@@ -375,9 +375,11 @@ const runTeamsSync = async () => {
 
   try {
     const result = await adminFetch<{
+      totalTeamsDetected: number;
       searchedTeams: number;
       syncedProfiles: number;
       skippedCached: number;
+      skippedPlaceholders: number;
       requestsExecuted: number;
       unresolvedTeams: string[];
     }>("/api/admin/sync-teams", {
@@ -388,7 +390,7 @@ const runTeamsSync = async () => {
     });
 
     const unresolvedCount = result.unresolvedTeams?.length ?? 0;
-    teamsSyncMessage.value = `Selecciones sync OK. buscadas: ${result.searchedTeams}, cacheadas: ${result.syncedProfiles}, omitidas por cache: ${result.skippedCached}, requests: ${result.requestsExecuted}, sin match: ${unresolvedCount}`;
+    teamsSyncMessage.value = `Selecciones sync OK. detectadas: ${result.totalTeamsDetected}, buscadas (reales): ${result.searchedTeams}, placeholders omitidos: ${result.skippedPlaceholders}, cacheadas: ${result.syncedProfiles}, omitidas por cache: ${result.skippedCached}, requests: ${result.requestsExecuted}, sin match: ${unresolvedCount}`;
 
     await loadIngestionLogs();
   } catch (error: any) {

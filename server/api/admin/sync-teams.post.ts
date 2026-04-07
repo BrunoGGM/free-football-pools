@@ -21,11 +21,42 @@ type ApiFootballTeamCandidate = {
 const PROVIDER = 'api-football'
 const DEFAULT_DELAY_MS = 160
 
+const TEAM_SEARCH_ALIASES_BY_KEY: Record<string, string[]> = {
+  sudafrica: ['South Africa'],
+  republicadecorea: ['South Korea', 'Korea Republic'],
+  republicacheca: ['Czech Republic', 'Czechia'],
+  bosniayherzegovina: ['Bosnia and Herzegovina'],
+  catar: ['Qatar'],
+  marruecos: ['Morocco'],
+  estadosunidos: ['United States', 'USA'],
+  turquia: ['Turkey'],
+  alemania: ['Germany'],
+  costademarfil: ["Cote d'Ivoire", 'Ivory Coast'],
+  paisesbajos: ['Netherlands'],
+  japon: ['Japan'],
+  suecia: ['Sweden'],
+  tunez: ['Tunisia'],
+  belgica: ['Belgium'],
+  egipto: ['Egypt'],
+  rideiran: ['Iran'],
+  espana: ['Spain'],
+  islasdecaboverde: ['Cape Verde'],
+  caboverde: ['Cape Verde'],
+  arabiasaudi: ['Saudi Arabia'],
+  francia: ['France'],
+  noruega: ['Norway'],
+  argelia: ['Algeria'],
+  jordania: ['Jordan'],
+  inglaterra: ['England'],
+  croacia: ['Croatia'],
+}
+
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function splitSearchTerms(teamName: string): string[] {
   const set = new Set<string>()
   const raw = teamName.trim()
+  const key = normalizeTeamKey(raw)
 
   if (raw) {
     set.add(raw)
@@ -38,7 +69,37 @@ function splitSearchTerms(teamName: string): string[] {
     }
   }
 
+  for (const alias of TEAM_SEARCH_ALIASES_BY_KEY[key] || []) {
+    const value = alias.trim()
+    if (value) {
+      set.add(value)
+    }
+  }
+
   return [...set]
+}
+
+function isBracketPlaceholderTeam(teamName: string): boolean {
+  const raw = teamName.trim()
+  const key = normalizeTeamKey(raw)
+
+  if (!key) {
+    return true
+  }
+
+  if (/^[12][A-L]$/i.test(raw.replace(/\s+/g, ''))) {
+    return true
+  }
+
+  if (key.startsWith('ganador') || key.startsWith('perdedor')) {
+    return true
+  }
+
+  if (key.includes('mejor3ro')) {
+    return true
+  }
+
+  return false
 }
 
 function scoreCandidate(targetName: string, candidate: ApiFootballTeamCandidate): number {
@@ -81,10 +142,13 @@ function pickBestCandidate(
   teamName: string,
   candidates: ApiFootballTeamCandidate[],
 ): ApiFootballTeamCandidate | null {
+  const nationalCandidates = candidates.filter((candidate) => candidate.team?.national)
+  const source = nationalCandidates.length > 0 ? nationalCandidates : candidates
+
   let best: ApiFootballTeamCandidate | null = null
   let bestScore = -1
 
-  for (const candidate of candidates) {
+  for (const candidate of source) {
     const score = scoreCandidate(teamName, candidate)
 
     if (score > bestScore) {
@@ -136,14 +200,18 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const teamNames = [...allTeamNames]
+  const allTeamNamesList = [...allTeamNames]
+  const teamNames = allTeamNamesList.filter((name) => !isBracketPlaceholderTeam(name))
+  const skippedPlaceholders = allTeamNamesList.length - teamNames.length
 
   if (teamNames.length === 0) {
     return {
       ok: true,
+      totalTeamsDetected: allTeamNamesList.length,
       searchedTeams: 0,
       syncedProfiles: 0,
       skippedCached: 0,
+      skippedPlaceholders,
       unresolvedTeams: [],
       updatedMatchesHome: 0,
       updatedMatchesAway: 0,
@@ -214,7 +282,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const terms = splitSearchTerms(teamName)
-    const candidates: ApiFootballTeamCandidate[] = []
+    const candidatesById = new Map<string, ApiFootballTeamCandidate>()
 
     for (const term of terms) {
       const apiUrl = `https://v3.football.api-sports.io/teams?search=${encodeURIComponent(term)}`
@@ -229,13 +297,18 @@ export default defineEventHandler(async (event) => {
       requestsExecuted += 1
 
       for (const item of response.response || []) {
-        candidates.push(item)
+        const teamId = String(item?.team?.id || normalizeTeamKey(item?.team?.name || ''))
+        if (teamId) {
+          candidatesById.set(teamId, item)
+        }
       }
 
       if (delayMs > 0) {
         await wait(delayMs)
       }
     }
+
+    const candidates = [...candidatesById.values()]
 
     const best = pickBestCandidate(teamName, candidates)
 
@@ -321,9 +394,11 @@ export default defineEventHandler(async (event) => {
 
   return {
     ok: true,
+    totalTeamsDetected: allTeamNamesList.length,
     searchedTeams: teamNames.length,
     syncedProfiles: upsertProfiles.length,
     skippedCached,
+    skippedPlaceholders,
     requestsExecuted,
     unresolvedTeams,
     updatedMatchesHome,
