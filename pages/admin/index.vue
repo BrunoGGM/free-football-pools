@@ -109,6 +109,9 @@ const globalMessage = ref<string | null>(null);
 const globalStats = ref<GlobalStatsPayload | null>(null);
 const savingQuiniela = ref(false);
 const deletingQuinielaId = ref<string | null>(null);
+const applyingManualPoints = ref(false);
+const manualPointsMessage = ref<string | null>(null);
+const manualPointsError = ref<string | null>(null);
 
 const quinielaForm = reactive({
   id: "",
@@ -119,6 +122,13 @@ const quinielaForm = reactive({
   start_date: "",
   end_date: "",
   admin_id: "",
+});
+
+const manualPointsForm = reactive({
+  quiniela_id: "",
+  user_id: "",
+  points_delta: 1,
+  reason: "",
 });
 
 const teamProfiles = ref<TeamProfileItem[]>([]);
@@ -233,8 +243,63 @@ const editQuiniela = (item: ManagedQuiniela) => {
   quinielaForm.start_date = toInputDateTime(item.start_date);
   quinielaForm.end_date = toInputDateTime(item.end_date);
   quinielaForm.admin_id = item.admin_id;
+  manualPointsForm.quiniela_id = item.id;
   globalMessage.value = null;
   globalError.value = null;
+};
+
+const applyManualPoints = async () => {
+  manualPointsMessage.value = null;
+  manualPointsError.value = null;
+
+  const quinielaId = manualPointsForm.quiniela_id.trim();
+  const userId = manualPointsForm.user_id.trim();
+  const pointsDelta = Number(manualPointsForm.points_delta);
+  const reason = manualPointsForm.reason.trim() || null;
+
+  if (!quinielaId || !userId) {
+    manualPointsError.value =
+      "Selecciona quiniela y user id para aplicar ajuste.";
+    return;
+  }
+
+  if (!Number.isInteger(pointsDelta) || pointsDelta === 0) {
+    manualPointsError.value =
+      "El ajuste debe ser un numero entero distinto de 0.";
+    return;
+  }
+
+  applyingManualPoints.value = true;
+
+  try {
+    const result = await adminFetch<{
+      ranking: {
+        rank: number;
+        total_points: number;
+        manual_points: number;
+      } | null;
+    }>(`/api/admin/quinielas/${quinielaId}/manual-points`, {
+      method: "POST",
+      body: {
+        user_id: userId,
+        points_delta: pointsDelta,
+        reason,
+      },
+    });
+
+    manualPointsMessage.value = result.ranking
+      ? `Ajuste aplicado. Nuevo total: ${result.ranking.total_points} pts (manual: ${result.ranking.manual_points}, rank: #${result.ranking.rank}).`
+      : "Ajuste aplicado correctamente.";
+    manualPointsForm.points_delta = 1;
+    manualPointsForm.reason = "";
+  } catch (error: any) {
+    manualPointsError.value =
+      error?.data?.message ||
+      error?.message ||
+      "No se pudo aplicar el ajuste manual";
+  } finally {
+    applyingManualPoints.value = false;
+  }
 };
 
 const loadGlobalStats = async (silentIfForbidden = true) => {
@@ -719,11 +784,16 @@ onMounted(async () => {
       :quiniela-form="quinielaForm"
       :saving-quiniela="savingQuiniela"
       :deleting-quiniela-id="deletingQuinielaId"
+      :manual-points-form="manualPointsForm"
+      :applying-manual-points="applyingManualPoints"
+      :manual-points-message="manualPointsMessage"
+      :manual-points-error="manualPointsError"
       @random-access-code="randomAccessCode"
       @save-quiniela="saveQuiniela"
       @reset-quiniela-form="resetQuinielaForm"
       @edit-quiniela="editQuiniela"
       @delete-quiniela="deleteQuiniela"
+      @apply-manual-points="applyManualPoints"
     />
 
     <AdminTeamsSection

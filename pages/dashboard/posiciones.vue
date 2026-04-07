@@ -73,6 +73,33 @@ const selectedChampionInfo = computed(() =>
 );
 
 const leaderRow = computed(() => rows.value[0] ?? null);
+const topTieCount = computed(() => {
+  const topPoints = rows.value[0]?.total_points;
+
+  if (topPoints === undefined) {
+    return 0;
+  }
+
+  return rows.value.filter((row) => row.total_points === topPoints).length;
+});
+
+const leaderTitle = computed(() =>
+  topTieCount.value > 1 ? "Lideres del torneo" : "Lider del torneo",
+);
+
+const leaderName = computed(() => {
+  if (!leaderRow.value) {
+    return "";
+  }
+
+  if (topTieCount.value <= 1) {
+    return leaderRow.value.username;
+  }
+
+  const others = topTieCount.value - 1;
+  return `${leaderRow.value.username} y ${others} mas`;
+});
+
 const leaderGapText = computed(() => {
   if (rows.value.length < 2) {
     return "Sin perseguidores por ahora";
@@ -248,6 +275,15 @@ const triggerChampionCelebration = () => {
   }, 2300);
 };
 
+const isMissingRankingTableError = (error: any) => {
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    error?.code === "42P01" ||
+    (message.includes("quiniela_rankings") && message.includes("exist"))
+  );
+};
+
 const loadRanking = async () => {
   if (!activeQuinielaId.value) {
     rows.value = [];
@@ -257,25 +293,82 @@ const loadRanking = async () => {
   loading.value = true;
   errorMessage.value = null;
 
-  const { data: members, error: membersError } = await client
-    .from("quiniela_members")
-    .select("user_id, total_points, predicted_champion")
+  const rankingResult = await client
+    .from("quiniela_rankings")
+    .select("user_id, total_points, rank")
     .eq("quiniela_id", activeQuinielaId.value)
+    .order("rank", { ascending: true })
     .order("total_points", { ascending: false });
 
-  if (membersError) {
-    loading.value = false;
-    errorMessage.value = membersError.message;
-    return;
+  let rankingRows: Array<{
+    user_id: string;
+    total_points: number;
+    rank: number;
+  }> = [];
+
+  if (rankingResult.error) {
+    if (!isMissingRankingTableError(rankingResult.error)) {
+      loading.value = false;
+      errorMessage.value = rankingResult.error.message;
+      return;
+    }
+
+    const { data: legacyMembers, error: legacyError } = await client
+      .from("quiniela_members")
+      .select("user_id, total_points")
+      .eq("quiniela_id", activeQuinielaId.value)
+      .order("total_points", { ascending: false });
+
+    if (legacyError) {
+      loading.value = false;
+      errorMessage.value = legacyError.message;
+      return;
+    }
+
+    let previousPoints: number | null = null;
+    let previousRank = 0;
+
+    rankingRows = (
+      (legacyMembers as Array<{
+        user_id: string;
+        total_points: number | null;
+      }> | null) ?? []
+    ).map((item, index) => {
+      const currentPoints = Number(item.total_points ?? 0);
+      const rank =
+        previousPoints !== null && currentPoints === previousPoints
+          ? previousRank
+          : index + 1;
+
+      previousPoints = currentPoints;
+      previousRank = rank;
+
+      return {
+        user_id: item.user_id,
+        total_points: currentPoints,
+        rank,
+      };
+    });
+  } else {
+    rankingRows = (
+      (rankingResult.data as Array<{
+        user_id: string;
+        total_points: number | null;
+        rank: number;
+      }> | null) ?? []
+    ).map((item) => ({
+      user_id: item.user_id,
+      total_points: Number(item.total_points ?? 0),
+      rank: Number(item.rank || 0),
+    }));
   }
 
-  const userIds = [
-    ...new Set((members ?? []).map((item) => item.user_id as string)),
-  ];
+  const userIds = [...new Set(rankingRows.map((item) => item.user_id))];
   const profilesMap = new Map<
     string,
     { username: string; avatar_url: string | null }
   >();
+  const championsMap = new Map<string, string | null>();
 
   if (userIds.length > 0) {
     const { data: profiles, error: profilesError } = await client
@@ -297,16 +390,37 @@ const loadRanking = async () => {
     }
   }
 
-  const normalized = (members ?? []).map((member, index) => {
-    const profile = profilesMap.get(member.user_id as string);
+  if (userIds.length > 0) {
+    const { data: memberPicks, error: memberPicksError } = await client
+      .from("quiniela_members")
+      .select("user_id, predicted_champion")
+      .eq("quiniela_id", activeQuinielaId.value)
+      .in("user_id", userIds);
+
+    if (memberPicksError) {
+      loading.value = false;
+      errorMessage.value = memberPicksError.message;
+      return;
+    }
+
+    for (const member of memberPicks ?? []) {
+      championsMap.set(
+        member.user_id as string,
+        (member.predicted_champion as string | null) ?? null,
+      );
+    }
+  }
+
+  const normalized = rankingRows.map((member) => {
+    const profile = profilesMap.get(member.user_id);
 
     return {
-      rank: index + 1,
-      user_id: member.user_id as string,
+      rank: member.rank,
+      user_id: member.user_id,
       username: profile?.username ?? "Jugador",
       avatar_url: profile?.avatar_url ?? null,
-      total_points: Number(member.total_points ?? 0),
-      predicted_champion: (member.predicted_champion as string | null) ?? null,
+      total_points: member.total_points,
+      predicted_champion: championsMap.get(member.user_id) ?? null,
     };
   });
 
@@ -545,13 +659,13 @@ onBeforeUnmount(() => {
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p class="text-xs uppercase tracking-[0.14em] text-warning/80">
-              Lider del torneo
+              {{ leaderTitle }}
             </p>
             <h2
               class="mt-1 flex items-center gap-2 text-xl font-semibold text-warning"
             >
               <span class="leader-crown" aria-hidden="true">👑</span>
-              {{ leaderRow.username }}
+              {{ leaderName }}
             </h2>
             <p class="text-sm text-base-content/75">{{ leaderGapText }}</p>
             <p class="leader-jackpot mt-1 text-sm font-semibold">

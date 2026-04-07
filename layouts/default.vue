@@ -12,8 +12,20 @@ const links = [
   { to: "/dashboard/grupos", label: "Grupos" },
   { to: "/dashboard/eliminatorias", label: "Eliminatorias" },
   { to: "/dashboard/posiciones", label: "Posiciones" },
-  { to: "/admin", label: "Admin" },
+  { to: "/admin", label: "Admin", requiresAdmin: true },
 ];
+
+const canAccessAdmin = ref(false);
+
+const navLinks = computed(() => {
+  return links.filter((link) => {
+    if (link.requiresAdmin) {
+      return canAccessAdmin.value;
+    }
+
+    return true;
+  });
+});
 
 interface HeaderMetric {
   label: string;
@@ -200,6 +212,38 @@ const loadHeaderMetrics = async () => {
   ];
 };
 
+const loadAdminAccess = async () => {
+  if (!user.value) {
+    canAccessAdmin.value = false;
+    return;
+  }
+
+  const { data: profile, error: profileError } = await client
+    .from("profiles")
+    .select("is_global_admin")
+    .eq("id", user.value.id)
+    .maybeSingle();
+
+  if (!profileError && profile?.is_global_admin) {
+    canAccessAdmin.value = true;
+    return;
+  }
+
+  if (!activeQuinielaId.value) {
+    canAccessAdmin.value = false;
+    return;
+  }
+
+  const { data: adminCheck, error: adminCheckError } = await client
+    .from("quinielas")
+    .select("id")
+    .eq("id", activeQuinielaId.value)
+    .eq("admin_id", user.value.id)
+    .maybeSingle();
+
+  canAccessAdmin.value = !adminCheckError && Boolean(adminCheck?.id);
+};
+
 const metricsTape = computed(() => [
   ...headerMetrics.value,
   ...headerMetrics.value,
@@ -300,6 +344,7 @@ onMounted(() => {
   if (user.value) {
     void loadActiveQuiniela();
     void loadHeaderMetrics();
+    void loadAdminAccess();
 
     metricsRefreshTimer = setInterval(() => {
       void loadHeaderMetrics();
@@ -348,6 +393,7 @@ watch(
     if (user.value) {
       void loadActiveQuiniela();
       void loadHeaderMetrics();
+      void loadAdminAccess();
     }
   },
 );
@@ -366,10 +412,12 @@ watch(
   () => {
     if (user.value) {
       void loadHeaderMetrics();
+      void loadAdminAccess();
       return;
     }
 
     headerMetrics.value = [];
+    canAccessAdmin.value = false;
   },
 );
 
@@ -420,7 +468,7 @@ onBeforeUnmount(() => {
 
         <nav class="hidden items-center gap-2 lg:flex" v-if="user">
           <NuxtLink
-            v-for="link in links"
+            v-for="link in navLinks"
             :key="link.to"
             :to="link.to"
             class="btn btn-sm"

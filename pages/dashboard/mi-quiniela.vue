@@ -57,6 +57,8 @@ const totalMembers = ref(0);
 const pointsFromLeader = ref<number | null>(null);
 const aheadSummary = ref<{ username: string; gap: number } | null>(null);
 const chaserSummary = ref<{ username: string; gap: number } | null>(null);
+const tiePeersCount = ref(0);
+const tiePeersPreview = ref<string[]>([]);
 
 const username = computed(() => {
   const metadataName = user.value?.user_metadata?.username;
@@ -101,11 +103,38 @@ const leaderStatusText = computed(() => {
     return "Aun no tienes posicion en esta quiniela.";
   }
 
+  if (isLeader.value && tiePeersCount.value > 0) {
+    return `Vas empatado en 1er lugar con ${tiePeersCount.value} jugador${tiePeersCount.value === 1 ? "" : "es"}.`;
+  }
+
   if (isLeader.value) {
     return "Vas en primer lugar: mantienes el premio completo.";
   }
 
+  if (tiePeersCount.value > 0) {
+    return `Estas empatado en el puesto #${myRank.value} con ${tiePeersCount.value} jugador${tiePeersCount.value === 1 ? "" : "es"}.`;
+  }
+
   return `Estas a ${pointsFromLeader.value ?? 0} pts del lider.`;
+});
+
+const tiePeersText = computed(() => {
+  if (tiePeersCount.value <= 0) {
+    return "";
+  }
+
+  const preview = tiePeersPreview.value;
+  const extra = tiePeersCount.value - preview.length;
+
+  if (preview.length === 0) {
+    return `Empate con ${tiePeersCount.value} jugador${tiePeersCount.value === 1 ? "" : "es"}.`;
+  }
+
+  if (extra > 0) {
+    return `Empate con ${preview.join(", ")} y ${extra} mas.`;
+  }
+
+  return `Empate con ${preview.join(", ")}.`;
 });
 
 const aheadText = computed(() => {
@@ -114,11 +143,13 @@ const aheadText = computed(() => {
   }
 
   if (isLeader.value) {
-    return "Nadie. Tu marcas el ritmo.";
+    return tiePeersCount.value > 0
+      ? "Lider compartido."
+      : "Nadie. Tu marcas el ritmo.";
   }
 
   if (!aheadSummary.value) {
-    return "Sin referencia";
+    return tiePeersCount.value > 0 ? "Empate en tu puesto" : "Sin referencia";
   }
 
   return `${aheadSummary.value.username} (+${aheadSummary.value.gap} pts)`;
@@ -160,6 +191,15 @@ const isMissingQuinielaColumnError = (error: any) => {
     error?.code === "42703" ||
     message.includes("predictions.quiniela_id") ||
     (message.includes("column") && message.includes("quiniela_id"))
+  );
+};
+
+const isMissingRankingTableError = (error: any) => {
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    error?.code === "42P01" ||
+    (message.includes("quiniela_rankings") && message.includes("exist"))
   );
 };
 
@@ -291,6 +331,8 @@ const loadMyQuinielaView = async () => {
     pointsFromLeader.value = null;
     aheadSummary.value = null;
     chaserSummary.value = null;
+    tiePeersCount.value = 0;
+    tiePeersPreview.value = [];
     return;
   }
 
@@ -306,9 +348,10 @@ const loadMyQuinielaView = async () => {
     .maybeSingle();
 
   const rankingMembersPromise = client
-    .from("quiniela_members")
-    .select("user_id, total_points")
+    .from("quiniela_rankings")
+    .select("user_id, total_points, rank")
     .eq("quiniela_id", activeQuinielaId.value)
+    .order("rank", { ascending: true })
     .order("total_points", { ascending: false });
 
   const scopedPredictionsPromise = client
@@ -369,18 +412,65 @@ const loadMyQuinielaView = async () => {
     (memberResult.data?.predicted_champion as string | null) ?? null;
 
   const rankingMembersResult = await rankingMembersPromise;
+  let rankingRows: Array<{
+    user_id: string;
+    total_points: number;
+    rank: number;
+  }> = [];
 
-  if (!rankingMembersResult.error) {
-    const rankingRows = (
+  if (rankingMembersResult.error) {
+    if (isMissingRankingTableError(rankingMembersResult.error)) {
+      compatibilityMessage.value =
+        "Ranking precomputado no disponible aun. Aplica la migracion 0014 para mejorar rendimiento y empates.";
+
+      const { data: legacyMembers, error: legacyMembersError } = await client
+        .from("quiniela_members")
+        .select("user_id, total_points")
+        .eq("quiniela_id", activeQuinielaId.value)
+        .order("total_points", { ascending: false });
+
+      if (!legacyMembersError) {
+        let previousPoints: number | null = null;
+        let previousRank = 0;
+
+        rankingRows = (
+          (legacyMembers as Array<{
+            user_id: string;
+            total_points: number | null;
+          }> | null) ?? []
+        ).map((item, index) => {
+          const currentPoints = Number(item.total_points ?? 0);
+          const rank =
+            previousPoints !== null && currentPoints === previousPoints
+              ? previousRank
+              : index + 1;
+
+          previousPoints = currentPoints;
+          previousRank = rank;
+
+          return {
+            user_id: item.user_id,
+            total_points: currentPoints,
+            rank,
+          };
+        });
+      }
+    }
+  } else {
+    rankingRows = (
       (rankingMembersResult.data as Array<{
         user_id: string;
         total_points: number | null;
+        rank: number;
       }> | null) ?? []
     ).map((item) => ({
       user_id: item.user_id,
       total_points: Number(item.total_points ?? 0),
+      rank: Number(item.rank || 0),
     }));
+  }
 
+  if (rankingRows.length > 0) {
     const rankingUserIds = [
       ...new Set(rankingRows.map((item) => item.user_id)),
     ];
@@ -419,15 +509,26 @@ const loadMyQuinielaView = async () => {
       const own = ranking[ownIndex]!;
       const leaderPointsValue = ranking[0]?.total_points ?? own.total_points;
 
-      myRank.value = ownIndex + 1;
+      myRank.value = own.rank;
       pointsFromLeader.value = Math.max(
         0,
         leaderPointsValue - own.total_points,
       );
 
-      const ahead = ownIndex > 0 ? ranking[ownIndex - 1] : null;
+      const ahead =
+        ranking
+          .slice(0, ownIndex)
+          .reverse()
+          .find((item) => item.total_points > own.total_points) ?? null;
       const chaser =
-        ownIndex < ranking.length - 1 ? ranking[ownIndex + 1] : null;
+        ranking
+          .slice(ownIndex + 1)
+          .find((item) => item.total_points < own.total_points) ?? null;
+      const tiePeers = ranking.filter(
+        (item) =>
+          item.user_id !== own.user_id &&
+          item.total_points === own.total_points,
+      );
 
       aheadSummary.value = ahead
         ? {
@@ -442,12 +543,29 @@ const loadMyQuinielaView = async () => {
             gap: Math.max(0, own.total_points - chaser.total_points),
           }
         : null;
+
+      tiePeersCount.value = tiePeers.length;
+      tiePeersPreview.value = tiePeers
+        .slice(0, 2)
+        .map((item) => item.username ?? "Jugador");
+
+      memberTotalPoints.value = own.total_points;
     } else {
       myRank.value = null;
       pointsFromLeader.value = null;
       aheadSummary.value = null;
       chaserSummary.value = null;
+      tiePeersCount.value = 0;
+      tiePeersPreview.value = [];
     }
+  } else {
+    myRank.value = null;
+    totalMembers.value = 0;
+    pointsFromLeader.value = null;
+    aheadSummary.value = null;
+    chaserSummary.value = null;
+    tiePeersCount.value = 0;
+    tiePeersPreview.value = [];
   }
 
   const normalized = (
@@ -568,6 +686,12 @@ watch(
               ]"
             >
               {{ leaderStatusText }}
+            </p>
+            <p
+              v-if="tiePeersCount > 0"
+              class="text-base-content/70 mt-1 text-xs"
+            >
+              {{ tiePeersText }}
             </p>
           </div>
           <span :class="['text-3xl', isLeader && 'leader-crown']">{{

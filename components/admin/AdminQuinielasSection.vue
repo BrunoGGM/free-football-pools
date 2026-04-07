@@ -36,6 +36,15 @@ defineProps<{
   };
   savingQuiniela: boolean;
   deletingQuinielaId: string | null;
+  manualPointsForm: {
+    quiniela_id: string;
+    user_id: string;
+    points_delta: number;
+    reason: string;
+  };
+  applyingManualPoints: boolean;
+  manualPointsMessage: string | null;
+  manualPointsError: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -44,6 +53,7 @@ const emit = defineEmits<{
   resetQuinielaForm: [];
   editQuiniela: [item: any];
   deleteQuiniela: [id: string];
+  applyManualPoints: [];
 }>();
 </script>
 
@@ -260,6 +270,98 @@ const emit = defineEmits<{
 
         <p v-if="globalError" class="alert alert-error mt-3 text-xs">
           {{ globalError }}
+        </p>
+      </div>
+
+      <div
+        class="card mt-6 rounded-xl border border-base-300 bg-base-100/70 p-4"
+      >
+        <h3 class="text-primary text-lg">Ajuste manual de puntos</h3>
+        <p class="text-base-content/70 mt-1 text-sm">
+          Registra bonos o penalizaciones por usuario. El ranking se recalcula
+          automaticamente con historial de auditoria.
+        </p>
+
+        <div class="mt-4 grid gap-3 md:grid-cols-2">
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Quiniela
+            </label>
+            <select
+              v-model="manualPointsForm.quiniela_id"
+              class="select select-bordered w-full"
+            >
+              <option value="">Selecciona quiniela</option>
+              <option
+                v-for="item in managedQuinielas"
+                :key="`adj-${item.id}`"
+                :value="item.id"
+              >
+                {{ item.name }} ({{ item.access_code }})
+              </option>
+            </select>
+          </div>
+
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              User id
+            </label>
+            <input
+              v-model="manualPointsForm.user_id"
+              class="input input-bordered w-full"
+              placeholder="UUID del miembro"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Ajuste de puntos
+            </label>
+            <input
+              v-model.number="manualPointsForm.points_delta"
+              type="number"
+              step="1"
+              class="input input-bordered w-full"
+              placeholder="Ej: 2 o -1"
+            />
+          </div>
+
+          <div class="space-y-1 md:col-span-2">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Motivo
+            </label>
+            <input
+              v-model="manualPointsForm.reason"
+              maxlength="240"
+              class="input input-bordered w-full"
+              placeholder="Bonus por dinamica semanal / Penalizacion por regla"
+            />
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <button
+            class="btn btn-secondary btn-sm"
+            :disabled="applyingManualPoints"
+            @click="emit('applyManualPoints')"
+          >
+            {{ applyingManualPoints ? "Aplicando..." : "Aplicar ajuste" }}
+          </button>
+        </div>
+
+        <p v-if="manualPointsMessage" class="alert alert-success mt-3 text-xs">
+          {{ manualPointsMessage }}
+        </p>
+        <p v-if="manualPointsError" class="alert alert-error mt-3 text-xs">
+          {{ manualPointsError }}
         </p>
       </div>
 
