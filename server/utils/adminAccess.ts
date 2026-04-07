@@ -1,14 +1,42 @@
-import { createError, type H3Event } from 'h3'
+import { createError, getHeader, type H3Event } from 'h3'
 import { serverSupabaseUser } from '#supabase/server'
 
 type SupabaseLike = {
   from: (table: string) => {
     select: (columns: string) => any
   }
+  auth: {
+    getUser: (jwt?: string) => Promise<{ data: { user: any | null }; error: any | null }>
+  }
+}
+
+async function resolveAuthenticatedUser(event: H3Event, supabase: SupabaseLike) {
+  try {
+    const cookieUser = await serverSupabaseUser(event)
+    if (cookieUser) {
+      return cookieUser
+    }
+  } catch {
+    // fallback below
+  }
+
+  const authHeader = getHeader(event, 'authorization') || ''
+  const [scheme, token] = authHeader.split(' ')
+
+  if (scheme?.toLowerCase() !== 'bearer' || !token) {
+    return null
+  }
+
+  const { data, error } = await supabase.auth.getUser(token)
+  if (error || !data?.user) {
+    return null
+  }
+
+  return data.user
 }
 
 export async function requireAdminAccess(event: H3Event, supabase: SupabaseLike) {
-  const user = await serverSupabaseUser(event)
+  const user = await resolveAuthenticatedUser(event, supabase)
 
   if (!user) {
     throw createError({ statusCode: 401, statusMessage: 'No autenticado' })
@@ -48,7 +76,7 @@ export async function requireAdminAccess(event: H3Event, supabase: SupabaseLike)
 }
 
 export async function requireGlobalAdminAccess(event: H3Event, supabase: SupabaseLike) {
-  const user = await serverSupabaseUser(event)
+  const user = await resolveAuthenticatedUser(event, supabase)
 
   if (!user) {
     throw createError({ statusCode: 401, statusMessage: 'No autenticado' })

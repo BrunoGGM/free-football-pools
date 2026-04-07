@@ -32,6 +32,31 @@ interface GlobalStatsPayload {
 const client = useSupabaseClient<any>();
 const { quiniela, loadActiveQuiniela } = useActiveQuiniela();
 
+const getAdminHeaders = async () => {
+  const { data } = await client.auth.getSession();
+  const token = data.session?.access_token;
+
+  if (!token) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+};
+
+const adminFetch = async <T,>(url: string, options: any = {}) => {
+  const authHeaders = await getAdminHeaders();
+
+  return await $fetch<T>(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      ...authHeaders,
+    },
+  });
+};
+
 const loadingLogs = ref(false);
 const logsError = ref<string | null>(null);
 const latestMatches = ref<
@@ -147,7 +172,9 @@ const loadGlobalStats = async (silentIfForbidden = true) => {
   globalError.value = null;
 
   try {
-    const data = await $fetch<GlobalStatsPayload>("/api/admin/global-stats");
+    const data = await adminFetch<GlobalStatsPayload>(
+      "/api/admin/global-stats",
+    );
     globalStats.value = data;
   } catch (error: any) {
     const statusCode = Number(error?.statusCode || error?.status || 0);
@@ -188,13 +215,13 @@ const saveQuiniela = async () => {
 
   try {
     if (quinielaForm.id) {
-      await $fetch(`/api/admin/quinielas/${quinielaForm.id}`, {
+      await adminFetch(`/api/admin/quinielas/${quinielaForm.id}`, {
         method: "PATCH",
         body: payload,
       });
       globalMessage.value = "Quiniela actualizada correctamente.";
     } else {
-      await $fetch("/api/admin/quinielas", {
+      await adminFetch("/api/admin/quinielas", {
         method: "POST",
         body: payload,
       });
@@ -229,7 +256,7 @@ const deleteQuiniela = async (quinielaId: string) => {
   deletingQuinielaId.value = quinielaId;
 
   try {
-    await $fetch(`/api/admin/quinielas/${quinielaId}`, {
+    await adminFetch(`/api/admin/quinielas/${quinielaId}`, {
       method: "DELETE",
     });
     globalMessage.value = "Quiniela eliminada correctamente.";
@@ -283,7 +310,7 @@ const loadSyncStatus = async () => {
   syncError.value = null;
 
   try {
-    const data = await $fetch<{
+    const data = await adminFetch<{
       requestsUsedToday: number;
       dailyBudget: number;
       remainingToday: number;
@@ -310,7 +337,7 @@ const runFixturesSync = async () => {
   syncError.value = null;
 
   try {
-    const result = await $fetch<{
+    const result = await adminFetch<{
       skipped: boolean;
       reason?: string;
       savedMatches?: number;
@@ -347,7 +374,7 @@ const runTeamsSync = async () => {
   teamsSyncError.value = null;
 
   try {
-    const result = await $fetch<{
+    const result = await adminFetch<{
       searchedTeams: number;
       syncedProfiles: number;
       skippedCached: number;
