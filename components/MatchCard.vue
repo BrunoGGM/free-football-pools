@@ -19,8 +19,11 @@ const emit = defineEmits<{
 const client = useSupabaseClient<any>();
 const user = useSupabaseUser();
 
+type PredictionOutcome = "home" | "draw" | "away";
+
 const homePrediction = ref<string>("");
 const awayPrediction = ref<string>("");
+const selectedOutcome = ref<PredictionOutcome | null>(null);
 const loading = ref(false);
 const saveError = ref<string | null>(null);
 const savedOnce = ref(false);
@@ -85,10 +88,68 @@ const awayLogoUrl = computed(() => props.match.away_team_logo_url || null);
 
 const isLive = computed(() => props.match.status === "in_progress");
 
+const outcomeFromScores = (home: number, away: number): PredictionOutcome => {
+  if (home > away) {
+    return "home";
+  }
+
+  if (home < away) {
+    return "away";
+  }
+
+  return "draw";
+};
+
+const setOutcome = (outcome: PredictionOutcome) => {
+  selectedOutcome.value = outcome;
+
+  const home = Number.parseInt(homePrediction.value, 10);
+  const away = Number.parseInt(awayPrediction.value, 10);
+  const hasValidScore =
+    !Number.isNaN(home) && !Number.isNaN(away) && home >= 0 && away >= 0;
+
+  if (!hasValidScore || outcomeFromScores(home, away) !== outcome) {
+    if (outcome === "home") {
+      homePrediction.value = "1";
+      awayPrediction.value = "0";
+      return;
+    }
+
+    if (outcome === "away") {
+      homePrediction.value = "0";
+      awayPrediction.value = "1";
+      return;
+    }
+
+    homePrediction.value = "1";
+    awayPrediction.value = "1";
+  }
+};
+
+const predictionSummary = computed(() => {
+  const home = Number.parseInt(homePrediction.value, 10);
+  const away = Number.parseInt(awayPrediction.value, 10);
+
+  if (Number.isNaN(home) || Number.isNaN(away) || home < 0 || away < 0) {
+    return null;
+  }
+
+  if (home > away) {
+    return `Gana ${props.match.home_team} (${home}-${away})`;
+  }
+
+  if (home < away) {
+    return `Gana ${props.match.away_team} (${home}-${away})`;
+  }
+
+  return `Empate (${home}-${away})`;
+});
+
 const loadPrediction = async () => {
   if (!user.value) {
     homePrediction.value = "";
     awayPrediction.value = "";
+    selectedOutcome.value = null;
     pointsEarned.value = null;
     return;
   }
@@ -107,6 +168,14 @@ const loadPrediction = async () => {
 
   homePrediction.value = data?.home_score?.toString() ?? "";
   awayPrediction.value = data?.away_score?.toString() ?? "";
+  if (
+    typeof data?.home_score === "number" &&
+    typeof data?.away_score === "number"
+  ) {
+    selectedOutcome.value = outcomeFromScores(data.home_score, data.away_score);
+  } else {
+    selectedOutcome.value = null;
+  }
   pointsEarned.value = data?.points_earned ?? null;
 };
 
@@ -118,8 +187,22 @@ const savePrediction = async () => {
   const home = Number.parseInt(homePrediction.value, 10);
   const away = Number.parseInt(awayPrediction.value, 10);
 
+  if (!selectedOutcome.value) {
+    saveError.value =
+      "Selecciona primero el resultado (local, empate o visita).";
+    return;
+  }
+
   if (Number.isNaN(home) || Number.isNaN(away) || home < 0 || away < 0) {
     saveError.value = "Ingresa un marcador valido con numeros positivos.";
+    return;
+  }
+
+  const scoreOutcome = outcomeFromScores(home, away);
+
+  if (scoreOutcome !== selectedOutcome.value) {
+    saveError.value =
+      "Tu marcador no coincide con el resultado seleccionado. Ajusta uno de los dos.";
     return;
   }
 
@@ -233,6 +316,45 @@ watch(
         Tu prediccion
       </p>
 
+      <div class="mt-3 grid gap-2 sm:grid-cols-3">
+        <button
+          :disabled="!canEdit || loading"
+          class="rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-55"
+          :class="[
+            selectedOutcome === 'home'
+              ? 'border-emerald-300/45 bg-emerald-400/20 text-emerald-100'
+              : 'border-white/10 bg-black/35 text-slate-200 hover:border-emerald-300/25',
+          ]"
+          @click="setOutcome('home')"
+        >
+          Gana {{ props.match.home_team }}
+        </button>
+        <button
+          :disabled="!canEdit || loading"
+          class="rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-55"
+          :class="[
+            selectedOutcome === 'draw'
+              ? 'border-emerald-300/45 bg-emerald-400/20 text-emerald-100'
+              : 'border-white/10 bg-black/35 text-slate-200 hover:border-emerald-300/25',
+          ]"
+          @click="setOutcome('draw')"
+        >
+          Empate
+        </button>
+        <button
+          :disabled="!canEdit || loading"
+          class="rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-55"
+          :class="[
+            selectedOutcome === 'away'
+              ? 'border-emerald-300/45 bg-emerald-400/20 text-emerald-100'
+              : 'border-white/10 bg-black/35 text-slate-200 hover:border-emerald-300/25',
+          ]"
+          @click="setOutcome('away')"
+        >
+          Gana {{ props.match.away_team }}
+        </button>
+      </div>
+
       <div class="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
         <input
           v-model="homePrediction"
@@ -255,7 +377,7 @@ watch(
         <p class="text-xs text-(--text-muted)">
           {{
             canEdit
-              ? "Puedes editar hasta antes del kickoff."
+              ? "+1 por resultado y +3 por marcador exacto. Editas hasta antes del kickoff."
               : "Prediccion bloqueada para este partido."
           }}
         </p>
@@ -271,6 +393,9 @@ watch(
 
       <p v-if="savedOnce" class="mt-3 text-sm text-emerald-200">
         Prediccion guardada.
+      </p>
+      <p v-if="predictionSummary" class="mt-1 text-xs text-(--text-muted)">
+        Tu pronostico: {{ predictionSummary }}
       </p>
       <p v-if="pointsEarned !== null" class="mt-1 text-sm text-amber-200">
         Puntos de este partido: {{ pointsEarned }}

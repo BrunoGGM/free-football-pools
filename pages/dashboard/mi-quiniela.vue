@@ -74,6 +74,52 @@ const teamFlag = (code: string | null, team: string) => {
   return teamFlagEmojiFromCode(resolvedCode);
 };
 
+type MatchOutcome = "home" | "away" | "draw";
+
+const resolveOutcome = (home: number, away: number): MatchOutcome => {
+  if (home > away) {
+    return "home";
+  }
+
+  if (home < away) {
+    return "away";
+  }
+
+  return "draw";
+};
+
+const predictionText = (row: PredictionRow) => {
+  if (!row.match) {
+    return "Prediccion guardada";
+  }
+
+  if (row.home_score > row.away_score) {
+    return `Gana ${row.match.home_team}`;
+  }
+
+  if (row.home_score < row.away_score) {
+    return `Gana ${row.match.away_team}`;
+  }
+
+  return "Empate";
+};
+
+const officialResultText = (match: MatchRow | null) => {
+  if (!match || match.home_score === null || match.away_score === null) {
+    return "Sin resultado oficial";
+  }
+
+  if (match.home_score > match.away_score) {
+    return `Gana ${match.home_team}`;
+  }
+
+  if (match.home_score < match.away_score) {
+    return `Gana ${match.away_team}`;
+  }
+
+  return "Empate";
+};
+
 const outcomeLabel = (row: PredictionRow) => {
   if (!row.match) {
     return "Sin partido";
@@ -91,15 +137,25 @@ const outcomeLabel = (row: PredictionRow) => {
     return "Pendiente";
   }
 
-  if (row.points_earned >= 3) {
-    return "Ganadora exacta";
+  const exactMatch =
+    row.home_score === row.match.home_score &&
+    row.away_score === row.match.away_score;
+
+  if (exactMatch) {
+    return "Marcador exacto (+3)";
   }
 
-  if (row.points_earned >= 1) {
-    return "Ganadora resultado";
+  const predictedOutcome = resolveOutcome(row.home_score, row.away_score);
+  const officialOutcome = resolveOutcome(
+    row.match.home_score,
+    row.match.away_score,
+  );
+
+  if (predictedOutcome === officialOutcome) {
+    return "Resultado acertado (+1)";
   }
 
-  return "Perdedora";
+  return "Sin acierto (0)";
 };
 
 const outcomeClass = (row: PredictionRow) => {
@@ -111,11 +167,25 @@ const outcomeClass = (row: PredictionRow) => {
     return "bg-amber-400/20 text-amber-100";
   }
 
-  if (row.points_earned >= 3) {
+  if (row.match.home_score === null || row.match.away_score === null) {
+    return "bg-slate-300/10 text-slate-200";
+  }
+
+  const exactMatch =
+    row.home_score === row.match.home_score &&
+    row.away_score === row.match.away_score;
+
+  if (exactMatch) {
     return "bg-emerald-400/20 text-emerald-100";
   }
 
-  if (row.points_earned >= 1) {
+  const predictedOutcome = resolveOutcome(row.home_score, row.away_score);
+  const officialOutcome = resolveOutcome(
+    row.match.home_score,
+    row.match.away_score,
+  );
+
+  if (predictedOutcome === officialOutcome) {
     return "bg-sky-400/20 text-sky-100";
   }
 
@@ -232,6 +302,10 @@ watch(
       <p class="mt-2 text-sm text-(--text-muted)">
         Quiniela activa: {{ quiniela?.name || "Sin nombre" }}
       </p>
+      <p class="mt-2 text-xs text-(--text-muted)">
+        Regla: +1 por acertar resultado (local/empate/visita) y +3 por marcador
+        exacto.
+      </p>
 
       <div class="mt-6 grid gap-4 sm:grid-cols-2">
         <div class="rounded-2xl border border-white/10 bg-black/25 p-4">
@@ -336,7 +410,10 @@ watch(
               </p>
             </td>
             <td class="px-4 py-3 font-semibold">
-              {{ row.home_score }} : {{ row.away_score }}
+              <p>{{ row.home_score }} : {{ row.away_score }}</p>
+              <p class="mt-1 text-xs font-normal text-(--text-muted)">
+                {{ predictionText(row) }}
+              </p>
             </td>
             <td class="px-4 py-3">
               <span
@@ -348,6 +425,15 @@ watch(
                 {{ row.match?.home_score }} : {{ row.match?.away_score }}
               </span>
               <span v-else class="text-(--text-muted)">Pendiente</span>
+              <p
+                class="mt-1 text-xs text-(--text-muted)"
+                v-if="
+                  row.match?.home_score !== null &&
+                  row.match?.away_score !== null
+                "
+              >
+                {{ officialResultText(row.match) }}
+              </p>
             </td>
             <td class="px-4 py-3">
               <span
