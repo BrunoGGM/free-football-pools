@@ -4,7 +4,14 @@ definePageMeta({
 });
 
 const user = useSupabaseUser();
-const { quiniela, loadActiveQuiniela, activeQuinielaId } = useActiveQuiniela();
+const {
+  quiniela,
+  loadActiveQuiniela,
+  loadMyQuinielas,
+  myQuinielas,
+  activeQuinielaId,
+  setActiveQuiniela,
+} = useActiveQuiniela();
 
 const username = computed(() => {
   const metadataName = user.value?.user_metadata?.username;
@@ -19,7 +26,13 @@ const username = computed(() => {
 
 onMounted(() => {
   void loadActiveQuiniela();
+  void loadMyQuinielas();
 });
+
+const selectQuiniela = async (quinielaId: string) => {
+  setActiveQuiniela(quinielaId);
+  await loadActiveQuiniela();
+};
 
 const quickLinks = [
   {
@@ -98,6 +111,45 @@ const quickLinks = [
         {{ quiniela?.start_date || "la fecha de inicio" }} para habilitar el
         bonus de 10 puntos.
       </p>
+    </article>
+
+    <article
+      v-if="myQuinielas.length"
+      class="pitch-panel rounded-2xl border border-white/10 p-5"
+    >
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="text-xl text-emerald-200">Mis quinielas</h2>
+        <NuxtLink
+          to="/ingresar"
+          class="text-xs font-semibold uppercase tracking-[0.12em] text-amber-200 underline underline-offset-4"
+        >
+          Unirme a otra
+        </NuxtLink>
+      </div>
+
+      <div class="mt-4 grid gap-3 md:grid-cols-2">
+        <button
+          v-for="membership in myQuinielas"
+          :key="membership.quiniela_id"
+          class="w-full rounded-xl border p-4 text-left transition"
+          :class="[
+            activeQuinielaId === membership.quiniela_id
+              ? 'border-emerald-300/45 bg-emerald-500/10'
+              : 'border-white/10 bg-black/25 hover:border-emerald-300/25',
+          ]"
+          @click="selectQuiniela(membership.quiniela_id)"
+        >
+          <p class="text-sm font-semibold text-white">
+            {{ membership.quiniela?.name || "Quiniela" }}
+          </p>
+          <p class="mt-1 text-xs text-(--text-muted)">
+            {{ membership.quiniela?.description || "Sin descripcion." }}
+          </p>
+          <p class="mt-2 text-xs text-amber-200">
+            Puntos actuales: {{ membership.total_points }}
+          </p>
+        </button>
+      </div>
     </article>
   </section>
 </template>
