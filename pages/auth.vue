@@ -10,6 +10,7 @@ const mode = ref<Mode>(route.query.mode === "register" ? "register" : "login");
 
 const email = ref("");
 const password = ref("");
+const confirmPassword = ref("");
 const username = ref("");
 
 const {
@@ -41,6 +42,11 @@ watch(mode, () => {
 
 const setMode = (nextMode: Mode) => {
   mode.value = nextMode;
+
+  if (nextMode === "login") {
+    confirmPassword.value = "";
+  }
+
   void navigateTo(`/auth?mode=${nextMode}`, { replace: true });
 };
 
@@ -55,6 +61,11 @@ const submit = async () => {
       await navigateTo("/dashboard");
     }
 
+    return;
+  }
+
+  if (password.value !== confirmPassword.value) {
+    errorMessage.value = "Las contraseñas no coinciden.";
     return;
   }
 
@@ -143,6 +154,21 @@ const submit = async () => {
           >
           <input
             v-model="password"
+            required
+            minlength="6"
+            type="password"
+            class="input input-bordered w-full"
+            placeholder="******"
+          />
+        </div>
+
+        <div v-if="mode === 'register'" class="form-control space-y-1">
+          <label
+            class="label-text text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >Confirmar password</label
+          >
+          <input
+            v-model="confirmPassword"
             required
             minlength="6"
             type="password"

@@ -35,6 +35,8 @@ const loading = ref(false);
 const errorMessage = ref<string | null>(null);
 const championInput = ref("");
 const championPickerOpen = ref(false);
+const championInputRef = ref<HTMLInputElement | null>(null);
+const championDropdownStyle = ref<Record<string, string>>({});
 const savingChampion = ref(false);
 const championSaved = ref(false);
 let championSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -208,6 +210,28 @@ const onChampionInputBlur = () => {
   }, 120);
 };
 
+const updateChampionDropdownPosition = () => {
+  if (!process.client || !championInputRef.value) {
+    return;
+  }
+
+  const rect = championInputRef.value.getBoundingClientRect();
+
+  championDropdownStyle.value = {
+    position: "fixed",
+    left: `${Math.max(8, rect.left)}px`,
+    top: `${rect.bottom + 8}px`,
+    width: `${rect.width}px`,
+    zIndex: "1400",
+  };
+};
+
+const onChampionDropdownViewportChange = () => {
+  if (championPickerOpen.value) {
+    updateChampionDropdownPosition();
+  }
+};
+
 const triggerChampionCelebration = () => {
   if (championSaveTimer) {
     clearTimeout(championSaveTimer);
@@ -349,12 +373,44 @@ const saveChampion = async () => {
 };
 
 onMounted(() => {
-  void Promise.all([loadActiveQuiniela(), loadRanking(), loadRegisteredTeams()]);
+  void Promise.all([
+    loadActiveQuiniela(),
+    loadRanking(),
+    loadRegisteredTeams(),
+  ]);
+});
+
+watch(championPickerOpen, (open) => {
+  if (!process.client) {
+    return;
+  }
+
+  if (open) {
+    nextTick(() => {
+      updateChampionDropdownPosition();
+    });
+
+    window.addEventListener("resize", onChampionDropdownViewportChange);
+    window.addEventListener("scroll", onChampionDropdownViewportChange, true);
+    return;
+  }
+
+  window.removeEventListener("resize", onChampionDropdownViewportChange);
+  window.removeEventListener("scroll", onChampionDropdownViewportChange, true);
 });
 
 onBeforeUnmount(() => {
   if (championSaveTimer) {
     clearTimeout(championSaveTimer);
+  }
+
+  if (process.client) {
+    window.removeEventListener("resize", onChampionDropdownViewportChange);
+    window.removeEventListener(
+      "scroll",
+      onChampionDropdownViewportChange,
+      true,
+    );
   }
 });
 </script>
@@ -392,6 +448,7 @@ onBeforeUnmount(() => {
       <div class="mt-4 flex flex-wrap gap-3">
         <div class="relative z-30 min-w-55 flex-1">
           <input
+            ref="championInputRef"
             v-model="championInput"
             class="input input-bordered w-full"
             placeholder="Busca y selecciona campeon"
@@ -400,35 +457,38 @@ onBeforeUnmount(() => {
             @blur="onChampionInputBlur"
           />
 
-          <div
-            v-if="championPickerOpen"
-            class="bg-base-100/98 relative z-50 mt-2 max-h-60 overflow-auto rounded-xl border border-base-300 shadow-xl"
-          >
-            <button
-              v-for="team in championOptions"
-              :key="team.team_key"
-              type="button"
-              class="hover:bg-primary/10 flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
-              @mousedown.prevent="selectChampionFromList(team)"
+          <Teleport to="body">
+            <div
+              v-if="championPickerOpen"
+              :style="championDropdownStyle"
+              class="bg-base-100/98 max-h-60 overflow-auto rounded-xl border border-base-300 shadow-2xl"
             >
-              <img
-                v-if="team.logo_url"
-                :src="team.logo_url"
-                :alt="`Escudo de ${team.name}`"
-                class="h-5 w-5 rounded-full border border-base-300 object-cover"
-                loading="lazy"
-              />
-              <span v-else>{{ teamOptionFlag(team) }}</span>
-              <span>{{ team.name }}</span>
-            </button>
+              <button
+                v-for="team in championOptions"
+                :key="team.team_key"
+                type="button"
+                class="hover:bg-primary/10 flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
+                @mousedown.prevent="selectChampionFromList(team)"
+              >
+                <img
+                  v-if="team.logo_url"
+                  :src="team.logo_url"
+                  :alt="`Escudo de ${team.name}`"
+                  class="h-5 w-5 rounded-full border border-base-300 object-cover"
+                  loading="lazy"
+                />
+                <span v-else>{{ teamOptionFlag(team) }}</span>
+                <span>{{ team.name }}</span>
+              </button>
 
-            <p
-              v-if="championOptions.length === 0"
-              class="text-base-content/70 px-3 py-3 text-xs"
-            >
-              Sin coincidencias en equipos registrados.
-            </p>
-          </div>
+              <p
+                v-if="championOptions.length === 0"
+                class="text-base-content/70 px-3 py-3 text-xs"
+              >
+                Sin coincidencias en equipos registrados.
+              </p>
+            </div>
+          </Teleport>
 
           <p
             v-if="selectedChampionInfo"
@@ -441,7 +501,9 @@ onBeforeUnmount(() => {
               class="h-4 w-4 rounded-full border border-base-300 object-cover"
               loading="lazy"
             />
-            <span v-else>{{ teamFlagEmojiFromCode(selectedChampionInfo.code) }}</span>
+            <span v-else>{{
+              teamFlagEmojiFromCode(selectedChampionInfo.code)
+            }}</span>
             <span>Seleccionado: {{ selectedChampionInfo.name }}</span>
           </p>
         </div>
@@ -510,17 +572,22 @@ onBeforeUnmount(() => {
             >
               <img
                 v-if="championLogoUrl(leaderRow.predicted_champion)"
-                :src="championLogoUrl(leaderRow.predicted_champion) || undefined"
+                :src="
+                  championLogoUrl(leaderRow.predicted_champion) || undefined
+                "
                 :alt="`Escudo de ${championDisplayName(leaderRow.predicted_champion)}`"
                 class="h-4 w-4 rounded-full border border-base-300 object-cover"
                 loading="lazy"
               />
-              <span v-else>{{ championFlag(leaderRow.predicted_champion) }}</span>
-              <span>Campeon: {{ championDisplayName(leaderRow.predicted_champion) }}</span>
+              <span v-else>{{
+                championFlag(leaderRow.predicted_champion)
+              }}</span>
+              <span
+                >Campeon:
+                {{ championDisplayName(leaderRow.predicted_champion) }}</span
+              >
             </p>
-            <p v-else class="text-xs text-base-content/70">
-              Campeon: Sin pick
-            </p>
+            <p v-else class="text-xs text-base-content/70">Campeon: Sin pick</p>
           </div>
         </div>
       </div>

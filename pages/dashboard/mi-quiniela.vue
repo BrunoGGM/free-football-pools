@@ -52,6 +52,11 @@ const compatibilityMessage = ref<string | null>(null);
 const memberTotalPoints = ref(0);
 const predictedChampion = ref<string | null>(null);
 const predictions = ref<PredictionRow[]>([]);
+const myRank = ref<number | null>(null);
+const totalMembers = ref(0);
+const pointsFromLeader = ref<number | null>(null);
+const aheadSummary = ref<{ username: string; gap: number } | null>(null);
+const chaserSummary = ref<{ username: string; gap: number } | null>(null);
 
 const username = computed(() => {
   const metadataName = user.value?.user_metadata?.username;
@@ -65,6 +70,75 @@ const username = computed(() => {
 });
 
 const hasPredictions = computed(() => predictions.value.length > 0);
+const isLeader = computed(() => myRank.value === 1 && totalMembers.value > 0);
+
+const rankEmoji = computed(() => {
+  if (myRank.value === 1) {
+    return "👑";
+  }
+
+  if (myRank.value === 2) {
+    return "🥈";
+  }
+
+  if (myRank.value === 3) {
+    return "🥉";
+  }
+
+  return "🎯";
+});
+
+const rankPositionText = computed(() => {
+  if (!myRank.value || totalMembers.value <= 0) {
+    return "Sin posicion";
+  }
+
+  return `#${myRank.value} de ${totalMembers.value}`;
+});
+
+const leaderStatusText = computed(() => {
+  if (!myRank.value || totalMembers.value <= 0) {
+    return "Aun no tienes posicion en esta quiniela.";
+  }
+
+  if (isLeader.value) {
+    return "Vas en primer lugar: mantienes el premio completo.";
+  }
+
+  return `Estas a ${pointsFromLeader.value ?? 0} pts del lider.`;
+});
+
+const aheadText = computed(() => {
+  if (!myRank.value || totalMembers.value <= 0) {
+    return "-";
+  }
+
+  if (isLeader.value) {
+    return "Nadie. Tu marcas el ritmo.";
+  }
+
+  if (!aheadSummary.value) {
+    return "Sin referencia";
+  }
+
+  return `${aheadSummary.value.username} (+${aheadSummary.value.gap} pts)`;
+});
+
+const chaserText = computed(() => {
+  if (!myRank.value || totalMembers.value <= 0) {
+    return "-";
+  }
+
+  if (!chaserSummary.value) {
+    return "Nadie por detras.";
+  }
+
+  if (isLeader.value) {
+    return `${chaserSummary.value.username} a ${chaserSummary.value.gap} pts`;
+  }
+
+  return `${chaserSummary.value.username} (${chaserSummary.value.gap} pts abajo)`;
+});
 
 const stageLabel = (stage: string) => stage.replaceAll("_", " ").toUpperCase();
 
@@ -212,6 +286,11 @@ const loadMyQuinielaView = async () => {
     predictions.value = [];
     memberTotalPoints.value = 0;
     predictedChampion.value = null;
+    myRank.value = null;
+    totalMembers.value = 0;
+    pointsFromLeader.value = null;
+    aheadSummary.value = null;
+    chaserSummary.value = null;
     return;
   }
 
@@ -225,6 +304,12 @@ const loadMyQuinielaView = async () => {
     .eq("user_id", user.value.id)
     .eq("quiniela_id", activeQuinielaId.value)
     .maybeSingle();
+
+  const rankingMembersPromise = client
+    .from("quiniela_members")
+    .select("user_id, total_points")
+    .eq("quiniela_id", activeQuinielaId.value)
+    .order("total_points", { ascending: false });
 
   const scopedPredictionsPromise = client
     .from("predictions")
@@ -282,6 +367,88 @@ const loadMyQuinielaView = async () => {
   memberTotalPoints.value = Number(memberResult.data?.total_points ?? 0);
   predictedChampion.value =
     (memberResult.data?.predicted_champion as string | null) ?? null;
+
+  const rankingMembersResult = await rankingMembersPromise;
+
+  if (!rankingMembersResult.error) {
+    const rankingRows = (
+      (rankingMembersResult.data as Array<{
+        user_id: string;
+        total_points: number | null;
+      }> | null) ?? []
+    ).map((item) => ({
+      user_id: item.user_id,
+      total_points: Number(item.total_points ?? 0),
+    }));
+
+    const rankingUserIds = [
+      ...new Set(rankingRows.map((item) => item.user_id)),
+    ];
+
+    const profileMap = new Map<string, { username: string }>();
+
+    if (rankingUserIds.length > 0) {
+      const { data: profiles, error: profilesError } = await client
+        .from("profiles")
+        .select("id, username")
+        .in("id", rankingUserIds);
+
+      if (!profilesError) {
+        for (const profile of profiles ?? []) {
+          profileMap.set(profile.id as string, {
+            username: (profile.username as string) ?? "Jugador",
+          });
+        }
+      }
+    }
+
+    const ranking = rankingRows.map((item) => ({
+      ...item,
+      username:
+        profileMap.get(item.user_id)?.username ??
+        (item.user_id === user.value?.id ? username.value : "Jugador"),
+    }));
+
+    totalMembers.value = ranking.length;
+
+    const ownIndex = ranking.findIndex(
+      (item) => item.user_id === user.value?.id,
+    );
+
+    if (ownIndex >= 0) {
+      const own = ranking[ownIndex]!;
+      const leaderPointsValue = ranking[0]?.total_points ?? own.total_points;
+
+      myRank.value = ownIndex + 1;
+      pointsFromLeader.value = Math.max(
+        0,
+        leaderPointsValue - own.total_points,
+      );
+
+      const ahead = ownIndex > 0 ? ranking[ownIndex - 1] : null;
+      const chaser =
+        ownIndex < ranking.length - 1 ? ranking[ownIndex + 1] : null;
+
+      aheadSummary.value = ahead
+        ? {
+            username: ahead.username ?? "Jugador",
+            gap: Math.max(0, ahead.total_points - own.total_points),
+          }
+        : null;
+
+      chaserSummary.value = chaser
+        ? {
+            username: chaser.username ?? "Jugador",
+            gap: Math.max(0, own.total_points - chaser.total_points),
+          }
+        : null;
+    } else {
+      myRank.value = null;
+      pointsFromLeader.value = null;
+      aheadSummary.value = null;
+      chaserSummary.value = null;
+    }
+  }
 
   const normalized = (
     (predictionsResult.data as RawPredictionRow[] | null) ?? []
@@ -369,6 +536,62 @@ watch(
           <p class="text-primary mt-1 text-lg font-semibold">
             {{ predictedChampion || "No definido" }}
           </p>
+        </div>
+      </div>
+
+      <div
+        v-if="myRank"
+        :class="[
+          'mt-5 rounded-2xl border p-4',
+          isLeader
+            ? 'leader-podium border-warning/35'
+            : 'border-base-300 bg-base-100/70',
+        ]"
+      >
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
+              Tu lugar actual
+            </p>
+            <h3
+              :class="[
+                'mt-1 text-2xl font-bold',
+                isLeader ? 'leader-points' : 'text-primary',
+              ]"
+            >
+              {{ rankPositionText }}
+            </h3>
+            <p
+              :class="[
+                'mt-1 text-sm',
+                isLeader ? 'leader-jackpot' : 'text-base-content/75',
+              ]"
+            >
+              {{ leaderStatusText }}
+            </p>
+          </div>
+          <span :class="['text-3xl', isLeader && 'leader-crown']">{{
+            rankEmoji
+          }}</span>
+        </div>
+
+        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+          <div
+            class="rounded-xl border border-base-300 bg-base-200/55 px-3 py-2"
+          >
+            <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
+              Delante de ti
+            </p>
+            <p class="mt-1 text-sm font-semibold">{{ aheadText }}</p>
+          </div>
+          <div
+            class="rounded-xl border border-base-300 bg-base-200/55 px-3 py-2"
+          >
+            <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
+              Te persigue
+            </p>
+            <p class="mt-1 text-sm font-semibold">{{ chaserText }}</p>
+          </div>
         </div>
       </div>
 

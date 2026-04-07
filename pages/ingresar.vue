@@ -58,17 +58,14 @@ const submit = async () => {
     return;
   }
 
-  const { error: memberError } = await client.from("quiniela_members").upsert(
-    {
-      user_id: user.value.id,
-      quiniela_id: quiniela.id,
-    },
-    { onConflict: "user_id,quiniela_id" },
-  );
+  const { error: memberError } = await client.from("quiniela_members").insert({
+    user_id: user.value.id,
+    quiniela_id: quiniela.id,
+  });
 
   loading.value = false;
 
-  if (memberError) {
+  if (memberError && memberError.code !== "23505") {
     errorMessage.value = memberError.message;
     return;
   }
