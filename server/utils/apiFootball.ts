@@ -16,6 +16,7 @@ export type MatchStage =
   | 'round_16'
   | 'quarter_final'
   | 'semi_final'
+  | 'third_place'
   | 'final'
 
 const FINISHED_CODES = new Set(['FT', 'AET', 'PEN'])
@@ -61,6 +62,10 @@ export function normalizeApiFootballStage(round: string | null | undefined): Mat
 
   if (/semi/.test(value)) {
     return 'semi_final'
+  }
+
+  if (/third|3rd/.test(value)) {
+    return 'third_place'
   }
 
   if (/\bfinal\b/.test(value)) {

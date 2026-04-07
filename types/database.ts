@@ -389,6 +389,7 @@ export type Database = {
         | "round_16"
         | "quarter_final"
         | "semi_final"
+        | "third_place"
         | "final"
       match_status: "pending" | "in_progress" | "finished"
     }
@@ -535,6 +536,7 @@ export const Constants = {
         "round_16",
         "quarter_final",
         "semi_final",
+        "third_place",
         "final",
       ],
       match_status: ["pending", "in_progress", "finished"],

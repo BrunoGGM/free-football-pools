@@ -10,6 +10,7 @@ const knockoutStages = [
   "round_16",
   "quarter_final",
   "semi_final",
+  "third_place",
   "final",
 ];
 
@@ -22,6 +23,7 @@ const grouped = computed(() => {
     round_16: [],
     quarter_final: [],
     semi_final: [],
+    third_place: [],
     final: [],
   };
 
@@ -42,6 +44,7 @@ const stageName = (stage: string) => {
     round_16: "Round 16",
     quarter_final: "Cuartos",
     semi_final: "Semis",
+    third_place: "Tercer lugar",
     final: "Final",
   };
 
@@ -92,7 +95,7 @@ const stageName = (stage: string) => {
       {{ errorMessage }}
     </article>
 
-    <div v-else class="grid gap-5 xl:grid-cols-5">
+    <div v-else class="grid gap-5 xl:grid-cols-6">
       <section v-for="stage in knockoutStages" :key="stage" class="space-y-3">
         <h2 class="text-lg text-emerald-200">{{ stageName(stage) }}</h2>
         <div class="space-y-4">
