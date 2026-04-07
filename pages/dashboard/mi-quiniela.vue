@@ -175,15 +175,15 @@ const outcomeLabel = (row: PredictionRow) => {
 
 const outcomeClass = (row: PredictionRow) => {
   if (!row.match || row.match.status === "pending") {
-    return "bg-slate-300/10 text-slate-200";
+    return "badge-ghost";
   }
 
   if (row.match.status === "in_progress") {
-    return "bg-amber-400/20 text-amber-100";
+    return "badge-warning";
   }
 
   if (row.match.home_score === null || row.match.away_score === null) {
-    return "bg-slate-300/10 text-slate-200";
+    return "badge-ghost";
   }
 
   const exactMatch =
@@ -191,7 +191,7 @@ const outcomeClass = (row: PredictionRow) => {
     row.away_score === row.match.away_score;
 
   if (exactMatch) {
-    return "bg-emerald-400/20 text-emerald-100";
+    return "badge-success";
   }
 
   const predictedOutcome = resolveOutcome(row.home_score, row.away_score);
@@ -201,10 +201,10 @@ const outcomeClass = (row: PredictionRow) => {
   );
 
   if (predictedOutcome === officialOutcome) {
-    return "bg-sky-400/20 text-sky-100";
+    return "badge-info";
   }
 
-  return "bg-red-400/20 text-red-100";
+  return "badge-error";
 };
 
 const loadMyQuinielaView = async () => {
@@ -317,59 +317,56 @@ watch(
   <section class="space-y-6">
     <header class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <p class="text-xs uppercase tracking-[0.18em] text-emerald-200">
+        <p class="text-primary text-xs uppercase tracking-[0.18em]">
           Dashboard
         </p>
-        <h1 class="mt-1 text-3xl text-white">Mi quiniela</h1>
+        <h1 class="text-base-content mt-1 text-3xl">Mi quiniela</h1>
       </div>
-      <button
-        class="rounded-full border border-white/12 px-4 py-2 text-sm text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100"
-        @click="loadMyQuinielaView"
-      >
+      <button class="btn btn-outline btn-sm" @click="loadMyQuinielaView">
         Refrescar
       </button>
     </header>
 
-    <article
-      v-if="!activeQuinielaId"
-      class="pitch-panel rounded-2xl border border-amber-300/25 p-5 text-amber-100"
-    >
+    <article v-if="!activeQuinielaId" class="alert alert-warning rounded-2xl">
       No tienes una quiniela activa para mostrar tus respuestas.
-      <NuxtLink
-        to="/ingresar"
-        class="ml-2 font-semibold underline underline-offset-4"
+      <NuxtLink to="/ingresar" class="link link-hover ml-2 font-semibold"
         >Ir a ingresar</NuxtLink
       >
     </article>
 
-    <article v-else class="pitch-panel neon-border rounded-3xl p-6 sm:p-8">
-      <p class="text-xs uppercase tracking-[0.18em] text-emerald-200">
+    <article
+      v-else
+      class="pitch-panel card neon-border rounded-3xl border border-base-300 bg-base-200/70 p-6 shadow-xl sm:p-8"
+    >
+      <p class="text-primary text-xs uppercase tracking-[0.18em]">
         Resumen personal
       </p>
-      <h2 class="mt-2 text-3xl text-white sm:text-4xl">{{ username }}</h2>
-      <p class="mt-2 text-sm text-(--text-muted)">
+      <h2 class="text-base-content mt-2 text-3xl sm:text-4xl">
+        {{ username }}
+      </h2>
+      <p class="text-base-content/70 mt-2 text-sm">
         Quiniela activa: {{ quiniela?.name || "Sin nombre" }}
       </p>
-      <p class="mt-2 text-xs text-(--text-muted)">
+      <p class="text-base-content/70 mt-2 text-xs">
         Regla: +1 por acertar resultado (local/empate/visita) y +3 por marcador
         exacto.
       </p>
 
       <div class="mt-6 grid gap-4 sm:grid-cols-2">
-        <div class="rounded-2xl border border-white/10 bg-black/25 p-4">
-          <p class="text-xs uppercase tracking-[0.14em] text-(--text-muted)">
+        <div class="card rounded-2xl border border-base-300 bg-base-100/70 p-4">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
             Puntos totales
           </p>
-          <p class="mt-1 text-3xl font-bold text-amber-200">
+          <p class="text-warning mt-1 text-3xl font-bold">
             {{ memberTotalPoints }}
           </p>
         </div>
 
-        <div class="rounded-2xl border border-white/10 bg-black/25 p-4">
-          <p class="text-xs uppercase tracking-[0.14em] text-(--text-muted)">
+        <div class="card rounded-2xl border border-base-300 bg-base-100/70 p-4">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
             Campeon predicho
           </p>
-          <p class="mt-1 text-lg font-semibold text-emerald-100">
+          <p class="text-primary mt-1 text-lg font-semibold">
             {{ predictedChampion || "No definido" }}
           </p>
         </div>
@@ -377,37 +374,31 @@ watch(
 
       <p
         v-if="compatibilityMessage"
-        class="mt-4 rounded-xl border border-amber-300/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
+        class="alert alert-warning mt-4 rounded-xl px-3 py-2 text-xs"
       >
         {{ compatibilityMessage }}
       </p>
     </article>
 
-    <article
-      v-if="loading"
-      class="pitch-panel rounded-2xl p-5 text-sm text-(--text-muted)"
-    >
+    <article v-if="loading" class="alert rounded-2xl text-sm">
       Cargando tus predicciones...
     </article>
     <article
       v-else-if="errorMessage"
-      class="rounded-2xl border border-red-300/20 bg-red-500/10 p-5 text-sm text-red-200"
+      class="alert alert-error rounded-2xl text-sm"
     >
       {{ errorMessage }}
     </article>
-    <article
-      v-else-if="!hasPredictions"
-      class="pitch-panel rounded-2xl p-5 text-sm text-(--text-muted)"
-    >
+    <article v-else-if="!hasPredictions" class="alert rounded-2xl text-sm">
       Todavia no has guardado predicciones.
     </article>
     <article
       v-else
-      class="overflow-x-auto rounded-2xl border border-white/8 bg-black/25"
+      class="overflow-x-auto rounded-2xl border border-base-300 bg-base-100/70"
     >
-      <table class="min-w-full text-sm">
+      <table class="table min-w-full text-sm">
         <thead
-          class="bg-black/35 text-left text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+          class="bg-base-200 text-base-content/70 text-left text-xs uppercase tracking-[0.12em]"
         >
           <tr>
             <th class="px-4 py-3">Partido</th>
@@ -421,10 +412,10 @@ watch(
           <tr
             v-for="row in predictions"
             :key="row.id"
-            class="border-t border-white/8 align-top"
+            class="border-t border-base-300 align-top"
           >
             <td class="px-4 py-3">
-              <p class="text-xs text-(--text-muted)">
+              <p class="text-base-content/70 text-xs">
                 {{ row.match ? stageLabel(row.match.stage) : "-" }}
               </p>
               <div class="mt-1 flex items-center gap-2">
@@ -432,7 +423,7 @@ watch(
                   v-if="row.match?.home_team_logo_url"
                   :src="row.match.home_team_logo_url"
                   :alt="`Escudo de ${row.match.home_team}`"
-                  class="h-5 w-5 rounded-full border border-white/15 object-cover"
+                  class="h-5 w-5 rounded-full border border-base-300 object-cover"
                   loading="lazy"
                 />
                 <span v-else class="text-base">
@@ -443,12 +434,12 @@ watch(
                   }}
                 </span>
                 <span>{{ row.match?.home_team }}</span>
-                <span class="text-(--text-muted)">vs</span>
+                <span class="text-base-content/70">vs</span>
                 <img
                   v-if="row.match?.away_team_logo_url"
                   :src="row.match.away_team_logo_url"
                   :alt="`Escudo de ${row.match.away_team}`"
-                  class="h-5 w-5 rounded-full border border-white/15 object-cover"
+                  class="h-5 w-5 rounded-full border border-base-300 object-cover"
                   loading="lazy"
                 />
                 <span v-else class="text-base">
@@ -460,13 +451,13 @@ watch(
                 </span>
                 <span>{{ row.match?.away_team }}</span>
               </div>
-              <p class="mt-1 text-xs text-(--text-muted)">
+              <p class="text-base-content/70 mt-1 text-xs">
                 {{ row.match ? kickoffText(row.match.match_time) : "-" }}
               </p>
             </td>
             <td class="px-4 py-3 font-semibold">
               <p>{{ row.home_score }} : {{ row.away_score }}</p>
-              <p class="mt-1 text-xs font-normal text-(--text-muted)">
+              <p class="text-base-content/70 mt-1 text-xs font-normal">
                 {{ predictionText(row) }}
               </p>
             </td>
@@ -479,9 +470,9 @@ watch(
               >
                 {{ row.match?.home_score }} : {{ row.match?.away_score }}
               </span>
-              <span v-else class="text-(--text-muted)">Pendiente</span>
+              <span v-else class="text-base-content/70">Pendiente</span>
               <p
-                class="mt-1 text-xs text-(--text-muted)"
+                class="text-base-content/70 mt-1 text-xs"
                 v-if="
                   row.match?.home_score !== null &&
                   row.match?.away_score !== null
@@ -492,13 +483,13 @@ watch(
             </td>
             <td class="px-4 py-3">
               <span
-                class="rounded-full px-3 py-1 text-xs font-semibold"
+                class="badge badge-sm px-3 py-1 text-xs font-semibold"
                 :class="outcomeClass(row)"
               >
                 {{ outcomeLabel(row) }}
               </span>
             </td>
-            <td class="px-4 py-3 font-semibold text-amber-200">
+            <td class="text-warning px-4 py-3 font-semibold">
               {{ row.points_earned }}
             </td>
           </tr>

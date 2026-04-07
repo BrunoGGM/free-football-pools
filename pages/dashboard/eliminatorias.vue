@@ -129,73 +129,54 @@ watch(
   <section class="space-y-6">
     <header class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <p class="text-xs uppercase tracking-[0.18em] text-emerald-200">
+        <p class="text-primary text-xs uppercase tracking-[0.18em]">
           Dashboard
         </p>
-        <h1 class="mt-1 text-3xl text-white">Llaves eliminatorias</h1>
+        <h1 class="text-base-content mt-1 text-3xl">Llaves eliminatorias</h1>
       </div>
 
-      <button
-        class="rounded-full border border-white/12 px-4 py-2 text-sm text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100"
-        @click="refresh"
-      >
-        Refrescar
-      </button>
+      <button class="btn btn-outline btn-sm" @click="refresh">Refrescar</button>
     </header>
 
-    <article
-      v-if="!activeQuinielaId"
-      class="pitch-panel rounded-2xl border border-amber-300/25 p-5 text-amber-100"
-    >
+    <article v-if="!activeQuinielaId" class="alert alert-warning rounded-2xl">
       Selecciona una quiniela primero para enviar predicciones.
-      <NuxtLink
-        to="/ingresar"
-        class="ml-2 font-semibold underline underline-offset-4"
+      <NuxtLink to="/ingresar" class="link link-hover ml-2 font-semibold"
         >Ir a ingresar</NuxtLink
       >
     </article>
 
-    <article
-      v-if="loading"
-      class="pitch-panel rounded-2xl p-5 text-sm text-(--text-muted)"
-    >
+    <article v-if="loading" class="alert rounded-2xl text-sm">
       Cargando llaves...
     </article>
     <article
       v-else-if="errorMessage"
-      class="rounded-2xl border border-red-300/20 bg-red-500/10 p-5 text-sm text-red-200"
+      class="alert alert-error rounded-2xl text-sm"
     >
       {{ errorMessage }}
     </article>
 
     <div v-else class="space-y-5">
-      <article class="pitch-panel rounded-2xl p-4 md:p-5">
+      <article
+        class="pitch-panel card rounded-2xl border border-base-300 bg-base-200/70 p-4 md:p-5"
+      >
         <div class="flex flex-wrap items-center gap-2">
           <button
-            class="rounded-full border px-4 py-2 text-sm transition"
-            :class="
-              viewMode === 'cards'
-                ? 'border-emerald-300/45 bg-emerald-500/15 text-emerald-100'
-                : 'border-white/12 text-slate-200 hover:border-white/30 hover:text-white'
-            "
+            class="btn btn-sm"
+            :class="viewMode === 'cards' ? 'btn-primary' : 'btn-outline'"
             @click="viewMode = 'cards'"
           >
             Rondas
           </button>
           <button
-            class="rounded-full border px-4 py-2 text-sm transition"
-            :class="
-              viewMode === 'bracket'
-                ? 'border-emerald-300/45 bg-emerald-500/15 text-emerald-100'
-                : 'border-white/12 text-slate-200 hover:border-white/30 hover:text-white'
-            "
+            class="btn btn-sm"
+            :class="viewMode === 'bracket' ? 'btn-primary' : 'btn-outline'"
             @click="viewMode = 'bracket'"
           >
             Bracket visual
           </button>
         </div>
 
-        <p class="mt-3 text-xs text-(--text-muted)">
+        <p class="text-base-content/70 mt-3 text-xs">
           {{
             viewMode === "cards"
               ? "Vista detallada por ronda para capturar y editar predicciones."
@@ -205,21 +186,19 @@ watch(
       </article>
 
       <template v-if="viewMode === 'cards'">
-        <article class="pitch-panel rounded-2xl p-4 md:p-5">
+        <article
+          class="pitch-panel card rounded-2xl border border-base-300 bg-base-200/70 p-4 md:p-5"
+        >
           <div class="flex gap-2 overflow-x-auto pb-2">
             <button
               v-for="stage in knockoutStages"
               :key="stage"
-              class="min-w-fit rounded-full border px-4 py-2 text-sm transition"
-              :class="
-                activeStage === stage
-                  ? 'border-emerald-300/45 bg-emerald-500/15 text-emerald-100'
-                  : 'border-white/12 text-slate-200 hover:border-white/30 hover:text-white'
-              "
+              class="btn btn-sm min-w-fit"
+              :class="activeStage === stage ? 'btn-primary' : 'btn-outline'"
               @click="activeStage = stage"
             >
               {{ stageName(stage) }}
-              <span class="ml-2 rounded-full bg-black/30 px-2 py-0.5 text-xs">
+              <span class="badge badge-sm ml-2 badge-ghost">
                 {{ stageMatchCount(stage) }}
               </span>
             </button>
@@ -229,7 +208,7 @@ watch(
             class="mt-4 grid items-center gap-3 md:grid-cols-[auto_1fr_auto]"
           >
             <button
-              class="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100 disabled:cursor-not-allowed disabled:opacity-45"
+              class="btn btn-outline btn-sm"
               :disabled="!hasPrevStage"
               @click="goPrevStage"
             >
@@ -237,18 +216,18 @@ watch(
             </button>
 
             <div
-              class="rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-center"
+              class="card rounded-xl border border-base-300 bg-base-100/70 px-4 py-3 text-center"
             >
-              <h2 class="text-lg text-emerald-200">
+              <h2 class="text-primary text-lg">
                 {{ stageName(activeStage) }}
               </h2>
-              <p class="mt-1 text-xs text-(--text-muted)">
+              <p class="text-base-content/70 mt-1 text-xs">
                 {{ stageHint(activeStage) }}
               </p>
             </div>
 
             <button
-              class="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100 disabled:cursor-not-allowed disabled:opacity-45"
+              class="btn btn-outline btn-sm"
               :disabled="!hasNextStage"
               @click="goNextStage"
             >
@@ -269,7 +248,7 @@ watch(
 
           <article
             v-if="activeStageMatches.length === 0"
-            class="rounded-2xl border border-dashed border-white/12 bg-black/15 p-5 text-sm text-(--text-muted)"
+            class="alert rounded-2xl border border-dashed border-base-300 text-sm"
           >
             Sin partidos cargados para
             {{ stageName(activeStage).toLowerCase() }}.

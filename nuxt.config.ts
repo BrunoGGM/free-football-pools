@@ -14,7 +14,7 @@ export default defineNuxtConfig({
   app: {
     head: {
       htmlAttrs: {
-        class: 'dark',
+        'data-theme': 'dark',
       },
     },
   },

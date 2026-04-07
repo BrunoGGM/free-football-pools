@@ -126,46 +126,41 @@ onMounted(() => {
   <section class="space-y-6">
     <header class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <p class="text-xs uppercase tracking-[0.18em] text-emerald-200">
+        <p class="text-primary text-xs uppercase tracking-[0.18em]">
           Dashboard
         </p>
-        <h1 class="mt-1 text-3xl text-white">Tabla de posiciones</h1>
+        <h1 class="text-base-content mt-1 text-3xl">Tabla de posiciones</h1>
       </div>
-      <button
-        class="rounded-full border border-white/12 px-4 py-2 text-sm text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100"
-        @click="loadRanking"
-      >
+      <button class="btn btn-outline btn-sm" @click="loadRanking">
         Refrescar
       </button>
     </header>
 
-    <article
-      v-if="!activeQuinielaId"
-      class="pitch-panel rounded-2xl border border-amber-300/25 p-5 text-amber-100"
-    >
+    <article v-if="!activeQuinielaId" class="alert alert-warning rounded-2xl">
       Activa una quiniela para ver posiciones.
-      <NuxtLink
-        to="/ingresar"
-        class="ml-2 font-semibold underline underline-offset-4"
+      <NuxtLink to="/ingresar" class="link link-hover ml-2 font-semibold"
         >Ir a ingresar</NuxtLink
       >
     </article>
 
-    <article v-else class="pitch-panel rounded-2xl p-5">
-      <h2 class="text-lg text-emerald-200">Prediccion de campeon</h2>
-      <p class="mt-1 text-sm text-(--text-muted)">
+    <article
+      v-else
+      class="pitch-panel card rounded-2xl border border-base-300 bg-base-200/70 p-5"
+    >
+      <h2 class="text-primary text-lg">Prediccion de campeon</h2>
+      <p class="text-base-content/70 mt-1 text-sm">
         Si aciertas antes del inicio del torneo, sumas 10 puntos bonus.
       </p>
 
       <div class="mt-4 flex flex-wrap gap-3">
         <input
           v-model="championInput"
-          class="min-w-55 flex-1 rounded-xl border border-white/10 bg-black/30 px-4 py-2 text-slate-100 outline-none transition focus:border-emerald-400"
+          class="input input-bordered min-w-55 flex-1"
           placeholder="Escribe el campeon"
         />
         <button
           :disabled="savingChampion"
-          class="rounded-xl bg-emerald-400/25 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/35 disabled:cursor-not-allowed disabled:opacity-60"
+          class="btn btn-primary"
           @click="saveChampion"
         >
           {{ savingChampion ? "Guardando..." : "Guardar campeon" }}
@@ -173,25 +168,22 @@ onMounted(() => {
       </div>
     </article>
 
-    <article
-      v-if="loading"
-      class="pitch-panel rounded-2xl p-5 text-sm text-(--text-muted)"
-    >
+    <article v-if="loading" class="alert rounded-2xl text-sm">
       Cargando ranking...
     </article>
     <article
       v-else-if="errorMessage"
-      class="rounded-2xl border border-red-300/20 bg-red-500/10 p-5 text-sm text-red-200"
+      class="alert alert-error rounded-2xl text-sm"
     >
       {{ errorMessage }}
     </article>
     <article
       v-else
-      class="overflow-hidden rounded-2xl border border-white/8 bg-black/25"
+      class="overflow-hidden rounded-2xl border border-base-300 bg-base-100/70"
     >
-      <table class="min-w-full text-sm">
+      <table class="table min-w-full text-sm">
         <thead
-          class="bg-black/35 text-left text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+          class="bg-base-200 text-base-content/70 text-left text-xs uppercase tracking-[0.12em]"
         >
           <tr>
             <th class="px-4 py-3">#</th>
@@ -204,9 +196,9 @@ onMounted(() => {
           <tr
             v-for="row in rows"
             :key="row.user_id"
-            class="border-t border-white/8"
+            class="border-t border-base-300"
           >
-            <td class="px-4 py-3 font-semibold text-emerald-200">
+            <td class="text-primary px-4 py-3 font-semibold">
               {{ row.rank }}
             </td>
             <td class="px-4 py-3">
@@ -215,11 +207,11 @@ onMounted(() => {
                   v-if="row.avatar_url"
                   :src="row.avatar_url"
                   alt="avatar"
-                  class="h-7 w-7 rounded-full border border-white/15 object-cover"
+                  class="h-7 w-7 rounded-full border border-base-300 object-cover"
                 />
                 <div
                   v-else
-                  class="grid h-7 w-7 place-content-center rounded-full bg-emerald-400/20 text-xs font-bold text-emerald-100"
+                  class="bg-primary/20 text-primary grid h-7 w-7 place-content-center rounded-full text-xs font-bold"
                 >
                   {{ row.username.slice(0, 1).toUpperCase() }}
                 </div>
@@ -227,7 +219,7 @@ onMounted(() => {
               </div>
             </td>
             <td class="px-4 py-3 font-semibold">{{ row.total_points }}</td>
-            <td class="px-4 py-3 text-(--text-muted)">
+            <td class="text-base-content/70 px-4 py-3">
               {{ row.predicted_champion || "-" }}
             </td>
           </tr>

@@ -211,77 +211,59 @@ watch(
   <section class="space-y-6">
     <header class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <p class="text-xs uppercase tracking-[0.18em] text-emerald-200">
+        <p class="text-primary text-xs uppercase tracking-[0.18em]">
           Dashboard
         </p>
-        <h1 class="mt-1 text-3xl text-white">Partidos de grupos</h1>
+        <h1 class="text-base-content mt-1 text-3xl">Partidos de grupos</h1>
       </div>
 
-      <button
-        class="rounded-full border border-white/12 px-4 py-2 text-sm text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100"
-        @click="refresh"
-      >
-        Refrescar
-      </button>
+      <button class="btn btn-outline btn-sm" @click="refresh">Refrescar</button>
     </header>
 
-    <article
-      v-if="!activeQuinielaId"
-      class="pitch-panel rounded-2xl border border-amber-300/25 p-5 text-amber-100"
-    >
+    <article v-if="!activeQuinielaId" class="alert alert-warning rounded-2xl">
       Selecciona una quiniela primero desde ingresar para activar guardado de
       predicciones.
-      <NuxtLink
-        to="/ingresar"
-        class="ml-2 font-semibold underline underline-offset-4"
+      <NuxtLink to="/ingresar" class="link link-hover ml-2 font-semibold"
         >Ir a ingresar</NuxtLink
       >
     </article>
 
-    <article
-      v-if="loading"
-      class="pitch-panel rounded-2xl p-5 text-sm text-(--text-muted)"
-    >
+    <article v-if="loading" class="alert rounded-2xl text-sm">
       Cargando partidos...
     </article>
     <article
       v-else-if="errorMessage"
-      class="rounded-2xl border border-red-300/20 bg-red-500/10 p-5 text-sm text-red-200"
+      class="alert alert-error rounded-2xl text-sm"
     >
       {{ errorMessage }}
     </article>
     <div v-else class="space-y-8">
-      <article
-        v-if="!hasMatches"
-        class="pitch-panel rounded-2xl p-5 text-sm text-(--text-muted)"
-      >
+      <article v-if="!hasMatches" class="alert rounded-2xl text-sm">
         Todavia no hay partidos de fase de grupos cargados. La tabla de
         rendimiento se mostrara en cuanto haya resultados.
       </article>
 
-      <article class="pitch-panel rounded-2xl p-4">
-        <p class="text-xs uppercase tracking-[0.14em] text-(--text-muted)">
+      <article
+        class="pitch-panel card rounded-2xl border border-base-300 bg-base-200/70 p-4"
+      >
+        <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
           Navegacion por grupos
         </p>
         <div class="mt-3 flex gap-2 overflow-x-auto pb-1">
           <button
             v-for="stage in stageTabs"
             :key="stage.stage"
-            class="shrink-0 rounded-full border px-4 py-2 text-sm font-semibold transition"
+            class="btn btn-sm shrink-0"
             :class="[
-              activeStage === stage.stage
-                ? 'border-emerald-300/50 bg-emerald-400/20 text-emerald-100'
-                : 'border-white/12 bg-black/25 text-slate-200 hover:border-emerald-300/35 hover:text-emerald-100',
+              activeStage === stage.stage ? 'btn-primary' : 'btn-outline',
             ]"
             @click="activeStage = stage.stage"
           >
             {{ stage.title }}
             <span
-              class="ml-2 rounded-full px-2 py-0.5 text-xs"
+              class="badge badge-sm ml-2"
               :class="[
-                activeStage === stage.stage
-                  ? 'bg-emerald-400/30 text-emerald-100'
-                  : 'bg-white/10 text-slate-200',
+                activeStage === stage.stage ? 'badge-primary' : 'badge-ghost',
               ]"
             >
               {{ stage.count }}
@@ -292,20 +274,20 @@ watch(
 
       <section class="space-y-3">
         <div class="flex items-center justify-between gap-3">
-          <h2 class="text-xl text-emerald-200">
+          <h2 class="text-primary text-xl">
             Rendimiento de {{ stageTitle(activeStage) }}
           </h2>
-          <p class="text-xs text-(--text-muted)">
+          <p class="text-base-content/70 text-xs">
             Solo selecciones del grupo activo
           </p>
         </div>
 
         <article
-          class="overflow-x-auto rounded-2xl border border-white/8 bg-black/25"
+          class="overflow-x-auto rounded-2xl border border-base-300 bg-base-100/70"
         >
-          <table class="min-w-full text-sm">
+          <table class="table min-w-full text-sm">
             <thead
-              class="bg-black/35 text-left text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+              class="bg-base-200 text-base-content/70 text-left text-xs uppercase tracking-[0.12em]"
             >
               <tr>
                 <th class="px-4 py-3">#</th>
@@ -324,9 +306,9 @@ watch(
               <tr
                 v-for="row in performanceRows"
                 :key="row.team"
-                class="border-t border-white/8"
+                class="border-t border-base-300"
               >
-                <td class="px-4 py-3 font-semibold text-emerald-200">
+                <td class="text-primary px-4 py-3 font-semibold">
                   {{ row.rank }}
                 </td>
                 <td class="px-4 py-3">
@@ -335,7 +317,7 @@ watch(
                       v-if="row.logoUrl"
                       :src="row.logoUrl"
                       :alt="`Bandera de ${row.team}`"
-                      class="h-5 w-5 rounded-full border border-white/15 bg-white/10 object-cover"
+                      class="h-5 w-5 rounded-full border border-base-300 bg-base-200 object-cover"
                       loading="lazy"
                     />
                     <span v-else class="text-base">{{
@@ -351,14 +333,14 @@ watch(
                 <td class="px-4 py-3">{{ row.goalsFor }}</td>
                 <td class="px-4 py-3">{{ row.goalsAgainst }}</td>
                 <td class="px-4 py-3">{{ row.goalDiff }}</td>
-                <td class="px-4 py-3 font-semibold text-amber-200">
+                <td class="text-warning px-4 py-3 font-semibold">
                   {{ row.points }}
                 </td>
               </tr>
-              <tr v-if="!hasPerformanceData" class="border-t border-white/8">
+              <tr v-if="!hasPerformanceData" class="border-t border-base-300">
                 <td
                   colspan="10"
-                  class="px-4 py-6 text-center text-sm text-(--text-muted)"
+                  class="text-base-content/70 px-4 py-6 text-center text-sm"
                 >
                   Aun no hay paises cargados para este grupo.
                 </td>
@@ -369,7 +351,7 @@ watch(
       </section>
 
       <section class="space-y-3">
-        <h2 class="text-xl text-emerald-200">{{ stageTitle(activeStage) }}</h2>
+        <h2 class="text-primary text-xl">{{ stageTitle(activeStage) }}</h2>
         <div v-if="activeMatches.length" class="grid gap-4 lg:grid-cols-2">
           <MatchCard
             v-for="match in activeMatches"
@@ -378,10 +360,7 @@ watch(
             :editable="Boolean(activeQuinielaId)"
           />
         </div>
-        <article
-          v-else
-          class="pitch-panel rounded-2xl p-5 text-sm text-(--text-muted)"
-        >
+        <article v-else class="alert rounded-2xl text-sm">
           Todavia no hay partidos cargados para este grupo.
         </article>
       </section>

@@ -25,34 +25,28 @@ const highlights = [
 </script>
 
 <template>
-  <section class="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
-    <div class="pitch-panel neon-border overflow-hidden rounded-3xl p-6 sm:p-8">
-      <p
-        class="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200"
-      >
+  <section class="grid items-start gap-6 lg:grid-cols-[1.3fr_1fr]">
+    <div
+      class="pitch-panel card neon-border overflow-hidden border border-base-300 bg-base-200/70 p-6 shadow-xl sm:p-8"
+    >
+      <p class="text-primary text-xs font-semibold uppercase tracking-[0.2em]">
         Mundial 2026
       </p>
-      <h1 class="mt-3 text-4xl leading-tight text-white sm:text-5xl">
+      <h1 class="text-base-content mt-3 text-4xl leading-tight sm:text-5xl">
         Vive la quiniela
-        <span class="text-emerald-300">mas intensa</span>
+        <span class="text-primary">mas intensa</span>
         de tu grupo
       </h1>
-      <p class="mt-5 max-w-xl text-base text-(--text-muted) sm:text-lg">
+      <p class="text-base-content/70 mt-5 max-w-xl text-base sm:text-lg">
         Crea o unete a tu sala privada, pronostica cada partido y compite en un
         ranking que se mueve con cada marcador en vivo.
       </p>
 
       <div class="mt-7 flex flex-wrap gap-3">
-        <NuxtLink
-          :to="ctaPrimary"
-          class="rounded-full bg-emerald-400/25 px-5 py-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/35"
-        >
+        <NuxtLink :to="ctaPrimary" class="btn btn-primary">
           {{ user ? "Ir al dashboard" : "Iniciar sesion" }}
         </NuxtLink>
-        <NuxtLink
-          :to="ctaSecondary"
-          class="rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-amber-300/45 hover:text-amber-100"
-        >
+        <NuxtLink :to="ctaSecondary" class="btn btn-outline">
           {{ user ? "Ingresar con codigo" : "Registrarse" }}
         </NuxtLink>
       </div>
@@ -61,38 +55,38 @@ const highlights = [
         <article
           v-for="item in highlights"
           :key="item.title"
-          class="rounded-xl border border-white/8 bg-black/20 p-4"
+          class="card border border-base-300 bg-base-100/70 p-4"
         >
-          <h2 class="text-lg text-emerald-200">{{ item.title }}</h2>
-          <p class="mt-2 text-sm text-(--text-muted)">{{ item.text }}</p>
+          <h2 class="text-primary text-lg">{{ item.title }}</h2>
+          <p class="text-base-content/70 mt-2 text-sm">{{ item.text }}</p>
         </article>
       </div>
     </div>
 
-    <aside class="pitch-panel overflow-hidden rounded-3xl p-6 sm:p-7">
-      <p
-        class="text-xs font-semibold uppercase tracking-[0.2em] text-amber-200"
-      >
+    <aside
+      class="pitch-panel card overflow-hidden border border-base-300 bg-base-200/70 p-6 shadow-xl sm:p-7"
+    >
+      <p class="text-warning text-xs font-semibold uppercase tracking-[0.2em]">
         Puntos oficiales
       </p>
-      <h2 class="mt-2 text-2xl text-white">Reglamento rapido</h2>
+      <h2 class="text-base-content mt-2 text-2xl">Reglamento rapido</h2>
 
-      <ul class="mt-5 space-y-3 text-sm text-slate-200">
-        <li class="rounded-xl border border-white/8 bg-black/20 p-3">
-          <p class="font-semibold text-emerald-200">1 punto</p>
-          <p class="text-(--text-muted)">
+      <ul class="text-base-content mt-5 space-y-3 text-sm">
+        <li class="card border border-base-300 bg-base-100/70 p-3">
+          <p class="text-primary font-semibold">1 punto</p>
+          <p class="text-base-content/70">
             Acertar resultado (local, empate o visita).
           </p>
         </li>
-        <li class="rounded-xl border border-white/8 bg-black/20 p-3">
-          <p class="font-semibold text-emerald-200">3 puntos</p>
-          <p class="text-(--text-muted)">
+        <li class="card border border-base-300 bg-base-100/70 p-3">
+          <p class="text-primary font-semibold">3 puntos</p>
+          <p class="text-base-content/70">
             Acertar marcador exacto del partido.
           </p>
         </li>
-        <li class="rounded-xl border border-white/8 bg-black/20 p-3">
-          <p class="font-semibold text-amber-200">10 puntos bonus</p>
-          <p class="text-(--text-muted)">
+        <li class="card border border-base-300 bg-base-100/70 p-3">
+          <p class="text-warning font-semibold">10 puntos bonus</p>
+          <p class="text-base-content/70">
             Acertar campeon predicho antes del inicio del torneo.
           </p>
         </li>
@@ -100,7 +94,7 @@ const highlights = [
 
       <NuxtLink
         to="/ingresar"
-        class="mt-6 inline-flex rounded-full border border-emerald-400/40 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/10"
+        class="btn btn-outline btn-primary btn-sm mt-6 inline-flex"
       >
         Ya tienes codigo de sala
       </NuxtLink>

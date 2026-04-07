@@ -72,27 +72,27 @@ const submit = async () => {
 
 <template>
   <section class="mx-auto max-w-xl">
-    <div class="pitch-panel neon-border rounded-3xl p-6 sm:p-8">
-      <div
-        class="flex items-center gap-2 rounded-full border border-white/10 bg-black/25 p-1"
-      >
+    <div
+      class="pitch-panel card neon-border rounded-3xl border border-base-300 bg-base-200/70 p-6 shadow-xl sm:p-8"
+    >
+      <div class="tabs tabs-boxed bg-base-100/70 p-1">
         <button
-          class="w-full rounded-full px-4 py-2 text-sm font-semibold transition"
+          class="tab w-full text-sm font-semibold"
           :class="
             mode === 'login'
-              ? 'bg-emerald-400/20 text-emerald-100'
-              : 'text-slate-300 hover:text-white'
+              ? 'tab-active text-primary'
+              : 'text-base-content/70'
           "
           @click="setMode('login')"
         >
           Iniciar sesion
         </button>
         <button
-          class="w-full rounded-full px-4 py-2 text-sm font-semibold transition"
+          class="tab w-full text-sm font-semibold"
           :class="
             mode === 'register'
-              ? 'bg-emerald-400/20 text-emerald-100'
-              : 'text-slate-300 hover:text-white'
+              ? 'tab-active text-primary'
+              : 'text-base-content/70'
           "
           @click="setMode('register')"
         >
@@ -100,15 +100,16 @@ const submit = async () => {
         </button>
       </div>
 
-      <h1 class="mt-6 text-3xl text-white">{{ title }}</h1>
-      <p class="mt-2 text-sm text-(--text-muted)">
+      <h1 class="text-base-content mt-6 text-3xl">{{ title }}</h1>
+      <p class="text-base-content/70 mt-2 text-sm">
         Entra a tu quiniela privada y prepara tus predicciones antes de cada
         kickoff.
       </p>
 
       <form class="mt-6 space-y-4" @submit.prevent="submit">
-        <div v-if="mode === 'register'" class="space-y-1">
-          <label class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+        <div v-if="mode === 'register'" class="form-control space-y-1">
+          <label
+            class="label-text text-base-content/70 text-xs uppercase tracking-[0.12em]"
             >Username</label
           >
           <input
@@ -116,26 +117,28 @@ const submit = async () => {
             required
             minlength="3"
             maxlength="32"
-            class="w-full rounded-xl border border-white/10 bg-black/35 px-4 py-3 text-slate-100 outline-none transition focus:border-emerald-400"
+            class="input input-bordered w-full"
             placeholder="tu_usuario"
           />
         </div>
 
-        <div class="space-y-1">
-          <label class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+        <div class="form-control space-y-1">
+          <label
+            class="label-text text-base-content/70 text-xs uppercase tracking-[0.12em]"
             >Email</label
           >
           <input
             v-model="email"
             required
             type="email"
-            class="w-full rounded-xl border border-white/10 bg-black/35 px-4 py-3 text-slate-100 outline-none transition focus:border-emerald-400"
+            class="input input-bordered w-full"
             placeholder="mail@ejemplo.com"
           />
         </div>
 
-        <div class="space-y-1">
-          <label class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+        <div class="form-control space-y-1">
+          <label
+            class="label-text text-base-content/70 text-xs uppercase tracking-[0.12em]"
             >Password</label
           >
           <input
@@ -143,24 +146,21 @@ const submit = async () => {
             required
             minlength="6"
             type="password"
-            class="w-full rounded-xl border border-white/10 bg-black/35 px-4 py-3 text-slate-100 outline-none transition focus:border-emerald-400"
+            class="input input-bordered w-full"
             placeholder="******"
           />
         </div>
 
         <button
           :disabled="loading"
-          class="w-full rounded-xl bg-emerald-400/25 px-4 py-3 font-semibold text-emerald-100 transition hover:bg-emerald-400/35 disabled:cursor-not-allowed disabled:opacity-55"
+          class="btn btn-primary w-full"
           type="submit"
         >
           {{ loading ? "Procesando..." : actionLabel }}
         </button>
       </form>
 
-      <p
-        v-if="errorMessage"
-        class="mt-4 rounded-xl border border-red-300/20 bg-red-400/10 px-4 py-3 text-sm text-red-200"
-      >
+      <p v-if="errorMessage" class="alert alert-error mt-4 text-sm">
         {{ errorMessage }}
       </p>
     </div>

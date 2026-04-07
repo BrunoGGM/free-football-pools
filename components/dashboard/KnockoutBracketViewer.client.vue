@@ -354,7 +354,9 @@ watch(
 </script>
 
 <template>
-  <article class="bracket-shell rounded-2xl border border-white/10 p-3 md:p-5">
+  <article
+    class="bracket-shell rounded-2xl border border-base-300 bg-base-200/70 p-3 md:p-5"
+  >
     <div :id="containerId" class="brackets-viewer" />
   </article>
 </template>
@@ -364,36 +366,44 @@ watch(
   background:
     radial-gradient(
       circle at 15% 10%,
-      rgba(16, 185, 129, 0.12),
+      color-mix(in oklab, var(--color-primary) 14%, transparent),
       transparent 46%
     ),
     radial-gradient(
       circle at 85% 80%,
-      rgba(148, 163, 184, 0.12),
+      color-mix(in oklab, var(--color-base-content) 10%, transparent),
       transparent 42%
     ),
-    linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(2, 6, 23, 0.95));
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--color-base-200) 85%, transparent),
+      color-mix(in oklab, var(--color-base-300) 90%, transparent)
+    );
 }
 
 .bracket-shell :deep(.brackets-viewer) {
-  --match-background: #ffffff;
-  --match-color: #0f172a;
-  --match-border: #cbd5e1;
-  --match-hover-background: #f8fafc;
+  --match-background: var(--color-base-100);
+  --match-color: var(--color-base-content);
+  --match-border: var(--color-base-300);
+  --match-hover-background: var(--color-base-200);
   --match-round-margin: 1.4rem;
-  --participant-background: #f8fafc;
-  --participant-color: #0f172a;
-  --participant-hover-background: #e2e8f0;
-  --participant-border: #dbeafe;
-  --connector-color: rgba(148, 163, 184, 0.65);
-  --hint-color: #475569;
+  --participant-background: var(--color-base-100);
+  --participant-color: var(--color-base-content);
+  --participant-hover-background: var(--color-base-200);
+  --participant-border: var(--color-base-300);
+  --connector-color: color-mix(
+    in oklab,
+    var(--color-base-content) 45%,
+    transparent
+  );
+  --hint-color: color-mix(in oklab, var(--color-base-content) 70%, transparent);
 }
 
 .bracket-shell :deep(.stage-header) {
-  color: #d1fae5;
+  color: var(--color-primary);
 }
 
 .bracket-shell :deep(.round-header) {
-  color: #e2e8f0;
+  color: var(--color-base-content);
 }
 </style>

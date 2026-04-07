@@ -23,44 +23,48 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <article class="pitch-panel rounded-2xl p-5">
-    <h2 class="text-xl text-white">Resumen del panel</h2>
-    <p class="mt-2 text-sm text-(--text-muted)">
+  <article
+    class="pitch-panel card rounded-2xl border border-base-300 bg-base-200/70 p-5"
+  >
+    <h2 class="text-base-content text-xl">Resumen del panel</h2>
+    <p class="text-base-content/70 mt-2 text-sm">
       Navega por secciones para administrar quinielas, equipos e ingesta sin
       tener una pagina extensa.
     </p>
 
     <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-        <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+      <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
+        <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
           Quiniela activa
         </p>
-        <p class="mt-1 text-sm font-semibold text-white">
+        <p class="text-base-content mt-1 text-sm font-semibold">
           {{ quiniela?.name || "Sin quiniela activa" }}
         </p>
       </div>
 
-      <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-        <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+      <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
+        <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
           Quinielas totales
         </p>
-        <p class="mt-1 text-sm font-semibold text-white">
+        <p class="text-base-content mt-1 text-sm font-semibold">
           {{ globalStats?.totals?.quinielas ?? "--" }}
         </p>
       </div>
 
-      <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-        <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+      <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
+        <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
           Equipos en catalogo
         </p>
-        <p class="mt-1 text-sm font-semibold text-white">{{ teamsTotal }}</p>
+        <p class="text-base-content mt-1 text-sm font-semibold">
+          {{ teamsTotal }}
+        </p>
       </div>
 
-      <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-        <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+      <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
+        <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
           Cuota API hoy
         </p>
-        <p class="mt-1 text-sm font-semibold text-white">
+        <p class="text-base-content mt-1 text-sm font-semibold">
           {{ syncStatus?.requestsUsedToday ?? 0 }}/{{
             syncStatus?.dailyBudget ?? 0
           }}
@@ -70,19 +74,16 @@ const emit = defineEmits<{
 
     <div class="mt-4 flex flex-wrap gap-2">
       <button
-        class="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100"
+        class="btn btn-outline btn-sm"
         @click="emit('navigate', 'quinielas')"
       >
         Ir a Quinielas
       </button>
-      <button
-        class="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100"
-        @click="emit('navigate', 'teams')"
-      >
+      <button class="btn btn-outline btn-sm" @click="emit('navigate', 'teams')">
         Ir a Equipos
       </button>
       <button
-        class="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100"
+        class="btn btn-outline btn-sm"
         @click="emit('navigate', 'ingestion')"
       >
         Ir a Ingesta API
@@ -91,13 +92,13 @@ const emit = defineEmits<{
 
     <div
       v-if="quiniela"
-      class="mt-4 rounded-xl border border-white/10 bg-black/25 p-4"
+      class="card mt-4 rounded-xl border border-base-300 bg-base-100/70 p-4"
     >
-      <p class="text-sm text-slate-100">
+      <p class="text-base-content text-sm">
         Access code:
         <span class="font-semibold">{{ quiniela.access_code }}</span>
       </p>
-      <p class="mt-1 text-sm text-(--text-muted)">
+      <p class="text-base-content/70 mt-1 text-sm">
         Inicio: {{ new Date(quiniela.start_date).toLocaleString("es-MX") }}
       </p>
     </div>

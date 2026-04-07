@@ -60,37 +60,34 @@ const quickLinks = [
 
 <template>
   <section class="space-y-6">
-    <article class="pitch-panel neon-border rounded-3xl p-6 sm:p-8">
-      <p class="text-xs uppercase tracking-[0.18em] text-emerald-200">
-        Dashboard
-      </p>
-      <h1 class="mt-2 text-3xl text-white sm:text-4xl">
+    <article
+      class="pitch-panel card neon-border rounded-3xl border border-base-300 bg-base-200/70 p-6 shadow-xl sm:p-8"
+    >
+      <p class="text-primary text-xs uppercase tracking-[0.18em]">Dashboard</p>
+      <h1 class="text-base-content mt-2 text-3xl sm:text-4xl">
         Bienvenido, {{ username }}
       </h1>
 
       <div
-        class="mt-5 rounded-2xl border border-white/8 bg-black/20 p-4 text-sm text-slate-200"
+        class="card mt-5 rounded-2xl border border-base-300 bg-base-100/70 p-4 text-sm text-base-content"
         v-if="quiniela"
       >
-        <p class="text-xs uppercase tracking-[0.14em] text-(--text-muted)">
+        <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
           Quiniela activa
         </p>
-        <p class="mt-1 text-lg font-semibold text-emerald-200">
+        <p class="text-primary mt-1 text-lg font-semibold">
           {{ quiniela.name }}
         </p>
-        <p class="mt-1 text-(--text-muted)">
+        <p class="text-base-content/70 mt-1">
           {{ quiniela.description || "Sin descripcion." }}
         </p>
       </div>
 
-      <div
-        class="mt-5 rounded-2xl border border-amber-300/20 bg-amber-500/5 p-4 text-sm text-amber-100"
-        v-else
-      >
+      <div class="alert alert-warning mt-5 rounded-2xl p-4 text-sm" v-else>
         <p>Aun no tienes una quiniela activa en esta sesion.</p>
         <NuxtLink
           to="/ingresar"
-          class="mt-2 inline-flex font-semibold text-amber-200 underline underline-offset-4"
+          class="link link-hover mt-2 inline-flex font-semibold"
         >
           Unirme con codigo
         </NuxtLink>
@@ -102,16 +99,18 @@ const quickLinks = [
         v-for="item in quickLinks"
         :key="item.to"
         :to="item.to"
-        class="pitch-panel rounded-2xl p-4 transition hover:-translate-y-0.5 hover:border-emerald-400/25"
+        class="pitch-panel card rounded-2xl border border-base-300 bg-base-200/70 p-4 transition hover:-translate-y-0.5 hover:border-primary/50"
       >
-        <h2 class="text-xl text-emerald-200">{{ item.title }}</h2>
-        <p class="mt-2 text-sm text-(--text-muted)">{{ item.text }}</p>
+        <h2 class="text-primary text-xl">{{ item.title }}</h2>
+        <p class="text-base-content/70 mt-2 text-sm">{{ item.text }}</p>
       </NuxtLink>
     </div>
 
-    <article class="pitch-panel rounded-2xl p-5">
-      <h2 class="text-xl text-white">Siguiente paso</h2>
-      <p class="mt-2 text-sm text-(--text-muted)">
+    <article
+      class="pitch-panel card rounded-2xl border border-base-300 bg-base-200/70 p-5"
+    >
+      <h2 class="text-base-content text-xl">Siguiente paso</h2>
+      <p class="text-base-content/70 mt-2 text-sm">
         Define tu campeon en la pantalla de posiciones antes de
         {{ quiniela?.start_date || "la fecha de inicio" }} para habilitar el
         bonus de 10 puntos.
@@ -120,13 +119,13 @@ const quickLinks = [
 
     <article
       v-if="myQuinielas.length"
-      class="pitch-panel rounded-2xl border border-white/10 p-5"
+      class="pitch-panel card rounded-2xl border border-base-300 bg-base-200/70 p-5"
     >
       <div class="flex items-center justify-between gap-3">
-        <h2 class="text-xl text-emerald-200">Mis quinielas</h2>
+        <h2 class="text-primary text-xl">Mis quinielas</h2>
         <NuxtLink
           to="/ingresar"
-          class="text-xs font-semibold uppercase tracking-[0.12em] text-amber-200 underline underline-offset-4"
+          class="link link-hover text-warning text-xs font-semibold uppercase tracking-[0.12em]"
         >
           Unirme a otra
         </NuxtLink>
@@ -136,21 +135,21 @@ const quickLinks = [
         <button
           v-for="membership in myQuinielas"
           :key="membership.quiniela_id"
-          class="w-full rounded-xl border p-4 text-left transition"
+          class="card w-full border p-4 text-left transition"
           :class="[
             activeQuinielaId === membership.quiniela_id
-              ? 'border-emerald-300/45 bg-emerald-500/10'
-              : 'border-white/10 bg-black/25 hover:border-emerald-300/25',
+              ? 'border-primary bg-primary/10'
+              : 'border-base-300 bg-base-100/70 hover:border-primary/40',
           ]"
           @click="selectQuiniela(membership.quiniela_id)"
         >
-          <p class="text-sm font-semibold text-white">
+          <p class="text-base-content text-sm font-semibold">
             {{ membership.quiniela?.name || "Quiniela" }}
           </p>
-          <p class="mt-1 text-xs text-(--text-muted)">
+          <p class="text-base-content/70 mt-1 text-xs">
             {{ membership.quiniela?.description || "Sin descripcion." }}
           </p>
-          <p class="mt-2 text-xs text-amber-200">
+          <p class="text-warning mt-2 text-xs">
             Puntos actuales: {{ membership.total_points }}
           </p>
         </button>

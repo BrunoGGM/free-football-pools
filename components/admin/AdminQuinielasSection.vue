@@ -46,98 +46,100 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <article v-if="isGlobalAdmin" class="pitch-panel rounded-2xl p-5">
-    <h2 class="text-xl text-white">Dashboard global</h2>
-    <p class="mt-2 text-sm text-(--text-muted)">
+  <article
+    v-if="isGlobalAdmin"
+    class="pitch-panel card rounded-2xl border border-base-300 bg-base-200/70 p-5"
+  >
+    <h2 class="text-base-content text-xl">Dashboard global</h2>
+    <p class="text-base-content/70 mt-2 text-sm">
       Como global admin puedes ver metricas totales y gestionar quinielas de
       toda la plataforma.
     </p>
 
-    <p v-if="globalLoading" class="mt-4 text-sm text-(--text-muted)">
+    <p v-if="globalLoading" class="text-base-content/70 mt-4 text-sm">
       Cargando dashboard global...
     </p>
 
-    <p
-      v-else-if="globalError"
-      class="mt-4 rounded-xl border border-red-300/20 bg-red-500/10 px-4 py-3 text-sm text-red-200"
-    >
+    <p v-else-if="globalError" class="alert alert-error mt-4 text-sm">
       {{ globalError }}
     </p>
 
     <template v-else-if="globalStats">
       <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-          <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+        <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
             Usuarios
           </p>
-          <p class="mt-1 text-2xl font-semibold text-white">
+          <p class="text-base-content mt-1 text-2xl font-semibold">
             {{ globalStats.totals.users }}
           </p>
         </div>
-        <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-          <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+        <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
             Global admins
           </p>
-          <p class="mt-1 text-2xl font-semibold text-white">
+          <p class="text-base-content mt-1 text-2xl font-semibold">
             {{ globalStats.totals.globalAdmins }}
           </p>
         </div>
-        <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-          <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+        <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
             Quinielas
           </p>
-          <p class="mt-1 text-2xl font-semibold text-white">
+          <p class="text-base-content mt-1 text-2xl font-semibold">
             {{ globalStats.totals.quinielas }}
           </p>
         </div>
-        <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-          <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+        <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
             Miembros
           </p>
-          <p class="mt-1 text-2xl font-semibold text-white">
+          <p class="text-base-content mt-1 text-2xl font-semibold">
             {{ globalStats.totals.members }}
           </p>
         </div>
-        <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-          <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+        <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
             Partidos
           </p>
-          <p class="mt-1 text-2xl font-semibold text-white">
+          <p class="text-base-content mt-1 text-2xl font-semibold">
             {{ globalStats.totals.matches }}
           </p>
         </div>
-        <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-          <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+        <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
             Predicciones
           </p>
-          <p class="mt-1 text-2xl font-semibold text-white">
+          <p class="text-base-content mt-1 text-2xl font-semibold">
             {{ globalStats.totals.predictions }}
           </p>
         </div>
       </div>
 
-      <div class="mt-6 rounded-xl border border-white/10 bg-black/25 p-4">
-        <h3 class="text-lg text-emerald-200">
+      <div
+        class="card mt-6 rounded-xl border border-base-300 bg-base-100/70 p-4"
+      >
+        <h3 class="text-primary text-lg">
           {{ quinielaForm.id ? "Editar quiniela" : "Crear quiniela" }}
         </h3>
 
         <div class="mt-4 grid gap-3 md:grid-cols-2">
           <div class="space-y-1">
             <label
-              class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
             >
               Nombre
             </label>
             <input
               v-model="quinielaForm.name"
-              class="w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-slate-100 outline-none focus:border-emerald-400"
+              class="input input-bordered w-full"
               placeholder="Quiniela principal"
             />
           </div>
 
           <div class="space-y-1">
             <label
-              class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
             >
               Access code
             </label>
@@ -145,11 +147,11 @@ const emit = defineEmits<{
               <input
                 v-model="quinielaForm.access_code"
                 maxlength="12"
-                class="w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 uppercase text-slate-100 outline-none focus:border-emerald-400"
+                class="input input-bordered w-full uppercase"
                 placeholder="ABC123"
               />
               <button
-                class="rounded-xl border border-white/15 px-3 text-xs text-slate-200 transition hover:border-emerald-300/45 hover:text-emerald-100"
+                class="btn btn-outline btn-sm"
                 @click="emit('randomAccessCode')"
               >
                 Generar
@@ -159,53 +161,53 @@ const emit = defineEmits<{
 
           <div class="space-y-1">
             <label
-              class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
             >
               Admin user id
             </label>
             <input
               v-model="quinielaForm.admin_id"
-              class="w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-slate-100 outline-none focus:border-emerald-400"
+              class="input input-bordered w-full"
               placeholder="uuid del admin"
             />
           </div>
 
           <div class="space-y-1">
             <label
-              class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
             >
               Inicio
             </label>
             <input
               v-model="quinielaForm.start_date"
               type="datetime-local"
-              class="w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-slate-100 outline-none focus:border-emerald-400"
+              class="input input-bordered w-full"
             />
           </div>
 
           <div class="space-y-1 md:col-span-2">
             <label
-              class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
             >
               Fin (opcional)
             </label>
             <input
               v-model="quinielaForm.end_date"
               type="datetime-local"
-              class="w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-slate-100 outline-none focus:border-emerald-400"
+              class="input input-bordered w-full"
             />
           </div>
 
           <div class="space-y-1 md:col-span-2">
             <label
-              class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
             >
               Descripcion
             </label>
             <textarea
               v-model="quinielaForm.description"
               rows="3"
-              class="w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-slate-100 outline-none focus:border-emerald-400"
+              class="textarea textarea-bordered w-full"
               placeholder="Descripcion de la quiniela"
             />
           </div>
@@ -213,7 +215,7 @@ const emit = defineEmits<{
 
         <div class="mt-4 flex flex-wrap gap-2">
           <button
-            class="rounded-full border border-emerald-300/45 px-4 py-2 text-sm text-emerald-100 transition hover:border-emerald-200 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            class="btn btn-primary btn-sm"
             :disabled="savingQuiniela"
             @click="emit('saveQuiniela')"
           >
@@ -227,32 +229,26 @@ const emit = defineEmits<{
           </button>
           <button
             v-if="quinielaForm.id"
-            class="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-100 transition hover:border-white/35"
+            class="btn btn-outline btn-sm"
             @click="emit('resetQuinielaForm')"
           >
             Cancelar edicion
           </button>
         </div>
 
-        <p
-          v-if="globalMessage"
-          class="mt-3 rounded-lg border border-emerald-300/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100"
-        >
+        <p v-if="globalMessage" class="alert alert-success mt-3 text-xs">
           {{ globalMessage }}
         </p>
 
-        <p
-          v-if="globalError"
-          class="mt-3 rounded-lg border border-red-300/20 bg-red-500/10 px-3 py-2 text-xs text-red-200"
-        >
+        <p v-if="globalError" class="alert alert-error mt-3 text-xs">
           {{ globalError }}
         </p>
       </div>
 
-      <div class="mt-6 overflow-hidden rounded-xl border border-white/8">
-        <table class="min-w-full text-sm">
+      <div class="mt-6 overflow-hidden rounded-xl border border-base-300">
+        <table class="table min-w-full text-sm">
           <thead
-            class="bg-black/35 text-left text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+            class="bg-base-200 text-base-content/70 text-left text-xs uppercase tracking-[0.12em]"
           >
             <tr>
               <th class="px-4 py-3">Quiniela</th>
@@ -266,32 +262,32 @@ const emit = defineEmits<{
             <tr
               v-for="item in managedQuinielas"
               :key="item.id"
-              class="border-t border-white/8"
+              class="border-t border-base-300"
             >
               <td class="px-4 py-3">
-                <p class="font-semibold text-slate-100">{{ item.name }}</p>
-                <p class="text-xs text-(--text-muted)">
+                <p class="text-base-content font-semibold">{{ item.name }}</p>
+                <p class="text-base-content/70 text-xs">
                   {{ item.description || "Sin descripcion" }}
                 </p>
               </td>
               <td class="px-4 py-3">
-                <p class="text-slate-100">{{ item.admin_username }}</p>
-                <p class="text-xs text-(--text-muted)">{{ item.admin_id }}</p>
+                <p class="text-base-content">{{ item.admin_username }}</p>
+                <p class="text-base-content/70 text-xs">{{ item.admin_id }}</p>
               </td>
               <td class="px-4 py-3 uppercase">{{ item.access_code }}</td>
-              <td class="px-4 py-3 text-(--text-muted)">
+              <td class="text-base-content/70 px-4 py-3">
                 {{ new Date(item.start_date).toLocaleString("es-MX") }}
               </td>
               <td class="px-4 py-3">
                 <div class="flex justify-end gap-2">
                   <button
-                    class="rounded-full border border-white/15 px-3 py-1 text-xs text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100"
+                    class="btn btn-outline btn-xs"
                     @click="emit('editQuiniela', item)"
                   >
                     Editar
                   </button>
                   <button
-                    class="rounded-full border border-red-300/25 px-3 py-1 text-xs text-red-100 transition hover:border-red-200 hover:text-red-50 disabled:opacity-55"
+                    class="btn btn-error btn-outline btn-xs"
                     :disabled="deletingQuinielaId === item.id"
                     @click="emit('deleteQuiniela', item.id)"
                   >
@@ -310,12 +306,9 @@ const emit = defineEmits<{
     </template>
   </article>
 
-  <article
-    v-else
-    class="pitch-panel rounded-2xl border border-amber-300/20 bg-amber-500/5 p-5"
-  >
-    <h2 class="text-xl text-amber-100">Acceso admin local</h2>
-    <p class="mt-2 text-sm text-amber-100/85">
+  <article v-else class="alert alert-warning rounded-2xl p-5">
+    <h2 class="text-xl">Acceso admin local</h2>
+    <p class="mt-2 text-sm">
       Tu acceso actual permite administrar la quiniela activa. El dashboard
       global solo aparece para usuarios con flag is_global_admin.
     </p>

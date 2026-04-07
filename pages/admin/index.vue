@@ -663,15 +663,10 @@ onMounted(async () => {
   <section class="space-y-6">
     <header class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <p class="text-xs uppercase tracking-[0.18em] text-emerald-200">
-          Admin
-        </p>
-        <h1 class="mt-1 text-3xl text-white">Panel de gestion</h1>
+        <p class="text-primary text-xs uppercase tracking-[0.18em]">Admin</p>
+        <h1 class="text-base-content mt-1 text-3xl">Panel de gestion</h1>
       </div>
-      <button
-        class="rounded-full border border-white/12 px-4 py-2 text-sm text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100"
-        @click="refreshCurrentSection"
-      >
+      <button class="btn btn-outline btn-sm" @click="refreshCurrentSection">
         Refrescar {{ activeSectionLabel }}
       </button>
     </header>
@@ -680,11 +675,11 @@ onMounted(async () => {
       <button
         v-for="section in adminSections"
         :key="section.key"
-        class="rounded-2xl border px-4 py-3 text-left transition"
+        class="card rounded-2xl border px-4 py-3 text-left transition"
         :class="
           adminSection === section.key
-            ? 'border-emerald-300/40 bg-emerald-500/10 text-emerald-100'
-            : 'border-white/10 bg-black/20 text-slate-200 hover:border-white/25 hover:text-white'
+            ? 'border-primary bg-primary/10 text-primary'
+            : 'border-base-300 bg-base-100/70 text-base-content hover:border-primary/40'
         "
         @click="adminSection = section.key"
       >

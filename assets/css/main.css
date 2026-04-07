@@ -1,17 +1,8 @@
 @import url("https://fonts.googleapis.com/css2?family=Anton&family=Chakra+Petch:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
-:root {
-  color-scheme: dark;
-  --bg-base: #050b08;
-  --bg-layer: #0c1712;
-  --bg-soft: #112319;
-  --text-main: #ecfff5;
-  --text-muted: #9fc5b0;
-  --emerald-live: #00f5a0;
-  --emerald-soft: #00b774;
-  --amber-accent: #f4bb2a;
-  --danger: #ff6b6b;
+@plugin "daisyui" {
+  themes: all;
 }
 
 * {
@@ -27,19 +18,24 @@ body,
 body {
   margin: 0;
   font-family: "Chakra Petch", sans-serif;
-  color: var(--text-main);
+  color: var(--color-base-content);
   background:
     radial-gradient(
       circle at 18% -5%,
-      rgba(0, 245, 160, 0.24),
+      color-mix(in oklab, var(--color-primary) 20%, transparent),
       transparent 36%
     ),
     radial-gradient(
       circle at 82% 0%,
-      rgba(244, 187, 42, 0.16),
-      transparent 28%
+      color-mix(in oklab, var(--color-warning) 14%, transparent),
+      transparent 30%
     ),
-    linear-gradient(160deg, #04110a, #09160f 46%, #020705 100%);
+    linear-gradient(
+      160deg,
+      var(--color-base-200),
+      var(--color-base-100) 46%,
+      var(--color-base-200) 100%
+    );
   background-attachment: fixed;
 }
 
@@ -52,15 +48,16 @@ h3,
 }
 
 .pitch-panel {
-  border: 1px solid rgba(0, 245, 160, 0.2);
+  border: 1px solid
+    color-mix(in oklab, var(--color-base-content) 14%, transparent);
   background: linear-gradient(
     180deg,
-    rgba(17, 35, 25, 0.9),
-    rgba(10, 22, 16, 0.96)
+    color-mix(in oklab, var(--color-base-100) 88%, transparent),
+    color-mix(in oklab, var(--color-base-200) 92%, transparent)
   );
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 20px 40px rgba(0, 0, 0, 0.35);
+    inset 0 1px 0 color-mix(in oklab, #fff 32%, transparent),
+    0 20px 40px color-mix(in oklab, #000 20%, transparent);
 }
 
 .neon-border {
@@ -75,8 +72,8 @@ h3,
   padding: 1px;
   background: linear-gradient(
     135deg,
-    rgba(0, 245, 160, 0.7),
-    rgba(244, 187, 42, 0.35)
+    color-mix(in oklab, var(--color-primary) 85%, transparent),
+    color-mix(in oklab, var(--color-warning) 55%, transparent)
   );
   mask:
     linear-gradient(#fff 0 0) content-box,
@@ -89,10 +86,10 @@ h3,
   height: 0.6rem;
   width: 0.6rem;
   border-radius: 9999px;
-  background: var(--emerald-live);
+  background: var(--color-success);
   box-shadow:
-    0 0 0 0 rgba(0, 245, 160, 0.65),
-    0 0 12px rgba(0, 245, 160, 0.9);
+    0 0 0 0 color-mix(in oklab, var(--color-success) 65%, transparent),
+    0 0 12px color-mix(in oklab, var(--color-success) 90%, transparent);
   animation: live-pulse 1.3s infinite;
 }
 
@@ -100,20 +97,20 @@ h3,
   0% {
     transform: scale(1);
     box-shadow:
-      0 0 0 0 rgba(0, 245, 160, 0.65),
-      0 0 12px rgba(0, 245, 160, 0.9);
+      0 0 0 0 color-mix(in oklab, var(--color-success) 65%, transparent),
+      0 0 12px color-mix(in oklab, var(--color-success) 90%, transparent);
   }
   70% {
     transform: scale(1.1);
     box-shadow:
-      0 0 0 10px rgba(0, 245, 160, 0),
-      0 0 16px rgba(0, 245, 160, 0.9);
+      0 0 0 10px color-mix(in oklab, var(--color-success) 0%, transparent),
+      0 0 16px color-mix(in oklab, var(--color-success) 90%, transparent);
   }
   100% {
     transform: scale(1);
     box-shadow:
-      0 0 0 0 rgba(0, 245, 160, 0),
-      0 0 12px rgba(0, 245, 160, 0.9);
+      0 0 0 0 color-mix(in oklab, var(--color-success) 0%, transparent),
+      0 0 12px color-mix(in oklab, var(--color-success) 90%, transparent);
   }
 }
 

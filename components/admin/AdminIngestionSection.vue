@@ -35,30 +35,32 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <article class="pitch-panel rounded-2xl p-5">
-    <h2 class="text-xl text-white">Monitoreo de ingesta de API</h2>
-    <p class="mt-2 text-sm text-(--text-muted)">
+  <article
+    class="pitch-panel card rounded-2xl border border-base-300 bg-base-200/70 p-5"
+  >
+    <h2 class="text-base-content text-xl">Monitoreo de ingesta de API</h2>
+    <p class="text-base-content/70 mt-2 text-sm">
       Este bloque muestra los ultimos partidos actualizados en la tabla matches
       para verificar el pulso de ingesta.
     </p>
 
     <div
-      class="mt-4 rounded-xl border border-white/10 bg-black/30 p-4 space-y-3"
+      class="card mt-4 space-y-3 rounded-xl border border-base-300 bg-base-100/70 p-4"
     >
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="text-sm text-slate-200">
+        <div class="text-base-content text-sm">
           <p>
             Cuota API-FOOTBALL hoy:
-            <span class="font-semibold text-emerald-200">
+            <span class="text-primary font-semibold">
               {{ syncStatus?.requestsUsedToday ?? 0 }}/{{
                 syncStatus?.dailyBudget ?? 0
               }}
             </span>
-            <span class="ml-2 text-(--text-muted)">
+            <span class="text-base-content/70 ml-2">
               (restantes: {{ syncStatus?.remainingToday ?? 0 }})
             </span>
           </p>
-          <p class="mt-1 text-(--text-muted)">
+          <p class="text-base-content/70 mt-1">
             Ultimo sync:
             {{
               syncStatus?.state?.lastSyncedAt
@@ -76,12 +78,12 @@ const emit = defineEmits<{
 
         <div class="flex items-center gap-3">
           <label
-            class="inline-flex items-center gap-2 text-xs text-(--text-muted)"
+            class="label cursor-pointer text-base-content/70 inline-flex items-center gap-2 text-xs"
           >
             <input
               :checked="forceSync"
               type="checkbox"
-              class="h-4 w-4 rounded border-white/20 bg-black/50"
+              class="checkbox checkbox-primary checkbox-sm"
               @change="
                 emit(
                   'update:forceSync',
@@ -93,7 +95,7 @@ const emit = defineEmits<{
           </label>
 
           <button
-            class="rounded-full border border-emerald-300/45 px-4 py-2 text-sm text-emerald-100 transition hover:border-emerald-200 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            class="btn btn-primary btn-sm"
             :disabled="syncingFixtures"
             @click="emit('runFixturesSync')"
           >
@@ -101,7 +103,7 @@ const emit = defineEmits<{
           </button>
 
           <button
-            class="rounded-full border border-sky-300/45 px-4 py-2 text-sm text-sky-100 transition hover:border-sky-200 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            class="btn btn-info btn-sm"
             :disabled="syncingTeams"
             @click="emit('runTeamsSync')"
           >
@@ -114,56 +116,38 @@ const emit = defineEmits<{
         </div>
       </div>
 
-      <p
-        v-if="syncStatus?.state?.lastError"
-        class="rounded-lg border border-red-300/20 bg-red-500/10 px-3 py-2 text-xs text-red-200"
-      >
+      <p v-if="syncStatus?.state?.lastError" class="alert alert-error text-xs">
         Ultimo error: {{ syncStatus.state.lastError }}
       </p>
 
-      <p
-        v-if="syncMessage"
-        class="rounded-lg border border-emerald-300/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100"
-      >
+      <p v-if="syncMessage" class="alert alert-success text-xs">
         {{ syncMessage }}
       </p>
 
-      <p
-        v-if="teamsSyncMessage"
-        class="rounded-lg border border-sky-300/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-100"
-      >
+      <p v-if="teamsSyncMessage" class="alert alert-info text-xs">
         {{ teamsSyncMessage }}
       </p>
 
-      <p
-        v-if="syncError"
-        class="rounded-lg border border-red-300/20 bg-red-500/10 px-3 py-2 text-xs text-red-200"
-      >
+      <p v-if="syncError" class="alert alert-error text-xs">
         {{ syncError }}
       </p>
 
-      <p
-        v-if="teamsSyncError"
-        class="rounded-lg border border-red-300/20 bg-red-500/10 px-3 py-2 text-xs text-red-200"
-      >
+      <p v-if="teamsSyncError" class="alert alert-error text-xs">
         {{ teamsSyncError }}
       </p>
     </div>
 
-    <p v-if="loadingLogs" class="mt-4 text-sm text-(--text-muted)">
+    <p v-if="loadingLogs" class="text-base-content/70 mt-4 text-sm">
       Cargando log...
     </p>
-    <p
-      v-else-if="logsError"
-      class="mt-4 rounded-xl border border-red-300/20 bg-red-500/10 px-4 py-3 text-sm text-red-200"
-    >
+    <p v-else-if="logsError" class="alert alert-error mt-4 text-sm">
       {{ logsError }}
     </p>
 
-    <div v-else class="mt-4 overflow-hidden rounded-xl border border-white/8">
-      <table class="min-w-full text-sm">
+    <div v-else class="mt-4 overflow-hidden rounded-xl border border-base-300">
+      <table class="table min-w-full text-sm">
         <thead
-          class="bg-black/35 text-left text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+          class="bg-base-200 text-base-content/70 text-left text-xs uppercase tracking-[0.12em]"
         >
           <tr>
             <th class="px-4 py-3">Partido</th>
@@ -175,27 +159,24 @@ const emit = defineEmits<{
           <tr
             v-for="entry in latestMatches"
             :key="entry.id"
-            class="border-t border-white/8"
+            class="border-t border-base-300"
           >
             <td class="px-4 py-3">
               {{ entry.home_team }} vs {{ entry.away_team }}
             </td>
             <td class="px-4 py-3">
               <span
-                class="rounded-full px-2 py-1 text-xs font-semibold"
+                class="badge badge-sm text-xs font-semibold"
                 :class="[
-                  entry.status === 'finished' &&
-                    'bg-slate-200/15 text-slate-100',
-                  entry.status === 'in_progress' &&
-                    'bg-emerald-400/25 text-emerald-100',
-                  entry.status === 'pending' &&
-                    'bg-amber-400/20 text-amber-100',
+                  entry.status === 'finished' && 'badge-neutral',
+                  entry.status === 'in_progress' && 'badge-success',
+                  entry.status === 'pending' && 'badge-warning',
                 ]"
               >
                 {{ entry.status }}
               </span>
             </td>
-            <td class="px-4 py-3 text-(--text-muted)">
+            <td class="text-base-content/70 px-4 py-3">
               {{ entry.updated_at }}
             </td>
           </tr>

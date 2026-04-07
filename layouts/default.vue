@@ -14,6 +14,68 @@ const links = [
   { to: "/admin", label: "Admin" },
 ];
 
+const availableThemes = [
+  "light",
+  "dark",
+  "cupcake",
+  "bumblebee",
+  "emerald",
+  "corporate",
+  "synthwave",
+  "retro",
+  "cyberpunk",
+  "valentine",
+  "halloween",
+  "garden",
+  "forest",
+  "aqua",
+  "lofi",
+  "pastel",
+  "fantasy",
+  "wireframe",
+  "black",
+  "luxury",
+  "dracula",
+  "cmyk",
+  "autumn",
+  "business",
+  "acid",
+  "lemonade",
+  "night",
+  "coffee",
+  "winter",
+  "dim",
+  "nord",
+  "sunset",
+  "caramellatte",
+  "abyss",
+  "silk",
+] as const;
+
+type ThemeName = (typeof availableThemes)[number];
+const selectedTheme = ref<ThemeName>("dark");
+
+const isThemeName = (value: string): value is ThemeName => {
+  return availableThemes.includes(value as ThemeName);
+};
+
+const setTheme = (theme: ThemeName) => {
+  selectedTheme.value = theme;
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem("quiniela-theme", theme);
+};
+
+const onThemeChange = (event: Event) => {
+  const target = event.target as HTMLSelectElement | null;
+  if (!target) {
+    return;
+  }
+
+  if (isThemeName(target.value)) {
+    setTheme(target.value);
+  }
+};
+
 const isActive = (path: string) => {
   return (
     route.path === path ||
@@ -33,6 +95,14 @@ const logout = async () => {
 };
 
 onMounted(() => {
+  const storedTheme = localStorage.getItem("quiniela-theme");
+
+  if (storedTheme && isThemeName(storedTheme)) {
+    setTheme(storedTheme);
+  } else {
+    setTheme("dark");
+  }
+
   if (user.value) {
     void loadActiveQuiniela();
   }
@@ -51,24 +121,22 @@ watch(
 <template>
   <div class="min-h-screen">
     <header
-      class="sticky top-0 z-20 border-b border-emerald-500/25 bg-black/40 backdrop-blur-xl"
+      class="bg-base-200/80 sticky top-0 z-20 border-b border-base-300 backdrop-blur-xl"
     >
       <div
         class="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6"
       >
         <NuxtLink to="/" class="flex items-center gap-3">
           <div
-            class="grid h-9 w-9 place-content-center rounded-xl bg-emerald-400/15 text-emerald-300 neon-border"
+            class="text-primary bg-primary/15 grid h-9 w-9 place-content-center rounded-xl neon-border"
           >
             <span class="logo-font text-lg leading-none">Q</span>
           </div>
           <div>
-            <p
-              class="logo-font text-xl uppercase leading-none text-emerald-300"
-            >
+            <p class="logo-font text-primary text-xl uppercase leading-none">
               Quiniela 2026
             </p>
-            <p class="text-xs text-(--text-muted)">Modo torneo en vivo</p>
+            <p class="text-base-content/70 text-xs">Modo torneo en vivo</p>
           </div>
         </NuxtLink>
 
@@ -77,29 +145,37 @@ watch(
             v-for="link in links"
             :key="link.to"
             :to="link.to"
-            class="rounded-full px-3 py-2 text-sm transition"
-            :class="[
-              isActive(link.to)
-                ? 'bg-emerald-400/20 text-emerald-200 shadow-[0_0_18px_rgba(0,245,160,0.2)]'
-                : 'text-slate-300 hover:bg-white/6 hover:text-white',
-            ]"
+            class="btn btn-sm"
+            :class="[isActive(link.to) ? 'btn-primary' : 'btn-outline']"
           >
             {{ link.label }}
           </NuxtLink>
         </nav>
 
         <div class="flex items-center gap-2">
-          <NuxtLink
-            v-if="!user"
-            to="/auth"
-            class="rounded-full border border-emerald-400/40 px-4 py-2 text-sm text-emerald-200 transition hover:bg-emerald-500/10"
+          <label for="theme-selector" class="sr-only">Tema</label>
+          <select
+            id="theme-selector"
+            class="select select-bordered select-sm w-44"
+            :value="selectedTheme"
+            @change="onThemeChange"
           >
+            <option
+              v-for="theme in availableThemes"
+              :key="theme"
+              :value="theme"
+            >
+              {{ theme }}
+            </option>
+          </select>
+
+          <NuxtLink v-if="!user" to="/auth" class="btn btn-primary btn-sm">
             Iniciar sesion
           </NuxtLink>
           <button
             v-else
             :disabled="loading"
-            class="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-200 transition hover:border-red-300/40 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+            class="btn btn-outline btn-error btn-sm"
             @click="logout"
           >
             {{ loading ? "Saliendo..." : "Salir" }}
@@ -110,25 +186,20 @@ watch(
       <div v-if="user" class="mx-auto w-full max-w-7xl px-4 pb-3 sm:px-6">
         <div
           v-if="quiniela"
-          class="rounded-2xl border border-emerald-300/35 bg-emerald-500/10 px-4 py-3"
+          class="card rounded-2xl border border-primary/40 bg-primary/10 px-4 py-3"
         >
-          <p class="text-xs uppercase tracking-[0.14em] text-emerald-200">
+          <p class="text-primary text-xs uppercase tracking-[0.14em]">
             Quiniela activa
           </p>
-          <p class="mt-1 text-lg font-semibold text-white sm:text-xl">
+          <p class="text-base-content mt-1 text-lg font-semibold sm:text-xl">
             {{ quiniela.name }}
           </p>
         </div>
-        <div
-          v-else
-          class="rounded-2xl border border-amber-300/35 bg-amber-500/10 px-4 py-3"
-        >
-          <p class="text-xs uppercase tracking-[0.14em] text-amber-200">
-            Sin quiniela activa
-          </p>
+        <div v-else class="alert alert-warning rounded-2xl px-4 py-3">
+          <p class="text-xs uppercase tracking-[0.14em]">Sin quiniela activa</p>
           <NuxtLink
             to="/ingresar"
-            class="mt-1 inline-flex text-sm font-semibold text-amber-100 underline underline-offset-4"
+            class="link link-hover mt-1 inline-flex text-sm font-semibold"
           >
             Seleccionar o unirme a una quiniela
           </NuxtLink>
