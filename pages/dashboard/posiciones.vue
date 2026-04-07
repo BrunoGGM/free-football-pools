@@ -16,6 +16,8 @@ interface PositionRow {
   avatar_url: string | null;
   total_points: number;
   predicted_champion: string | null;
+  current_streak: number;
+  badge_icons: string[];
 }
 
 interface TeamProfileOption {
@@ -25,10 +27,22 @@ interface TeamProfileOption {
   team_key: string;
 }
 
+interface WeeklyLeaderRow {
+  user_id: string;
+  username: string;
+  weekly_points: number;
+  exact_hits: number;
+}
+
 const client = useSupabaseClient<any>();
 const user = useSupabaseUser();
+const { emitChampionSaved, emitRankUp } = useGameUx();
 const activeQuinielaId = useCookie<string | null>("active_quiniela_id");
 const { quiniela, loadActiveQuiniela } = useActiveQuiniela();
+const gamificationSupported = useState<boolean | null>(
+  "gamification-supported",
+  () => null,
+);
 
 const rows = ref<PositionRow[]>([]);
 const loading = ref(false);
@@ -40,7 +54,23 @@ const championDropdownStyle = ref<Record<string, string>>({});
 const savingChampion = ref(false);
 const championSaved = ref(false);
 let championSaveTimer: ReturnType<typeof setTimeout> | null = null;
+const rankUpVisible = ref(false);
+const rankUpFrom = ref<number | null>(null);
+const rankUpTo = ref<number | null>(null);
+let rankUpTimer: ReturnType<typeof setTimeout> | null = null;
+const previousOwnRank = ref<number | null>(null);
 const registeredTeams = ref<TeamProfileOption[]>([]);
+const gamificationMessage = ref<string | null>(null);
+const weeklyLeaders = ref<WeeklyLeaderRow[]>([]);
+
+const rankUpSubtitle = computed(() => {
+  if (!rankUpFrom.value || !rankUpTo.value) {
+    return "Sigues escalando la tabla";
+  }
+
+  const climbed = Math.max(1, rankUpFrom.value - rankUpTo.value);
+  return `Subiste ${climbed} puesto${climbed === 1 ? "" : "s"}`;
+});
 
 const registeredTeamsMap = computed(() => {
   const map = new Map<string, TeamProfileOption>();
@@ -144,6 +174,13 @@ const firstPlacePrizeText = computed(() => {
     currency: "MXN",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+  });
+});
+const weeklyPeriodText = computed(() => {
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  return since.toLocaleDateString("es-MX", {
+    day: "2-digit",
+    month: "short",
   });
 });
 
@@ -265,14 +302,26 @@ const triggerChampionCelebration = () => {
   }
 
   championSaved.value = true;
-
-  if (process.client) {
-    window.dispatchEvent(new CustomEvent("quiniela:celebration"));
-  }
+  emitChampionSaved();
 
   championSaveTimer = setTimeout(() => {
     championSaved.value = false;
   }, 2300);
+};
+
+const triggerRankUpCelebration = (fromRank: number, toRank: number) => {
+  if (rankUpTimer) {
+    clearTimeout(rankUpTimer);
+  }
+
+  rankUpFrom.value = fromRank;
+  rankUpTo.value = toRank;
+  rankUpVisible.value = true;
+  emitRankUp({ fromRank, toRank });
+
+  rankUpTimer = setTimeout(() => {
+    rankUpVisible.value = false;
+  }, 2600);
 };
 
 const isMissingRankingTableError = (error: any) => {
@@ -284,14 +333,29 @@ const isMissingRankingTableError = (error: any) => {
   );
 };
 
+const isMissingGamificationTableError = (error: any) => {
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    error?.code === "42P01" ||
+    message.includes("quiniela_member_streaks") ||
+    message.includes("user_achievements") ||
+    message.includes("achievement_definitions")
+  );
+};
+
 const loadRanking = async () => {
   if (!activeQuinielaId.value) {
     rows.value = [];
+    gamificationMessage.value = null;
+    weeklyLeaders.value = [];
     return;
   }
 
   loading.value = true;
   errorMessage.value = null;
+  gamificationMessage.value = null;
+  weeklyLeaders.value = [];
 
   const rankingResult = await client
     .from("quiniela_rankings")
@@ -369,6 +433,8 @@ const loadRanking = async () => {
     { username: string; avatar_url: string | null }
   >();
   const championsMap = new Map<string, string | null>();
+  const streaksMap = new Map<string, number>();
+  const badgesMap = new Map<string, string[]>();
 
   if (userIds.length > 0) {
     const { data: profiles, error: profilesError } = await client
@@ -411,6 +477,78 @@ const loadRanking = async () => {
     }
   }
 
+  if (userIds.length > 0 && gamificationSupported.value !== false) {
+    const { data: streakRows, error: streakError } = await client
+      .from("quiniela_member_streaks")
+      .select("user_id, current_streak")
+      .eq("quiniela_id", activeQuinielaId.value)
+      .in("user_id", userIds);
+
+    if (streakError && isMissingGamificationTableError(streakError)) {
+      gamificationSupported.value = false;
+      gamificationMessage.value =
+        "Gamificacion no disponible aun. Aplica la migracion 0015 para rachas y medallas.";
+    } else if (streakError) {
+      loading.value = false;
+      errorMessage.value = streakError.message;
+      return;
+    } else {
+      gamificationSupported.value = true;
+
+      for (const row of streakRows ?? []) {
+        streaksMap.set(
+          row.user_id as string,
+          Number((row as { current_streak?: number }).current_streak ?? 0),
+        );
+      }
+    }
+  }
+
+  if (userIds.length > 0 && gamificationSupported.value !== false) {
+    const { data: achievementRows, error: achievementsError } = await client
+      .from("user_achievements")
+      .select("user_id, achievement:achievement_definitions(icon_emoji)")
+      .eq("quiniela_id", activeQuinielaId.value)
+      .in("user_id", userIds)
+      .order("unlocked_at", { ascending: false });
+
+    if (
+      achievementsError &&
+      isMissingGamificationTableError(achievementsError)
+    ) {
+      gamificationSupported.value = false;
+      gamificationMessage.value =
+        "Gamificacion no disponible aun. Aplica la migracion 0015 para rachas y medallas.";
+    } else if (achievementsError) {
+      loading.value = false;
+      errorMessage.value = achievementsError.message;
+      return;
+    } else {
+      for (const row of (achievementRows as Array<{
+        user_id: string;
+        achievement:
+          | { icon_emoji?: string | null }
+          | Array<{ icon_emoji?: string | null }>
+          | null;
+      }> | null) ?? []) {
+        const achievement = Array.isArray(row.achievement)
+          ? row.achievement[0]
+          : row.achievement;
+        const icon = achievement?.icon_emoji;
+
+        if (!icon) {
+          continue;
+        }
+
+        const userBadges = badgesMap.get(row.user_id) ?? [];
+
+        if (!userBadges.includes(icon) && userBadges.length < 4) {
+          badgesMap.set(row.user_id, [...userBadges, icon]);
+        }
+      }
+    }
+  }
+
   const normalized = rankingRows.map((member) => {
     const profile = profilesMap.get(member.user_id);
 
@@ -421,13 +559,97 @@ const loadRanking = async () => {
       avatar_url: profile?.avatar_url ?? null,
       total_points: member.total_points,
       predicted_champion: championsMap.get(member.user_id) ?? null,
+      current_streak: streaksMap.get(member.user_id) ?? 0,
+      badge_icons: badgesMap.get(member.user_id) ?? [],
     };
   });
+  const usernameByUserId = new Map<string, string>();
+  for (const row of normalized) {
+    usernameByUserId.set(row.user_id, row.username);
+  }
 
   rows.value = normalized;
 
   const ownRow = normalized.find((entry) => entry.user_id === user.value?.id);
+
+  if (
+    previousOwnRank.value !== null &&
+    ownRow?.rank !== undefined &&
+    ownRow.rank < previousOwnRank.value
+  ) {
+    triggerRankUpCelebration(previousOwnRank.value, ownRow.rank);
+  }
+
+  previousOwnRank.value = ownRow?.rank ?? null;
   championInput.value = ownRow?.predicted_champion ?? "";
+  const weekStartIso = new Date(
+    Date.now() - 7 * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  if (userIds.length > 0) {
+    const { data: recentMatches, error: recentMatchesError } = await client
+      .from("matches")
+      .select("id")
+      .eq("status", "finished")
+      .gte("match_time", weekStartIso);
+
+    if (!recentMatchesError) {
+      const matchIds = (recentMatches ?? [])
+        .map((item) => item.id as string)
+        .filter(Boolean);
+
+      if (matchIds.length > 0) {
+        const { data: weeklyPredictions, error: weeklyPredictionsError } =
+          await client
+            .from("predictions")
+            .select("user_id, points_earned")
+            .eq("quiniela_id", activeQuinielaId.value)
+            .in("user_id", userIds)
+            .in("match_id", matchIds);
+
+        if (!weeklyPredictionsError) {
+          const weeklyMap = new Map<
+            string,
+            { weekly_points: number; exact_hits: number }
+          >();
+
+          for (const row of (weeklyPredictions as Array<{
+            user_id: string;
+            points_earned: number | null;
+          }> | null) ?? []) {
+            const current = weeklyMap.get(row.user_id) ?? {
+              weekly_points: 0,
+              exact_hits: 0,
+            };
+            const points = Number(row.points_earned ?? 0);
+
+            current.weekly_points += points;
+            if (points >= 3) {
+              current.exact_hits += 1;
+            }
+
+            weeklyMap.set(row.user_id, current);
+          }
+
+          weeklyLeaders.value = [...weeklyMap.entries()]
+            .map(([user_id, value]) => ({
+              user_id,
+              username: usernameByUserId.get(user_id) ?? "Jugador",
+              weekly_points: value.weekly_points,
+              exact_hits: value.exact_hits,
+            }))
+            .sort(
+              (a, b) =>
+                b.weekly_points - a.weekly_points ||
+                b.exact_hits - a.exact_hits ||
+                a.username.localeCompare(b.username),
+            )
+            .slice(0, 5);
+        }
+      }
+    }
+  }
+
   loading.value = false;
 };
 
@@ -513,9 +735,22 @@ watch(championPickerOpen, (open) => {
   window.removeEventListener("scroll", onChampionDropdownViewportChange, true);
 });
 
+watch(
+  () => activeQuinielaId.value,
+  () => {
+    rankUpVisible.value = false;
+    previousOwnRank.value = null;
+    void loadRanking();
+  },
+);
+
 onBeforeUnmount(() => {
   if (championSaveTimer) {
     clearTimeout(championSaveTimer);
+  }
+
+  if (rankUpTimer) {
+    clearTimeout(rankUpTimer);
   }
 
   if (process.client) {
@@ -542,6 +777,13 @@ onBeforeUnmount(() => {
         Refrescar
       </button>
     </header>
+
+    <WowSaveBurst
+      :visible="rankUpVisible"
+      class="mt-1"
+      :title="rankUpTo ? `Subiste al #${rankUpTo}` : 'Subiste en la tabla'"
+      :subtitle="rankUpSubtitle"
+    />
 
     <article v-if="!activeQuinielaId" class="alert alert-warning rounded-2xl">
       Activa una quiniela para ver posiciones.
@@ -653,6 +895,13 @@ onBeforeUnmount(() => {
       class="overflow-hidden rounded-2xl border border-base-300 bg-base-100/70"
     >
       <div
+        v-if="gamificationMessage"
+        class="alert alert-warning rounded-none border-b border-base-300 text-xs"
+      >
+        {{ gamificationMessage }}
+      </div>
+
+      <div
         v-if="leaderRow"
         class="leader-podium border-b border-base-300 px-4 py-4 sm:px-5"
       >
@@ -705,6 +954,32 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
+      <div class="border-b border-base-300 bg-base-200/55 px-4 py-3 sm:px-5">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
+            Ranking semanal
+          </p>
+          <p class="text-base-content/70 text-xs">
+            Desde {{ weeklyPeriodText }}
+          </p>
+        </div>
+
+        <div v-if="weeklyLeaders.length > 0" class="mt-2 flex flex-wrap gap-2">
+          <span
+            v-for="(row, index) in weeklyLeaders"
+            :key="`${row.user_id}-weekly`"
+            class="badge badge-outline gap-1"
+          >
+            <span>{{ index + 1 }}.</span>
+            <span>{{ row.username }}</span>
+            <span>• {{ row.weekly_points }} pts</span>
+            <span>• 🎯 {{ row.exact_hits }}</span>
+          </span>
+        </div>
+        <p v-else class="text-base-content/70 mt-2 text-xs">
+          Aun no hay resultados finalizados en los ultimos 7 dias.
+        </p>
+      </div>
 
       <table class="table min-w-full text-sm">
         <thead
@@ -714,6 +989,7 @@ onBeforeUnmount(() => {
             <th class="px-4 py-3">#</th>
             <th class="px-4 py-3">Jugador</th>
             <th class="px-4 py-3">Puntos</th>
+            <th class="px-4 py-3">Racha</th>
             <th class="px-4 py-3">Campeon</th>
           </tr>
         </thead>
@@ -763,8 +1039,27 @@ onBeforeUnmount(() => {
                   <span v-if="row.rank === 1" class="leader-tag">MANDA</span>
                 </span>
               </div>
+              <div v-if="row.badge_icons.length > 0" class="mt-1 flex gap-1">
+                <span
+                  v-for="(icon, index) in row.badge_icons"
+                  :key="`${row.user_id}-badge-${index}`"
+                  class="text-xs"
+                >
+                  {{ icon }}
+                </span>
+              </div>
             </td>
             <td class="px-4 py-3 font-semibold">{{ row.total_points }}</td>
+            <td class="px-4 py-3">
+              <span
+                class="badge badge-sm"
+                :class="
+                  row.current_streak >= 3 ? 'badge-success' : 'badge-ghost'
+                "
+              >
+                🔥 {{ row.current_streak }}
+              </span>
+            </td>
             <td class="text-base-content/70 px-4 py-3">
               <span
                 v-if="row.predicted_champion"

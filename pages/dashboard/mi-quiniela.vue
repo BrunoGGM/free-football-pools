@@ -38,11 +38,23 @@ interface RawPredictionRow {
   match: MatchRow | MatchRow[] | null;
 }
 
+interface AchievementItem {
+  code: string;
+  name: string;
+  icon: string;
+  unlockedAt: string;
+}
+
 const user = useSupabaseUser();
 const client = useSupabaseClient<any>();
 const { quiniela, activeQuinielaId, loadActiveQuiniela } = useActiveQuiniela();
+const { emitExactHit } = useGameUx();
 const predictionsByQuinielaSupported = useState<boolean | null>(
   "predictions-by-quiniela-supported",
+  () => null,
+);
+const gamificationSupported = useState<boolean | null>(
+  "gamification-supported",
   () => null,
 );
 
@@ -59,6 +71,14 @@ const aheadSummary = ref<{ username: string; gap: number } | null>(null);
 const chaserSummary = ref<{ username: string; gap: number } | null>(null);
 const tiePeersCount = ref(0);
 const tiePeersPreview = ref<string[]>([]);
+const currentStreak = ref(0);
+const bestStreak = ref(0);
+const earnedBadges = ref<AchievementItem[]>([]);
+const showExactHitCelebration = ref(false);
+const exactHitDelta = ref(0);
+let exactHitTimer: ReturnType<typeof setTimeout> | null = null;
+const exactHitsInitialized = ref(false);
+const exactHitsCount = ref(0);
 
 const username = computed(() => {
   const metadataName = user.value?.user_metadata?.username;
@@ -171,6 +191,11 @@ const chaserText = computed(() => {
   return `${chaserSummary.value.username} (${chaserSummary.value.gap} pts abajo)`;
 });
 
+const badgeCountText = computed(() => {
+  const count = earnedBadges.value.length;
+  return `${count} medalla${count === 1 ? "" : "s"}`;
+});
+
 const stageLabel = (stage: string) => stage.replaceAll("_", " ").toUpperCase();
 
 const kickoffText = (value: string) =>
@@ -201,6 +226,28 @@ const isMissingRankingTableError = (error: any) => {
     error?.code === "42P01" ||
     (message.includes("quiniela_rankings") && message.includes("exist"))
   );
+};
+
+const isMissingGamificationTableError = (error: any) => {
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    error?.code === "42P01" ||
+    message.includes("quiniela_member_streaks") ||
+    message.includes("user_achievements") ||
+    message.includes("achievement_definitions")
+  );
+};
+
+const appendCompatibilityMessage = (message: string) => {
+  if (!compatibilityMessage.value) {
+    compatibilityMessage.value = message;
+    return;
+  }
+
+  if (!compatibilityMessage.value.includes(message)) {
+    compatibilityMessage.value = `${compatibilityMessage.value} ${message}`;
+  }
 };
 
 type MatchOutcome = "home" | "away" | "draw";
@@ -321,6 +368,124 @@ const outcomeClass = (row: PredictionRow) => {
   return "badge-error";
 };
 
+const triggerExactHitCelebration = (delta: number, totalExactHits: number) => {
+  if (exactHitTimer) {
+    clearTimeout(exactHitTimer);
+  }
+
+  exactHitDelta.value = delta;
+  showExactHitCelebration.value = true;
+  emitExactHit({ delta, totalExactHits });
+
+  exactHitTimer = setTimeout(() => {
+    showExactHitCelebration.value = false;
+  }, 2600);
+};
+
+const loadGamificationSnapshot = async () => {
+  if (!user.value || !activeQuinielaId.value) {
+    currentStreak.value = 0;
+    bestStreak.value = 0;
+    earnedBadges.value = [];
+    return;
+  }
+
+  if (gamificationSupported.value === false) {
+    currentStreak.value = 0;
+    bestStreak.value = 0;
+    earnedBadges.value = [];
+    appendCompatibilityMessage(
+      "Gamificacion no disponible aun. Aplica la migracion 0015 para rachas y medallas.",
+    );
+    return;
+  }
+
+  const streakResult = await client
+    .from("quiniela_member_streaks")
+    .select("current_streak, best_streak")
+    .eq("quiniela_id", activeQuinielaId.value)
+    .eq("user_id", user.value.id)
+    .maybeSingle();
+
+  if (streakResult.error) {
+    if (isMissingGamificationTableError(streakResult.error)) {
+      gamificationSupported.value = false;
+      currentStreak.value = 0;
+      bestStreak.value = 0;
+      earnedBadges.value = [];
+      appendCompatibilityMessage(
+        "Gamificacion no disponible aun. Aplica la migracion 0015 para rachas y medallas.",
+      );
+      return;
+    }
+
+    throw streakResult.error;
+  }
+
+  const achievementsResult = await client
+    .from("user_achievements")
+    .select(
+      "unlocked_at, achievement:achievement_definitions(code, name, icon_emoji)",
+    )
+    .eq("quiniela_id", activeQuinielaId.value)
+    .eq("user_id", user.value.id)
+    .order("unlocked_at", { ascending: false });
+
+  if (achievementsResult.error) {
+    if (isMissingGamificationTableError(achievementsResult.error)) {
+      gamificationSupported.value = false;
+      currentStreak.value = 0;
+      bestStreak.value = 0;
+      earnedBadges.value = [];
+      appendCompatibilityMessage(
+        "Gamificacion no disponible aun. Aplica la migracion 0015 para rachas y medallas.",
+      );
+      return;
+    }
+
+    throw achievementsResult.error;
+  }
+
+  gamificationSupported.value = true;
+  currentStreak.value = Number(streakResult.data?.current_streak ?? 0);
+  bestStreak.value = Number(streakResult.data?.best_streak ?? 0);
+
+  earnedBadges.value = (
+    (achievementsResult.data as Array<{
+      unlocked_at: string;
+      achievement:
+        | {
+            code?: string | null;
+            name?: string | null;
+            icon_emoji?: string | null;
+          }
+        | Array<{
+            code?: string | null;
+            name?: string | null;
+            icon_emoji?: string | null;
+          }>
+        | null;
+    }> | null) ?? []
+  )
+    .map((row) => {
+      const rawAchievement = Array.isArray(row.achievement)
+        ? row.achievement[0]
+        : row.achievement;
+
+      if (!rawAchievement) {
+        return null;
+      }
+
+      return {
+        code: rawAchievement.code || "badge",
+        name: rawAchievement.name || "Medalla",
+        icon: rawAchievement.icon_emoji || "🏅",
+        unlockedAt: row.unlocked_at,
+      };
+    })
+    .filter((row): row is AchievementItem => Boolean(row));
+};
+
 const loadMyQuinielaView = async () => {
   if (!user.value || !activeQuinielaId.value) {
     predictions.value = [];
@@ -333,6 +498,9 @@ const loadMyQuinielaView = async () => {
     chaserSummary.value = null;
     tiePeersCount.value = 0;
     tiePeersPreview.value = [];
+    currentStreak.value = 0;
+    bestStreak.value = 0;
+    earnedBadges.value = [];
     return;
   }
 
@@ -583,6 +751,31 @@ const loadMyQuinielaView = async () => {
     });
 
   predictions.value = normalized;
+
+  try {
+    await loadGamificationSnapshot();
+  } catch (error: any) {
+    errorMessage.value = error?.message || "No se pudo cargar la gamificacion.";
+  }
+
+  const nextExactHits = normalized.filter((row) => {
+    return row.match?.status === "finished" && Number(row.points_earned) >= 3;
+  }).length;
+
+  if (!exactHitsInitialized.value) {
+    exactHitsCount.value = nextExactHits;
+    exactHitsInitialized.value = true;
+    return;
+  }
+
+  if (nextExactHits > exactHitsCount.value) {
+    triggerExactHitCelebration(
+      nextExactHits - exactHitsCount.value,
+      nextExactHits,
+    );
+  }
+
+  exactHitsCount.value = nextExactHits;
 };
 
 onMounted(async () => {
@@ -593,9 +786,18 @@ onMounted(async () => {
 watch(
   () => activeQuinielaId.value,
   () => {
+    showExactHitCelebration.value = false;
+    exactHitsInitialized.value = false;
+    exactHitsCount.value = 0;
     void loadMyQuinielaView();
   },
 );
+
+onBeforeUnmount(() => {
+  if (exactHitTimer) {
+    clearTimeout(exactHitTimer);
+  }
+});
 </script>
 
 <template>
@@ -611,6 +813,13 @@ watch(
         Refrescar
       </button>
     </header>
+
+    <WowSaveBurst
+      :visible="showExactHitCelebration"
+      class="mt-1"
+      :title="exactHitDelta > 1 ? 'Exactos encadenados' : 'Marcador exacto'"
+      :subtitle="`+${exactHitDelta * 3} pts en exactos confirmados`"
+    />
 
     <article v-if="!activeQuinielaId" class="alert alert-warning rounded-2xl">
       No tienes una quiniela activa para mostrar tus respuestas.
@@ -653,6 +862,42 @@ watch(
           </p>
           <p class="text-primary mt-1 text-lg font-semibold">
             {{ predictedChampion || "No definido" }}
+          </p>
+        </div>
+
+        <div class="card rounded-2xl border border-base-300 bg-base-100/70 p-4">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
+            Racha actual
+          </p>
+          <p class="text-success mt-1 text-3xl font-bold">
+            {{ currentStreak }}
+          </p>
+          <p class="text-base-content/70 mt-1 text-xs">
+            Mejor racha: {{ bestStreak }}
+          </p>
+        </div>
+
+        <div class="card rounded-2xl border border-base-300 bg-base-100/70 p-4">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
+            Medallas
+          </p>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <span
+              v-for="badge in earnedBadges.slice(0, 4)"
+              :key="`${badge.code}-${badge.unlockedAt}`"
+              class="badge badge-sm badge-outline"
+            >
+              {{ badge.icon }} {{ badge.name }}
+            </span>
+            <span
+              v-if="earnedBadges.length === 0"
+              class="text-base-content/70 text-xs"
+            >
+              Sin medallas por ahora.
+            </span>
+          </div>
+          <p class="text-base-content/70 mt-2 text-xs">
+            {{ badgeCountText }} desbloqueadas
           </p>
         </div>
       </div>

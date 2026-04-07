@@ -592,6 +592,21 @@ h3,
   transform: translateY(5px) scale(0.98);
 }
 
+.arena-page-enter-active,
+.arena-page-leave-active {
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease,
+    filter 220ms ease;
+}
+
+.arena-page-enter-from,
+.arena-page-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+  filter: blur(1px);
+}
+
 .odds-strip {
   position: relative;
   overflow: hidden;
@@ -847,6 +862,8 @@ h3,
 
   .wow-burst-enter-active,
   .wow-burst-leave-active,
+  .arena-page-enter-active,
+  .arena-page-leave-active,
   .pitch-panel,
   .card,
   .btn,

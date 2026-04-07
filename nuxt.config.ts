@@ -12,6 +12,10 @@ export default defineNuxtConfig({
     plugins: [tailwindcss()],
   },
   app: {
+    pageTransition: {
+      name: 'arena-page',
+      mode: 'out-in',
+    },
     head: {
       htmlAttrs: {
         'data-theme': 'dark',

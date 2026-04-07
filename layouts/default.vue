@@ -5,6 +5,7 @@ const user = useSupabaseUser();
 const { signOut, loading } = useSupabaseAuth();
 const { clearActiveQuiniela, quiniela, loadActiveQuiniela, activeQuinielaId } =
   useActiveQuiniela();
+const { lastEvent } = useGameUx();
 
 const links = [
   { to: "/dashboard", label: "Dashboard" },
@@ -38,7 +39,6 @@ let metricsRefreshTimer: ReturnType<typeof setInterval> | null = null;
 const soundEnabled = ref(true);
 let audioContext: AudioContext | null = null;
 let clickSoundListener: ((event: PointerEvent) => void) | null = null;
-let celebrationSoundListener: ((event: Event) => void) | null = null;
 let lastSoundAt = 0;
 
 const ensureAudioContext = () => {
@@ -97,6 +97,18 @@ const playSoftClick = () => {
 const playSoftSuccess = () => {
   playSoftTone(620, 0.13, 0.014, "sine");
   playSoftTone(860, 0.15, 0.01, "triangle", 0.06);
+};
+
+const playExactHit = () => {
+  playSoftTone(780, 0.12, 0.016, "sine");
+  playSoftTone(980, 0.14, 0.012, "triangle", 0.05);
+  playSoftTone(1280, 0.16, 0.009, "triangle", 0.11);
+};
+
+const playRankUp = () => {
+  playSoftTone(540, 0.09, 0.014, "triangle");
+  playSoftTone(740, 0.1, 0.012, "sine", 0.05);
+  playSoftTone(920, 0.12, 0.01, "triangle", 0.1);
 };
 
 const toggleSound = () => {
@@ -375,17 +387,36 @@ onMounted(() => {
     playSoftClick();
   };
 
-  celebrationSoundListener = () => {
-    if (!soundEnabled.value) {
+  document.addEventListener("pointerdown", clickSoundListener);
+});
+
+watch(
+  () => lastEvent.value?.id,
+  () => {
+    if (!soundEnabled.value || !lastEvent.value) {
       return;
     }
 
-    playSoftSuccess();
-  };
+    if (lastEvent.value.type === "prediction-saved") {
+      playSoftSuccess();
+      return;
+    }
 
-  document.addEventListener("pointerdown", clickSoundListener);
-  window.addEventListener("quiniela:celebration", celebrationSoundListener);
-});
+    if (lastEvent.value.type === "champion-saved") {
+      playSoftSuccess();
+      return;
+    }
+
+    if (lastEvent.value.type === "exact-hit") {
+      playExactHit();
+      return;
+    }
+
+    if (lastEvent.value.type === "rank-up") {
+      playRankUp();
+    }
+  },
+);
 
 watch(
   () => activeQuinielaId.value,
@@ -428,13 +459,6 @@ onBeforeUnmount(() => {
 
   if (clickSoundListener) {
     document.removeEventListener("pointerdown", clickSoundListener);
-  }
-
-  if (celebrationSoundListener) {
-    window.removeEventListener(
-      "quiniela:celebration",
-      celebrationSoundListener,
-    );
   }
 
   if (audioContext && audioContext.state !== "closed") {

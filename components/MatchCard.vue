@@ -18,6 +18,7 @@ const emit = defineEmits<{
 
 const client = useSupabaseClient<any>();
 const user = useSupabaseUser();
+const { emitPredictionSaved } = useGameUx();
 const activeQuinielaId = useCookie<string | null>("active_quiniela_id");
 const predictionsByQuinielaSupported = useState<boolean | null>(
   "predictions-by-quiniela-supported",
@@ -168,10 +169,6 @@ const triggerSaveCelebration = () => {
   }
 
   showSaveCelebration.value = true;
-
-  if (process.client) {
-    window.dispatchEvent(new CustomEvent("quiniela:celebration"));
-  }
 
   celebrationTimer = setTimeout(() => {
     showSaveCelebration.value = false;
@@ -359,6 +356,10 @@ const savePrediction = async () => {
   savedOnce.value = true;
   pointsEarned.value = data?.points_earned ?? null;
   triggerSaveCelebration();
+  emitPredictionSaved({
+    matchId: props.match.id,
+    pointsEarned: pointsEarned.value,
+  });
   emit("saved", { matchId: props.match.id, points: pointsEarned.value });
 };
 

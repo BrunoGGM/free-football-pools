@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      achievement_definitions: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          icon_emoji: string
+          id: string
+          is_active: boolean
+          name: string
+          tier: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          icon_emoji?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          tier?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          icon_emoji?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          tier?: number
+        }
+        Relationships: []
+      }
       api_provider_sync_state: {
         Row: {
           created_at: string
@@ -268,6 +301,45 @@ export type Database = {
           },
         ]
       }
+      quiniela_member_streaks: {
+        Row: {
+          best_streak: number
+          current_streak: number
+          quiniela_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          best_streak?: number
+          current_streak?: number
+          quiniela_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          best_streak?: number
+          current_streak?: number
+          quiniela_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiniela_member_streaks_quiniela_id_fkey"
+            columns: ["quiniela_id"]
+            isOneToOne: false
+            referencedRelation: "quinielas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiniela_member_streaks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quiniela_members: {
         Row: {
           champion_predicted_at: string | null
@@ -450,11 +522,64 @@ export type Database = {
         }
         Relationships: []
       }
+      user_achievements: {
+        Row: {
+          achievement_id: string
+          id: string
+          metadata: Json
+          quiniela_id: string
+          unlocked_at: string
+          user_id: string
+        }
+        Insert: {
+          achievement_id: string
+          id?: string
+          metadata?: Json
+          quiniela_id: string
+          unlocked_at?: string
+          user_id: string
+        }
+        Update: {
+          achievement_id?: string
+          id?: string
+          metadata?: Json
+          quiniela_id?: string
+          unlocked_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_achievements_achievement_id_fkey"
+            columns: ["achievement_id"]
+            isOneToOne: false
+            referencedRelation: "achievement_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_achievements_quiniela_id_fkey"
+            columns: ["quiniela_id"]
+            isOneToOne: false
+            referencedRelation: "quinielas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_achievements_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      award_member_achievements: {
+        Args: { p_quiniela_id: string; p_user_id: string }
+        Returns: undefined
+      }
       calculate_prediction_points: {
         Args: {
           actual_away: number
@@ -463,6 +588,24 @@ export type Database = {
           predicted_home: number
         }
         Returns: number
+      }
+      grant_achievement_by_code: {
+        Args: {
+          p_code: string
+          p_metadata?: Json
+          p_quiniela_id: string
+          p_user_id: string
+        }
+        Returns: undefined
+      }
+      grant_streak_bonus: {
+        Args: {
+          p_milestone: number
+          p_points: number
+          p_quiniela_id: string
+          p_user_id: string
+        }
+        Returns: undefined
       }
       is_admin_of_quiniela: {
         Args: { p_quiniela_id: string; p_user_id: string }
@@ -475,12 +618,20 @@ export type Database = {
       }
       map_team_code: { Args: { p_name: string }; Returns: string }
       normalize_team_key: { Args: { p_name: string }; Returns: string }
+      recalculate_member_streak: {
+        Args: { p_quiniela_id: string; p_user_id: string }
+        Returns: undefined
+      }
       recalculate_member_total_points: {
         Args: { p_quiniela_id: string; p_user_id: string }
         Returns: undefined
       }
       recalculate_quiniela_ranking: {
         Args: { p_quiniela_id: string }
+        Returns: undefined
+      }
+      refresh_member_gamification: {
+        Args: { p_quiniela_id: string; p_user_id: string }
         Returns: undefined
       }
       unaccent: { Args: { "": string }; Returns: string }
