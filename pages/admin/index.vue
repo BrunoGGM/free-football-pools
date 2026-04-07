@@ -202,7 +202,9 @@ const saveQuiniela = async () => {
     await loadGlobalStats(false);
   } catch (error: any) {
     globalError.value =
-      error?.data?.message || error?.message || "No se pudo guardar la quiniela";
+      error?.data?.message ||
+      error?.message ||
+      "No se pudo guardar la quiniela";
   } finally {
     savingQuiniela.value = false;
   }
@@ -236,7 +238,9 @@ const deleteQuiniela = async (quinielaId: string) => {
     await loadGlobalStats(false);
   } catch (error: any) {
     globalError.value =
-      error?.data?.message || error?.message || "No se pudo eliminar la quiniela";
+      error?.data?.message ||
+      error?.message ||
+      "No se pudo eliminar la quiniela";
   } finally {
     deletingQuinielaId.value = null;
   }
@@ -447,7 +451,9 @@ onMounted(async () => {
 
           <div class="mt-4 grid gap-3 md:grid-cols-2">
             <div class="space-y-1">
-              <label class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+              <label
+                class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+              >
                 Nombre
               </label>
               <input
@@ -458,7 +464,9 @@ onMounted(async () => {
             </div>
 
             <div class="space-y-1">
-              <label class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+              <label
+                class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+              >
                 Access code
               </label>
               <div class="flex gap-2">
@@ -478,7 +486,9 @@ onMounted(async () => {
             </div>
 
             <div class="space-y-1">
-              <label class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+              <label
+                class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+              >
                 Admin user id
               </label>
               <input
@@ -489,7 +499,9 @@ onMounted(async () => {
             </div>
 
             <div class="space-y-1">
-              <label class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+              <label
+                class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+              >
                 Inicio
               </label>
               <input
@@ -500,7 +512,9 @@ onMounted(async () => {
             </div>
 
             <div class="space-y-1 md:col-span-2">
-              <label class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+              <label
+                class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+              >
                 Fin (opcional)
               </label>
               <input
@@ -511,7 +525,9 @@ onMounted(async () => {
             </div>
 
             <div class="space-y-1 md:col-span-2">
-              <label class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
+              <label
+                class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
+              >
                 Descripcion
               </label>
               <textarea
@@ -529,7 +545,13 @@ onMounted(async () => {
               :disabled="savingQuiniela"
               @click="saveQuiniela"
             >
-              {{ savingQuiniela ? "Guardando..." : quinielaForm.id ? "Guardar cambios" : "Crear quiniela" }}
+              {{
+                savingQuiniela
+                  ? "Guardando..."
+                  : quinielaForm.id
+                    ? "Guardar cambios"
+                    : "Crear quiniela"
+              }}
             </button>
             <button
               v-if="quinielaForm.id"
@@ -601,7 +623,11 @@ onMounted(async () => {
                       :disabled="deletingQuinielaId === item.id"
                       @click="deleteQuiniela(item.id)"
                     >
-                      {{ deletingQuinielaId === item.id ? "Eliminando..." : "Borrar" }}
+                      {{
+                        deletingQuinielaId === item.id
+                          ? "Eliminando..."
+                          : "Borrar"
+                      }}
                     </button>
                   </div>
                 </td>
