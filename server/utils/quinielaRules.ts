@@ -8,6 +8,7 @@ export const DEFAULT_QUINIELA_RULES = {
   streak_hit_min_points: 1,
   streak_bonus_3_points: 1,
   streak_bonus_5_points: 2,
+  allow_member_predictions_view: false,
 } as const
 
 const RULE_BOUNDS = {
@@ -20,6 +21,8 @@ const RULE_BOUNDS = {
   streak_bonus_5_points: { min: 0, max: 20 },
 } as const
 
+type NumericRuleField = keyof typeof RULE_BOUNDS
+
 export type QuinielaRulesPayload = {
   exact_score_points: number
   correct_outcome_points: number
@@ -28,6 +31,7 @@ export type QuinielaRulesPayload = {
   streak_hit_min_points: number
   streak_bonus_3_points: number
   streak_bonus_5_points: number
+  allow_member_predictions_view: boolean
 }
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
@@ -39,7 +43,7 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 }
 
 const parseRuleInt = (
-  field: keyof QuinielaRulesPayload,
+  field: NumericRuleField,
   value: unknown,
   required: boolean,
 ): number | undefined => {
@@ -67,6 +71,43 @@ const parseRuleInt = (
   }
 
   return parsed
+}
+
+const parseRuleBoolean = (
+  field: 'allow_member_predictions_view',
+  value: unknown,
+): boolean | undefined => {
+  if (value === undefined || value === null || value === '') {
+    return undefined
+  }
+
+  if (typeof value === 'boolean') {
+    return value
+  }
+
+  if (typeof value === 'number') {
+    if (value === 1) {
+      return true
+    }
+
+    if (value === 0) {
+      return false
+    }
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+
+    if (['true', '1', 'si', 'sí', 'yes', 'on'].includes(normalized)) {
+      return true
+    }
+
+    if (['false', '0', 'no', 'off'].includes(normalized)) {
+      return false
+    }
+  }
+
+  throw createError({ statusCode: 400, statusMessage: `${field} invalido (debe ser booleano)` })
 }
 
 const validateRulesConsistency = (rules: QuinielaRulesPayload) => {
@@ -114,6 +155,10 @@ export const parseQuinielaRulesInput = (
     streak_hit_min_points: parseRuleInt('streak_hit_min_points', source.streak_hit_min_points, requireAll),
     streak_bonus_3_points: parseRuleInt('streak_bonus_3_points', source.streak_bonus_3_points, requireAll),
     streak_bonus_5_points: parseRuleInt('streak_bonus_5_points', source.streak_bonus_5_points, requireAll),
+    allow_member_predictions_view: parseRuleBoolean(
+      'allow_member_predictions_view',
+      source.allow_member_predictions_view,
+    ),
   }
 
   const cleanedParsed = Object.fromEntries(
@@ -128,6 +173,8 @@ export const parseQuinielaRulesInput = (
     streak_hit_min_points: cleanedParsed.streak_hit_min_points ?? base.streak_hit_min_points,
     streak_bonus_3_points: cleanedParsed.streak_bonus_3_points ?? base.streak_bonus_3_points,
     streak_bonus_5_points: cleanedParsed.streak_bonus_5_points ?? base.streak_bonus_5_points,
+    allow_member_predictions_view:
+      cleanedParsed.allow_member_predictions_view ?? base.allow_member_predictions_view,
   }
 
   validateRulesConsistency(merged)

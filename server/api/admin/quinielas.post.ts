@@ -21,6 +21,7 @@ type CreateQuinielaBody = {
   streak_hit_min_points?: number | string
   streak_bonus_3_points?: number | string
   streak_bonus_5_points?: number | string
+  allow_member_predictions_view?: boolean | string | number
 }
 
 const parseTicketPrice = (value: unknown) => {

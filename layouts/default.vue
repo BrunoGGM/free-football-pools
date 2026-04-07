@@ -3,8 +3,15 @@ const route = useRoute();
 const client = useSupabaseClient<any>();
 const user = useSupabaseUser();
 const { signOut, loading } = useSupabaseAuth();
-const { clearActiveQuiniela, quiniela, loadActiveQuiniela, activeQuinielaId } =
-  useActiveQuiniela();
+const {
+  clearActiveQuiniela,
+  quiniela,
+  loadActiveQuiniela,
+  activeQuinielaId,
+  myQuinielas,
+  loadMyQuinielas,
+  setActiveQuiniela,
+} = useActiveQuiniela();
 const { lastEvent } = useGameUx();
 
 const links = [
@@ -37,9 +44,57 @@ interface HeaderMetric {
 const headerMetrics = ref<HeaderMetric[]>([]);
 let metricsRefreshTimer: ReturnType<typeof setInterval> | null = null;
 const soundEnabled = ref(true);
+const switchingQuiniela = ref(false);
 let audioContext: AudioContext | null = null;
 let clickSoundListener: ((event: PointerEvent) => void) | null = null;
 let lastSoundAt = 0;
+
+const sessionUserName = computed(() => {
+  if (!user.value) {
+    return "Invitado";
+  }
+
+  const metaUsername = user.value.user_metadata?.username;
+  if (typeof metaUsername === "string" && metaUsername.trim()) {
+    return metaUsername.trim();
+  }
+
+  const metaFullName = user.value.user_metadata?.full_name;
+  if (typeof metaFullName === "string" && metaFullName.trim()) {
+    return metaFullName.trim();
+  }
+
+  const email = user.value.email;
+  if (typeof email === "string" && email.includes("@")) {
+    return email.split("@")[0] || "Jugador";
+  }
+
+  return "Jugador";
+});
+
+const onActiveQuinielaChange = async (event: Event) => {
+  const target = event.target as HTMLSelectElement | null;
+  if (!target || switchingQuiniela.value) {
+    return;
+  }
+
+  const nextId = target.value || null;
+
+  if (nextId === activeQuinielaId.value) {
+    return;
+  }
+
+  switchingQuiniela.value = true;
+  setActiveQuiniela(nextId);
+
+  await Promise.all([
+    loadActiveQuiniela(),
+    loadHeaderMetrics(),
+    loadAdminAccess(),
+  ]);
+
+  switchingQuiniela.value = false;
+};
 
 const ensureAudioContext = () => {
   if (!process.client || !soundEnabled.value) {
@@ -355,6 +410,7 @@ onMounted(() => {
 
   if (user.value) {
     void loadActiveQuiniela();
+    void loadMyQuinielas();
     void loadHeaderMetrics();
     void loadAdminAccess();
 
@@ -423,6 +479,7 @@ watch(
   () => {
     if (user.value) {
       void loadActiveQuiniela();
+      void loadMyQuinielas();
       void loadHeaderMetrics();
       void loadAdminAccess();
     }
@@ -442,6 +499,7 @@ watch(
   () => user.value?.id,
   () => {
     if (user.value) {
+      void loadMyQuinielas();
       void loadHeaderMetrics();
       void loadAdminAccess();
       return;
@@ -538,26 +596,69 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div v-if="user" class="mx-auto w-full max-w-7xl px-4 pb-3 sm:px-6">
+      <div v-if="user" class="mx-auto w-full max-w-7xl px-4 pb-2 sm:px-6">
         <div
-          v-if="quiniela"
-          class="card rounded-2xl border border-primary/40 bg-primary/10 px-4 py-3"
+          class="flex flex-wrap items-center gap-2 rounded-xl border border-primary/35 bg-primary/10 px-3 py-2 text-xs"
         >
-          <p class="text-primary text-xs uppercase tracking-[0.14em]">
-            Quiniela activa
-          </p>
-          <p class="text-base-content mt-1 text-lg font-semibold sm:text-xl">
-            {{ quiniela.name }}
-          </p>
-        </div>
-        <div v-else class="alert alert-warning rounded-2xl px-4 py-3">
-          <p class="text-xs uppercase tracking-[0.14em]">Sin quiniela activa</p>
-          <NuxtLink
-            to="/ingresar"
-            class="link link-hover mt-1 inline-flex text-sm font-semibold"
+          <span class="text-base-content/70">Sesion:</span>
+          <strong class="text-base-content">{{ sessionUserName }}</strong>
+
+          <span class="hidden h-4 w-px bg-base-300/70 sm:inline-block"></span>
+
+          <span class="text-base-content/70">Quiniela:</span>
+          <strong class="text-base-content max-w-52 truncate">
+            {{ quiniela?.name || "Sin quiniela" }}
+          </strong>
+
+          <span
+            class="badge badge-xs"
+            :class="quiniela ? 'badge-primary' : 'badge-warning'"
           >
-            Seleccionar o unirme a una quiniela
-          </NuxtLink>
+            {{ quiniela ? "Activa" : "Sin quiniela" }}
+          </span>
+
+          <div
+            class="ml-auto flex min-w-60 flex-1 items-center gap-2 sm:flex-initial"
+          >
+            <label
+              class="text-base-content/70 whitespace-nowrap"
+              for="header-quiniela-selector"
+            >
+              Cambiar
+            </label>
+            <select
+              id="header-quiniela-selector"
+              class="select select-bordered select-xs h-8 min-h-8 w-full sm:w-64"
+              :value="activeQuinielaId || ''"
+              :disabled="switchingQuiniela || myQuinielas.length === 0"
+              @change="onActiveQuinielaChange"
+            >
+              <option value="" disabled>
+                {{
+                  myQuinielas.length === 0
+                    ? "Sin quinielas disponibles"
+                    : "Selecciona quiniela"
+                }}
+              </option>
+              <option
+                v-for="entry in myQuinielas"
+                :key="entry.quiniela_id"
+                :value="entry.quiniela_id"
+              >
+                {{ entry.quiniela?.name || "Quiniela" }}
+              </option>
+            </select>
+            <NuxtLink to="/ingresar" class="btn btn-ghost btn-xs">
+              Gestionar
+            </NuxtLink>
+          </div>
+
+          <span
+            v-if="switchingQuiniela"
+            class="text-base-content/70 text-[11px]"
+          >
+            Cambiando...
+          </span>
         </div>
       </div>
 

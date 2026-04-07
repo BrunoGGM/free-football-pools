@@ -23,6 +23,7 @@ interface ManagedQuiniela {
     streak_hit_min_points: number;
     streak_bonus_3_points: number;
     streak_bonus_5_points: number;
+    allow_member_predictions_view: boolean;
   };
 }
 
@@ -138,6 +139,7 @@ const quinielaForm = reactive({
   streak_hit_min_points: 1,
   streak_bonus_3_points: 1,
   streak_bonus_5_points: 2,
+  allow_member_predictions_view: false,
 });
 
 const manualPointsForm = reactive({
@@ -255,6 +257,7 @@ const resetQuinielaForm = () => {
   quinielaForm.streak_hit_min_points = 1;
   quinielaForm.streak_bonus_3_points = 1;
   quinielaForm.streak_bonus_5_points = 2;
+  quinielaForm.allow_member_predictions_view = false;
 };
 
 const editQuiniela = (item: ManagedQuiniela) => {
@@ -284,6 +287,9 @@ const editQuiniela = (item: ManagedQuiniela) => {
   );
   quinielaForm.streak_bonus_5_points = Number(
     item.rules?.streak_bonus_5_points ?? 2,
+  );
+  quinielaForm.allow_member_predictions_view = Boolean(
+    item.rules?.allow_member_predictions_view ?? false,
   );
   manualPointsForm.quiniela_id = item.id;
   globalMessage.value = null;
@@ -388,6 +394,9 @@ const saveQuiniela = async () => {
     streak_hit_min_points: Number(quinielaForm.streak_hit_min_points),
     streak_bonus_3_points: Number(quinielaForm.streak_bonus_3_points),
     streak_bonus_5_points: Number(quinielaForm.streak_bonus_5_points),
+    allow_member_predictions_view: Boolean(
+      quinielaForm.allow_member_predictions_view,
+    ),
   };
 
   if (!payload.name || !payload.access_code || !payload.start_date) {

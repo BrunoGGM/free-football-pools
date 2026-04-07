@@ -34,6 +34,54 @@ interface WeeklyLeaderRow {
   exact_hits: number;
 }
 
+interface RankedUserPredictionRow {
+  id: string;
+  home_score: number;
+  away_score: number;
+  points_earned: number;
+  created_at: string;
+  match: {
+    id: string;
+    stage: string;
+    status: "pending" | "in_progress" | "finished";
+    match_time: string;
+    home_team: string;
+    away_team: string;
+    home_score: number | null;
+    away_score: number | null;
+  } | null;
+}
+
+interface RankedUserRawPredictionRow {
+  id: string;
+  home_score: number;
+  away_score: number;
+  points_earned: number;
+  created_at: string;
+  match:
+    | {
+        id: string;
+        stage: string;
+        status: "pending" | "in_progress" | "finished";
+        match_time: string;
+        home_team: string;
+        away_team: string;
+        home_score: number | null;
+        away_score: number | null;
+      }
+    | Array<{
+        id: string;
+        stage: string;
+        status: "pending" | "in_progress" | "finished";
+        match_time: string;
+        home_team: string;
+        away_team: string;
+        home_score: number | null;
+        away_score: number | null;
+      }>
+    | null;
+}
+
 const client = useSupabaseClient<any>();
 const user = useSupabaseUser();
 const { emitChampionSaved, emitRankUp } = useGameUx();
@@ -66,6 +114,12 @@ const previousOwnRank = ref<number | null>(null);
 const registeredTeams = ref<TeamProfileOption[]>([]);
 const gamificationMessage = ref<string | null>(null);
 const weeklyLeaders = ref<WeeklyLeaderRow[]>([]);
+const canViewOtherQuinielas = ref(false);
+const userQuinielaModalOpen = ref(false);
+const selectedUserForQuinielaModal = ref<PositionRow | null>(null);
+const selectedUserPredictions = ref<RankedUserPredictionRow[]>([]);
+const loadingSelectedUserPredictions = ref(false);
+const selectedUserPredictionsError = ref<string | null>(null);
 
 const rankUpSubtitle = computed(() => {
   if (!rankUpFrom.value || !rankUpTo.value) {
@@ -197,6 +251,11 @@ const weeklyPeriodText = computed(() => {
   });
 });
 
+const selectedUserPredictionCountText = computed(() => {
+  const total = selectedUserPredictions.value.length;
+  return `${total} prediccion${total === 1 ? "" : "es"}`;
+});
+
 const resolveChampionFromRegisteredTeams = (input: string) => {
   const raw = input.trim();
 
@@ -271,6 +330,49 @@ const championDisplayName = (value: string | null) => {
 const championLogoUrl = (value: string | null) => {
   const info = getChampionInfo(value);
   return info?.logoUrl ?? null;
+};
+
+const getMatchTeamInfo = (teamName: string | null | undefined) => {
+  const name = (teamName || "").trim();
+
+  if (!name) {
+    return {
+      name: "-",
+      code: null as string | null,
+      logoUrl: null as string | null,
+    };
+  }
+
+  const exact = registeredTeamsMap.value.get(normalizeTeamKey(name));
+
+  if (exact) {
+    return {
+      name: exact.name,
+      code: exact.code,
+      logoUrl: exact.logo_url,
+    };
+  }
+
+  return {
+    name,
+    code: resolveTeamCode(name),
+    logoUrl: null,
+  };
+};
+
+const matchTeamFlag = (teamName: string | null | undefined) => {
+  const info = getMatchTeamInfo(teamName);
+  return info.code ? teamFlagEmojiFromCode(info.code) : "";
+};
+
+const matchTeamLogoUrl = (teamName: string | null | undefined) => {
+  const info = getMatchTeamInfo(teamName);
+  return info.logoUrl;
+};
+
+const matchTeamDisplayName = (teamName: string | null | undefined) => {
+  const info = getMatchTeamInfo(teamName);
+  return info.name;
 };
 
 const teamOptionFlag = (team: TeamProfileOption) =>
@@ -367,6 +469,142 @@ const isMissingWeeklyRankingTableError = (error: any) => {
   );
 };
 
+const isMissingVisibilityRuleError = (error: any) => {
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    error?.code === "42P01" ||
+    error?.code === "42703" ||
+    message.includes("quiniela_rules") ||
+    message.includes("allow_member_predictions_view")
+  );
+};
+
+const isPredictionsAccessDeniedError = (error: any) => {
+  const message = String(error?.message || "").toLowerCase();
+  return error?.code === "42501" || message.includes("permission denied");
+};
+
+const stageLabel = (stage: string) => stage.replaceAll("_", " ").toUpperCase();
+
+const kickoffText = (value: string) =>
+  new Date(value).toLocaleString("es-MX", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+
+const predictionStatusText = (row: RankedUserPredictionRow) => {
+  if (!row.match) {
+    return "Sin partido";
+  }
+
+  if (row.match.status === "in_progress") {
+    return "En juego";
+  }
+
+  if (row.match.status !== "finished") {
+    return "Pendiente";
+  }
+
+  return "Finalizado";
+};
+
+const winnerFromScore = (
+  homeScore: number | null | undefined,
+  awayScore: number | null | undefined,
+  homeTeam: string | null | undefined,
+  awayTeam: string | null | undefined,
+) => {
+  if (homeScore === null || homeScore === undefined) {
+    return "Pendiente";
+  }
+
+  if (awayScore === null || awayScore === undefined) {
+    return "Pendiente";
+  }
+
+  if (homeScore === awayScore) {
+    return "Empate";
+  }
+
+  return homeScore > awayScore
+    ? matchTeamDisplayName(homeTeam)
+    : matchTeamDisplayName(awayTeam);
+};
+
+const pickWinnerText = (row: RankedUserPredictionRow) => {
+  return winnerFromScore(
+    row.home_score,
+    row.away_score,
+    row.match?.home_team,
+    row.match?.away_team,
+  );
+};
+
+const officialWinnerText = (row: RankedUserPredictionRow) => {
+  return winnerFromScore(
+    row.match?.home_score,
+    row.match?.away_score,
+    row.match?.home_team,
+    row.match?.away_team,
+  );
+};
+
+const closeUserQuinielaModal = () => {
+  userQuinielaModalOpen.value = false;
+  selectedUserForQuinielaModal.value = null;
+  selectedUserPredictions.value = [];
+  selectedUserPredictionsError.value = null;
+};
+
+const openUserQuinielaModal = async (row: PositionRow) => {
+  if (!activeQuinielaId.value || !canViewOtherQuinielas.value) {
+    return;
+  }
+
+  userQuinielaModalOpen.value = true;
+  selectedUserForQuinielaModal.value = row;
+  selectedUserPredictions.value = [];
+  selectedUserPredictionsError.value = null;
+  loadingSelectedUserPredictions.value = true;
+
+  const result = await client
+    .from("predictions")
+    .select(
+      "id, home_score, away_score, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score)",
+    )
+    .eq("quiniela_id", activeQuinielaId.value)
+    .eq("user_id", row.user_id)
+    .order("match_time", { ascending: true, referencedTable: "matches" });
+
+  loadingSelectedUserPredictions.value = false;
+
+  if (result.error) {
+    if (isPredictionsAccessDeniedError(result.error)) {
+      selectedUserPredictionsError.value =
+        "No tienes permiso para ver esta quiniela. Activa la opcion en reglas de la quiniela.";
+      return;
+    }
+
+    selectedUserPredictionsError.value =
+      result.error.message || "No se pudo cargar el listado de predicciones.";
+    return;
+  }
+
+  selectedUserPredictions.value = (
+    (result.data as RankedUserRawPredictionRow[] | null) ?? []
+  )
+    .map((item) => ({
+      ...item,
+      match: Array.isArray(item.match) ? (item.match[0] ?? null) : item.match,
+    }))
+    .sort((a, b) => {
+      const aTime = a.match ? new Date(a.match.match_time).getTime() : 0;
+      const bTime = b.match ? new Date(b.match.match_time).getTime() : 0;
+      return aTime - bTime;
+    });
+};
+
 const appendGamificationMessage = (message: string) => {
   if (!gamificationMessage.value) {
     gamificationMessage.value = message;
@@ -383,6 +621,8 @@ const loadRanking = async () => {
     rows.value = [];
     gamificationMessage.value = null;
     weeklyLeaders.value = [];
+    canViewOtherQuinielas.value = false;
+    closeUserQuinielaModal();
     return;
   }
 
@@ -390,6 +630,36 @@ const loadRanking = async () => {
   errorMessage.value = null;
   gamificationMessage.value = null;
   weeklyLeaders.value = [];
+
+  const visibilityResult = await client
+    .from("quiniela_rules")
+    .select("allow_member_predictions_view")
+    .eq("quiniela_id", activeQuinielaId.value)
+    .maybeSingle();
+
+  if (
+    visibilityResult.error &&
+    isMissingVisibilityRuleError(visibilityResult.error)
+  ) {
+    canViewOtherQuinielas.value = false;
+    appendGamificationMessage(
+      "Visibilidad de quinielas no disponible aun. Aplica la migracion 0019 para habilitarla.",
+    );
+  } else if (visibilityResult.error) {
+    canViewOtherQuinielas.value = false;
+  } else {
+    canViewOtherQuinielas.value = Boolean(
+      (
+        visibilityResult.data as {
+          allow_member_predictions_view?: boolean;
+        } | null
+      )?.allow_member_predictions_view ?? false,
+    );
+  }
+
+  if (!canViewOtherQuinielas.value && userQuinielaModalOpen.value) {
+    closeUserQuinielaModal();
+  }
 
   const rankingResult = await client
     .from("quiniela_rankings")
@@ -1064,6 +1334,7 @@ onBeforeUnmount(() => {
             <th class="px-4 py-3">Puntos</th>
             <th class="px-4 py-3">Racha</th>
             <th class="px-4 py-3">Campeon</th>
+            <th v-if="canViewOtherQuinielas" class="px-4 py-3">Quiniela</th>
           </tr>
         </thead>
         <tbody>
@@ -1150,6 +1421,14 @@ onBeforeUnmount(() => {
               </span>
               <span v-else>-</span>
             </td>
+            <td v-if="canViewOtherQuinielas" class="px-4 py-3">
+              <button
+                class="btn btn-outline btn-xs"
+                @click="openUserQuinielaModal(row)"
+              >
+                Ver quiniela
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -1166,5 +1445,164 @@ onBeforeUnmount(() => {
         </p>
       </div>
     </article>
+
+    <dialog class="modal" :class="{ 'modal-open': userQuinielaModalOpen }">
+      <div class="modal-box max-w-4xl">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h3 class="text-lg font-semibold text-base-content">
+              Quiniela de
+              {{ selectedUserForQuinielaModal?.username || "Jugador" }}
+            </h3>
+            <p class="mt-1 text-xs text-base-content/70">
+              {{ selectedUserPredictionCountText }}
+            </p>
+          </div>
+          <button class="btn btn-ghost btn-xs" @click="closeUserQuinielaModal">
+            Cerrar
+          </button>
+        </div>
+
+        <div
+          v-if="loadingSelectedUserPredictions"
+          class="mt-4 text-sm text-base-content/70"
+        >
+          Cargando quiniela del usuario...
+        </div>
+
+        <p
+          v-else-if="selectedUserPredictionsError"
+          class="alert alert-error mt-4 text-xs"
+        >
+          {{ selectedUserPredictionsError }}
+        </p>
+
+        <p
+          v-else-if="selectedUserPredictions.length === 0"
+          class="mt-4 text-sm text-base-content/70"
+        >
+          Este usuario aun no tiene predicciones guardadas.
+        </p>
+
+        <div
+          v-else
+          class="mt-4 max-h-[60vh] overflow-auto rounded-xl border border-base-300"
+        >
+          <table class="table min-w-full text-sm">
+            <thead
+              class="bg-base-200 text-base-content/70 text-left text-xs uppercase tracking-[0.12em]"
+            >
+              <tr>
+                <th class="px-3 py-2">Partido</th>
+                <th class="px-3 py-2">Pick</th>
+                <th class="px-3 py-2">Oficial</th>
+                <th class="px-3 py-2">Ganador</th>
+                <th class="px-3 py-2">Estado</th>
+                <th class="px-3 py-2">Pts</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="item in selectedUserPredictions"
+                :key="item.id"
+                class="border-t border-base-300"
+              >
+                <td class="px-3 py-2">
+                  <p class="text-xs text-base-content/70">
+                    {{ item.match ? stageLabel(item.match.stage) : "-" }}
+                  </p>
+                  <p class="font-medium">
+                    <span class="inline-flex items-center gap-1">
+                      <img
+                        v-if="
+                          item.match && matchTeamLogoUrl(item.match.home_team)
+                        "
+                        :src="
+                          matchTeamLogoUrl(item.match.home_team) || undefined
+                        "
+                        :alt="`Escudo de ${matchTeamDisplayName(item.match.home_team)}`"
+                        class="h-4 w-4 rounded-full border border-base-300 object-cover"
+                        loading="lazy"
+                      />
+                      <span
+                        v-else-if="
+                          item.match && matchTeamFlag(item.match.home_team)
+                        "
+                        >{{ matchTeamFlag(item.match.home_team) }}</span
+                      >
+                      <span>{{
+                        matchTeamDisplayName(item.match?.home_team)
+                      }}</span>
+                    </span>
+                    <span class="mx-1 text-base-content/60">vs</span>
+                    <span class="inline-flex items-center gap-1">
+                      <img
+                        v-if="
+                          item.match && matchTeamLogoUrl(item.match.away_team)
+                        "
+                        :src="
+                          matchTeamLogoUrl(item.match.away_team) || undefined
+                        "
+                        :alt="`Escudo de ${matchTeamDisplayName(item.match.away_team)}`"
+                        class="h-4 w-4 rounded-full border border-base-300 object-cover"
+                        loading="lazy"
+                      />
+                      <span
+                        v-else-if="
+                          item.match && matchTeamFlag(item.match.away_team)
+                        "
+                        >{{ matchTeamFlag(item.match.away_team) }}</span
+                      >
+                      <span>{{
+                        matchTeamDisplayName(item.match?.away_team)
+                      }}</span>
+                    </span>
+                  </p>
+                  <p class="text-xs text-base-content/70" v-if="item.match">
+                    {{ kickoffText(item.match.match_time) }}
+                  </p>
+                </td>
+                <td class="px-3 py-2 font-semibold">
+                  {{ item.home_score }} : {{ item.away_score }}
+                </td>
+                <td class="px-3 py-2">
+                  <span
+                    v-if="
+                      item.match?.home_score !== null &&
+                      item.match?.away_score !== null
+                    "
+                  >
+                    {{ item.match?.home_score ?? "-" }} :
+                    {{ item.match?.away_score ?? "-" }}
+                  </span>
+                  <span v-else class="text-base-content/70">Pendiente</span>
+                </td>
+                <td class="px-3 py-2">
+                  <p class="text-xs text-base-content/70">
+                    Pick: {{ pickWinnerText(item) }}
+                  </p>
+                  <p class="text-xs text-base-content/70">
+                    Oficial: {{ officialWinnerText(item) }}
+                  </p>
+                </td>
+                <td class="px-3 py-2">
+                  {{ predictionStatusText(item) }}
+                </td>
+                <td class="px-3 py-2 font-semibold text-warning">
+                  {{ item.points_earned }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <form
+        method="dialog"
+        class="modal-backdrop"
+        @submit.prevent="closeUserQuinielaModal"
+      >
+        <button @click="closeUserQuinielaModal">close</button>
+      </form>
+    </dialog>
   </section>
 </template>

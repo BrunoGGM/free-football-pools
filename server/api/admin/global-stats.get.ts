@@ -56,7 +56,7 @@ export default defineEventHandler(async (event) => {
   if (quinielaIds.length > 0) {
     const { data: rules, error: rulesError } = await supabase
       .from('quiniela_rules')
-      .select('quiniela_id, exact_score_points, correct_outcome_points, champion_bonus_points, exact_hit_min_points, streak_hit_min_points, streak_bonus_3_points, streak_bonus_5_points')
+      .select('quiniela_id, exact_score_points, correct_outcome_points, champion_bonus_points, exact_hit_min_points, streak_hit_min_points, streak_bonus_3_points, streak_bonus_5_points, allow_member_predictions_view')
       .in('quiniela_id', quinielaIds)
 
     if (rulesError && rulesError.code !== '42P01') {
@@ -74,6 +74,10 @@ export default defineEventHandler(async (event) => {
         streak_hit_min_points: Number(item.streak_hit_min_points ?? DEFAULT_QUINIELA_RULES.streak_hit_min_points),
         streak_bonus_3_points: Number(item.streak_bonus_3_points ?? DEFAULT_QUINIELA_RULES.streak_bonus_3_points),
         streak_bonus_5_points: Number(item.streak_bonus_5_points ?? DEFAULT_QUINIELA_RULES.streak_bonus_5_points),
+        allow_member_predictions_view: Boolean(
+          item.allow_member_predictions_view ??
+          DEFAULT_QUINIELA_RULES.allow_member_predictions_view,
+        ),
       })
     }
   }

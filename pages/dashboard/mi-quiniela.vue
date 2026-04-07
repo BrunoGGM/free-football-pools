@@ -3,7 +3,11 @@ definePageMeta({
   middleware: ["auth"],
 });
 
-import { resolveTeamCode, teamFlagEmojiFromCode } from "~/utils/teamMeta";
+import {
+  normalizeTeamKey,
+  resolveTeamCode,
+  teamFlagEmojiFromCode,
+} from "~/utils/teamMeta";
 
 interface MatchRow {
   id: string;
@@ -217,6 +221,42 @@ const chaserText = computed(() => {
 const badgeCountText = computed(() => {
   const count = earnedBadges.value.length;
   return `${count} medalla${count === 1 ? "" : "s"}`;
+});
+
+const predictedChampionLogoUrl = computed(() => {
+  if (!predictedChampion.value) {
+    return null;
+  }
+
+  const championKey = normalizeTeamKey(predictedChampion.value);
+
+  if (!championKey) {
+    return null;
+  }
+
+  for (const row of predictions.value) {
+    const match = row.match;
+
+    if (!match) {
+      continue;
+    }
+
+    if (
+      normalizeTeamKey(match.home_team) === championKey &&
+      match.home_team_logo_url
+    ) {
+      return match.home_team_logo_url;
+    }
+
+    if (
+      normalizeTeamKey(match.away_team) === championKey &&
+      match.away_team_logo_url
+    ) {
+      return match.away_team_logo_url;
+    }
+  }
+
+  return null;
 });
 
 const stageLabel = (stage: string) => stage.replaceAll("_", " ").toUpperCase();
@@ -1037,7 +1077,21 @@ onBeforeUnmount(() => {
             Campeon predicho
           </p>
           <p class="text-primary mt-1 text-lg font-semibold">
-            {{ predictedChampion || "No definido" }}
+            <span
+              v-if="predictedChampion"
+              class="inline-flex items-center gap-2"
+            >
+              <img
+                v-if="predictedChampionLogoUrl"
+                :src="predictedChampionLogoUrl"
+                :alt="`Escudo de ${predictedChampion}`"
+                class="h-5 w-5 rounded-full border border-base-300 object-cover"
+                loading="lazy"
+              />
+              <span v-else>{{ teamFlag(null, predictedChampion) }}</span>
+              <span>{{ predictedChampion }}</span>
+            </span>
+            <span v-else>No definido</span>
           </p>
         </div>
 

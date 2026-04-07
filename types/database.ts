@@ -519,6 +519,7 @@ export type Database = {
       }
       quiniela_rules: {
         Row: {
+          allow_member_predictions_view: boolean
           champion_bonus_points: number
           correct_outcome_points: number
           created_at: string
@@ -531,6 +532,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          allow_member_predictions_view?: boolean
           champion_bonus_points?: number
           correct_outcome_points?: number
           created_at?: string
@@ -543,6 +545,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          allow_member_predictions_view?: boolean
           champion_bonus_points?: number
           correct_outcome_points?: number
           created_at?: string
@@ -856,6 +859,19 @@ export type Database = {
       get_quiniela_rules: {
         Args: { p_quiniela_id: string }
         Returns: {
+          champion_bonus_points: number
+          correct_outcome_points: number
+          exact_hit_min_points: number
+          exact_score_points: number
+          streak_bonus_3_points: number
+          streak_bonus_5_points: number
+          streak_hit_min_points: number
+        }[]
+      }
+      get_quiniela_rules_with_visibility: {
+        Args: { p_quiniela_id: string }
+        Returns: {
+          allow_member_predictions_view: boolean
           champion_bonus_points: number
           correct_outcome_points: number
           exact_hit_min_points: number

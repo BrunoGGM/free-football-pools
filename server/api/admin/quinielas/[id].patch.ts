@@ -24,6 +24,7 @@ type UpdateQuinielaBody = {
   streak_hit_min_points?: number | string
   streak_bonus_3_points?: number | string
   streak_bonus_5_points?: number | string
+  allow_member_predictions_view?: boolean | string | number
 }
 
 const parseTicketPrice = (value: unknown) => {
@@ -56,6 +57,7 @@ export default defineEventHandler(async (event) => {
     streak_hit_min_points: body.streak_hit_min_points,
     streak_bonus_3_points: body.streak_bonus_3_points,
     streak_bonus_5_points: body.streak_bonus_5_points,
+    allow_member_predictions_view: body.allow_member_predictions_view,
   }
 
   if (typeof body.name === 'string') {
@@ -132,7 +134,7 @@ export default defineEventHandler(async (event) => {
   if (hasIncomingRuleValues) {
     const { data: currentRules, error: currentRulesError } = await supabase
       .from('quiniela_rules')
-      .select('exact_score_points, correct_outcome_points, champion_bonus_points, exact_hit_min_points, streak_hit_min_points, streak_bonus_3_points, streak_bonus_5_points')
+      .select('exact_score_points, correct_outcome_points, champion_bonus_points, exact_hit_min_points, streak_hit_min_points, streak_bonus_3_points, streak_bonus_5_points, allow_member_predictions_view')
       .eq('quiniela_id', quinielaId)
       .maybeSingle()
 
@@ -156,6 +158,9 @@ export default defineEventHandler(async (event) => {
         streak_hit_min_points: Number(currentRules.streak_hit_min_points),
         streak_bonus_3_points: Number(currentRules.streak_bonus_3_points),
         streak_bonus_5_points: Number(currentRules.streak_bonus_5_points),
+        allow_member_predictions_view: Boolean(
+          currentRules.allow_member_predictions_view,
+        ),
       }
       : DEFAULT_QUINIELA_RULES
 

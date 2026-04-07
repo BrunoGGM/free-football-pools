@@ -31,6 +31,7 @@ defineProps<{
       streak_hit_min_points: number;
       streak_bonus_3_points: number;
       streak_bonus_5_points: number;
+      allow_member_predictions_view: boolean;
     };
   }>;
   quinielaForm: {
@@ -49,6 +50,7 @@ defineProps<{
     streak_hit_min_points: number;
     streak_bonus_3_points: number;
     streak_bonus_5_points: number;
+    allow_member_predictions_view: boolean;
   };
   savingQuiniela: boolean;
   deletingQuinielaId: string | null;
@@ -373,6 +375,27 @@ const emit = defineEmits<{
               class="input input-bordered w-full"
             />
           </div>
+
+          <div class="space-y-1 md:col-span-2">
+            <label class="label cursor-pointer justify-start gap-3">
+              <input
+                v-model="quinielaForm.allow_member_predictions_view"
+                type="checkbox"
+                class="toggle toggle-primary"
+              />
+              <div>
+                <span
+                  class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+                >
+                  Ver quiniela de otros miembros
+                </span>
+                <p class="text-base-content/60 mt-1 text-xs normal-case">
+                  Si esta activo, los miembros podran abrir el listado de
+                  predicciones de otros usuarios desde posiciones.
+                </p>
+              </div>
+            </label>
+          </div>
         </div>
 
         <div class="mt-4 flex flex-wrap gap-2">
@@ -544,6 +567,10 @@ const emit = defineEmits<{
                   item.rules.correct_outcome_points
                 }}
                 / C{{ item.rules.champion_bonus_points }}
+                <span class="block mt-1">
+                  Quiniela visible:
+                  {{ item.rules.allow_member_predictions_view ? "SI" : "NO" }}
+                </span>
               </td>
               <td class="text-base-content/70 px-4 py-3">
                 {{ new Date(item.start_date).toLocaleString("es-MX") }}
