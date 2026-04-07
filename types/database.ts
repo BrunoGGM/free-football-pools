@@ -74,10 +74,12 @@ export type Database = {
           away_score: number | null
           away_team: string
           away_team_code: string | null
+          away_team_logo_url: string | null
           created_at: string
           home_score: number | null
           home_team: string
           home_team_code: string | null
+          home_team_logo_url: string | null
           id: string
           match_time: string
           source_time: string | null
@@ -92,10 +94,12 @@ export type Database = {
           away_score?: number | null
           away_team: string
           away_team_code?: string | null
+          away_team_logo_url?: string | null
           created_at?: string
           home_score?: number | null
           home_team: string
           home_team_code?: string | null
+          home_team_logo_url?: string | null
           id?: string
           match_time: string
           source_time?: string | null
@@ -110,10 +114,12 @@ export type Database = {
           away_score?: number | null
           away_team?: string
           away_team_code?: string | null
+          away_team_logo_url?: string | null
           created_at?: string
           home_score?: number | null
           home_team?: string
           home_team_code?: string | null
+          home_team_logo_url?: string | null
           id?: string
           match_time?: string
           source_time?: string | null
@@ -291,6 +297,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      team_profiles: {
+        Row: {
+          api_team_id: number | null
+          code: string | null
+          country: string | null
+          created_at: string
+          id: string
+          is_national: boolean | null
+          logo_url: string | null
+          name: string
+          source_provider: string
+          team_key: string
+          updated_at: string
+        }
+        Insert: {
+          api_team_id?: number | null
+          code?: string | null
+          country?: string | null
+          created_at?: string
+          id?: string
+          is_national?: boolean | null
+          logo_url?: string | null
+          name: string
+          source_provider?: string
+          team_key: string
+          updated_at?: string
+        }
+        Update: {
+          api_team_id?: number | null
+          code?: string | null
+          country?: string | null
+          created_at?: string
+          id?: string
+          is_national?: boolean | null
+          logo_url?: string | null
+          name?: string
+          source_provider?: string
+          team_key?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {

@@ -7,7 +7,7 @@ import {
   normalizeApiFootballStatus,
 } from '../../utils/apiFootball'
 import { requireAdminAccess } from '../../utils/adminAccess'
-import { resolveTeamCode } from '../../../utils/teamMeta'
+import { normalizeTeamKey, resolveTeamCode } from '../../../utils/teamMeta'
 
 type ApiFootballFixture = {
   fixture?: {
@@ -25,8 +25,8 @@ type ApiFootballFixture = {
     round?: string
   }
   teams?: {
-    home?: { name?: string }
-    away?: { name?: string }
+    home?: { id?: number; name?: string; logo?: string }
+    away?: { id?: number; name?: string; logo?: string }
   }
   goals?: {
     home?: number | null
@@ -151,6 +151,8 @@ export default defineEventHandler(async (event) => {
     away_team: string
     home_team_code: string | null
     away_team_code: string | null
+    home_team_logo_url: string | null
+    away_team_logo_url: string | null
     home_score: number | null
     away_score: number | null
     status: 'pending' | 'in_progress' | 'finished'
@@ -161,12 +163,28 @@ export default defineEventHandler(async (event) => {
     source_timezone: string
   }> = []
 
+  const teamProfilesMap = new Map<
+    string,
+    {
+      team_key: string
+      api_team_id: number | null
+      name: string
+      code: string | null
+      country: string | null
+      logo_url: string | null
+      is_national: boolean | null
+      source_provider: string
+    }
+  >()
+
   let skippedUnknownStage = 0
 
   for (const fixture of fixtures) {
     const fixtureId = Number(fixture.fixture?.id || 0)
     const homeTeam = (fixture.teams?.home?.name || '').trim()
     const awayTeam = (fixture.teams?.away?.name || '').trim()
+    const homeTeamLogo = (fixture.teams?.home?.logo || '').trim() || null
+    const awayTeamLogo = (fixture.teams?.away?.logo || '').trim() || null
     const matchTime = fixture.fixture?.date
     const stage = normalizeApiFootballStage(fixture.league?.round)
     const venue = (fixture.fixture?.venue?.name || '').trim() || null
@@ -183,6 +201,8 @@ export default defineEventHandler(async (event) => {
       away_team: awayTeam,
       home_team_code: resolveTeamCode(homeTeam),
       away_team_code: resolveTeamCode(awayTeam),
+      home_team_logo_url: homeTeamLogo,
+      away_team_logo_url: awayTeamLogo,
       home_score: fixture.goals?.home ?? null,
       away_score: fixture.goals?.away ?? null,
       status: normalizeApiFootballStatus(fixture.fixture?.status?.short),
@@ -192,6 +212,45 @@ export default defineEventHandler(async (event) => {
       source_time: sourceTime,
       source_timezone: 'America/New_York',
     })
+
+    const homeTeamKey = normalizeTeamKey(homeTeam)
+    const awayTeamKey = normalizeTeamKey(awayTeam)
+
+    if (homeTeamKey) {
+      teamProfilesMap.set(homeTeamKey, {
+        team_key: homeTeamKey,
+        api_team_id: fixture.teams?.home?.id ?? null,
+        name: homeTeam,
+        code: resolveTeamCode(homeTeam),
+        country: null,
+        logo_url: homeTeamLogo,
+        is_national: true,
+        source_provider: PROVIDER,
+      })
+    }
+
+    if (awayTeamKey) {
+      teamProfilesMap.set(awayTeamKey, {
+        team_key: awayTeamKey,
+        api_team_id: fixture.teams?.away?.id ?? null,
+        name: awayTeam,
+        code: resolveTeamCode(awayTeam),
+        country: null,
+        logo_url: awayTeamLogo,
+        is_national: true,
+        source_provider: PROVIDER,
+      })
+    }
+  }
+
+  if (teamProfilesMap.size > 0) {
+    const { error: teamsUpsertError } = await supabase
+      .from('team_profiles')
+      .upsert([...teamProfilesMap.values()], { onConflict: 'team_key' })
+
+    if (teamsUpsertError) {
+      throw createError({ statusCode: 500, statusMessage: teamsUpsertError.message })
+    }
   }
 
   if (rowsToUpsert.length > 0) {

@@ -46,6 +46,9 @@ const latestMatches = ref<
 const syncingFixtures = ref(false);
 const syncMessage = ref<string | null>(null);
 const syncError = ref<string | null>(null);
+const syncingTeams = ref(false);
+const teamsSyncMessage = ref<string | null>(null);
+const teamsSyncError = ref<string | null>(null);
 const forceSync = ref(false);
 const syncStatus = ref<{
   requestsUsedToday: number;
@@ -335,6 +338,39 @@ const runFixturesSync = async () => {
       error?.data?.message || error?.message || "Error sincronizando fixtures";
   } finally {
     syncingFixtures.value = false;
+  }
+};
+
+const runTeamsSync = async () => {
+  syncingTeams.value = true;
+  teamsSyncMessage.value = null;
+  teamsSyncError.value = null;
+
+  try {
+    const result = await $fetch<{
+      searchedTeams: number;
+      syncedProfiles: number;
+      skippedCached: number;
+      requestsExecuted: number;
+      unresolvedTeams: string[];
+    }>("/api/admin/sync-teams", {
+      method: "POST",
+      body: {
+        force: forceSync.value,
+      },
+    });
+
+    const unresolvedCount = result.unresolvedTeams?.length ?? 0;
+    teamsSyncMessage.value = `Selecciones sync OK. buscadas: ${result.searchedTeams}, cacheadas: ${result.syncedProfiles}, omitidas por cache: ${result.skippedCached}, requests: ${result.requestsExecuted}, sin match: ${unresolvedCount}`;
+
+    await loadIngestionLogs();
+  } catch (error: any) {
+    teamsSyncError.value =
+      error?.data?.message ||
+      error?.message ||
+      "Error sincronizando selecciones";
+  } finally {
+    syncingTeams.value = false;
   }
 };
 
@@ -709,6 +745,18 @@ onMounted(async () => {
                 syncingFixtures ? "Sincronizando..." : "Sincronizar fixtures"
               }}
             </button>
+
+            <button
+              class="rounded-full border border-sky-300/45 px-4 py-2 text-sm text-sky-100 transition hover:border-sky-200 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="syncingTeams"
+              @click="runTeamsSync"
+            >
+              {{
+                syncingTeams
+                  ? "Sincronizando..."
+                  : "Sincronizar selecciones y logos"
+              }}
+            </button>
           </div>
         </div>
 
@@ -727,10 +775,24 @@ onMounted(async () => {
         </p>
 
         <p
+          v-if="teamsSyncMessage"
+          class="rounded-lg border border-sky-300/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-100"
+        >
+          {{ teamsSyncMessage }}
+        </p>
+
+        <p
           v-if="syncError"
           class="rounded-lg border border-red-300/20 bg-red-500/10 px-3 py-2 text-xs text-red-200"
         >
           {{ syncError }}
+        </p>
+
+        <p
+          v-if="teamsSyncError"
+          class="rounded-lg border border-red-300/20 bg-red-500/10 px-3 py-2 text-xs text-red-200"
+        >
+          {{ teamsSyncError }}
         </p>
       </div>
 

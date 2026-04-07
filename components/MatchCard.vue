@@ -80,6 +80,9 @@ const sourceTimeLabel = computed(() => {
   return props.match.source_time.slice(0, 5);
 });
 
+const homeLogoUrl = computed(() => props.match.home_team_logo_url || null);
+const awayLogoUrl = computed(() => props.match.away_team_logo_url || null);
+
 const isLive = computed(() => props.match.status === "in_progress");
 
 const loadPrediction = async () => {
@@ -184,7 +187,14 @@ watch(
 
     <div class="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
       <div class="rounded-xl bg-black/20 p-3 text-center">
-        <p class="text-2xl leading-none">{{ homeTeamFlag }}</p>
+        <img
+          v-if="homeLogoUrl"
+          :src="homeLogoUrl"
+          :alt="`Escudo de ${props.match.home_team}`"
+          class="mx-auto mb-1 h-10 w-10 rounded-full bg-white/10 object-contain"
+          loading="lazy"
+        />
+        <p v-else class="text-2xl leading-none">{{ homeTeamFlag }}</p>
         <p class="text-base font-semibold">{{ props.match.home_team }}</p>
         <p class="text-xs text-(--text-muted)">{{ homeTeamCode || "--" }}</p>
       </div>
@@ -205,7 +215,14 @@ watch(
       </div>
 
       <div class="rounded-xl bg-black/20 p-3 text-center">
-        <p class="text-2xl leading-none">{{ awayTeamFlag }}</p>
+        <img
+          v-if="awayLogoUrl"
+          :src="awayLogoUrl"
+          :alt="`Escudo de ${props.match.away_team}`"
+          class="mx-auto mb-1 h-10 w-10 rounded-full bg-white/10 object-contain"
+          loading="lazy"
+        />
+        <p v-else class="text-2xl leading-none">{{ awayTeamFlag }}</p>
         <p class="text-base font-semibold">{{ props.match.away_team }}</p>
         <p class="text-xs text-(--text-muted)">{{ awayTeamCode || "--" }}</p>
       </div>
