@@ -29,6 +29,21 @@ interface GlobalStatsPayload {
   quinielas: ManagedQuiniela[];
 }
 
+interface TeamProfileItem {
+  id: string;
+  api_team_id: number | null;
+  team_key: string;
+  name: string;
+  code: string | null;
+  country: string | null;
+  logo_url: string | null;
+  is_national: boolean | null;
+  source_provider: string;
+  updated_at: string;
+}
+
+type AdminSectionKey = "overview" | "quinielas" | "teams" | "ingestion";
+
 const client = useSupabaseClient<any>();
 const { quiniela, loadActiveQuiniela } = useActiveQuiniela();
 
@@ -104,8 +119,59 @@ const quinielaForm = reactive({
   admin_id: "",
 });
 
+const teamProfiles = ref<TeamProfileItem[]>([]);
+const teamsTotal = ref(0);
+const teamsLoading = ref(false);
+const teamsError = ref<string | null>(null);
+const teamsMessage = ref<string | null>(null);
+const teamsSearch = ref("");
+const savingTeamProfile = ref(false);
+const deletingTeamProfileId = ref<string | null>(null);
+const forceDeleteTeamProfile = ref(false);
+const teamForm = reactive({
+  id: "",
+  name: "",
+  code: "",
+  country: "",
+  logo_url: "",
+  api_team_id: "",
+  source_provider: "manual",
+  is_national: true,
+});
+
 const isGlobalAdmin = computed(() => Boolean(globalStats.value?.isGlobalAdmin));
 const managedQuinielas = computed(() => globalStats.value?.quinielas ?? []);
+const adminSection = ref<AdminSectionKey>("overview");
+const adminSections = computed(() => [
+  {
+    key: "overview" as AdminSectionKey,
+    label: "Resumen",
+    description: "Vista general",
+  },
+  {
+    key: "quinielas" as AdminSectionKey,
+    label: "Quinielas",
+    description: isGlobalAdmin.value ? "Gestion global" : "Acceso local",
+  },
+  {
+    key: "teams" as AdminSectionKey,
+    label: "Equipos",
+    description: "Catalogo y logos",
+  },
+  {
+    key: "ingestion" as AdminSectionKey,
+    label: "Ingesta API",
+    description: "Sync y monitoreo",
+  },
+]);
+
+const activeSectionLabel = computed(() => {
+  const current = adminSections.value.find(
+    (section) => section.key === adminSection.value,
+  );
+
+  return current?.label ?? "Seccion";
+});
 
 const toInputDateTime = (isoDate: string | null) => {
   if (!isoDate) {
@@ -403,11 +469,193 @@ const runTeamsSync = async () => {
   }
 };
 
+const loadTeamProfiles = async () => {
+  teamsLoading.value = true;
+  teamsError.value = null;
+
+  try {
+    const data = await adminFetch<{
+      items: TeamProfileItem[];
+      total: number;
+    }>(
+      `/api/admin/team-profiles?q=${encodeURIComponent(teamsSearch.value.trim())}&limit=50&offset=0`,
+    );
+
+    teamProfiles.value = data.items || [];
+    teamsTotal.value = Number(data.total || 0);
+  } catch (error: any) {
+    teamsError.value =
+      error?.data?.message ||
+      error?.message ||
+      "No se pudo cargar el catalogo de equipos";
+  } finally {
+    teamsLoading.value = false;
+  }
+};
+
+const resetTeamForm = () => {
+  teamForm.id = "";
+  teamForm.name = "";
+  teamForm.code = "";
+  teamForm.country = "";
+  teamForm.logo_url = "";
+  teamForm.api_team_id = "";
+  teamForm.source_provider = "manual";
+  teamForm.is_national = true;
+};
+
+const editTeamProfile = (item: TeamProfileItem) => {
+  teamForm.id = item.id;
+  teamForm.name = item.name;
+  teamForm.code = item.code ?? "";
+  teamForm.country = item.country ?? "";
+  teamForm.logo_url = item.logo_url ?? "";
+  teamForm.api_team_id = item.api_team_id?.toString() ?? "";
+  teamForm.source_provider = item.source_provider || "manual";
+  teamForm.is_national = item.is_national ?? true;
+  teamsMessage.value = null;
+  teamsError.value = null;
+};
+
+const saveTeamProfile = async () => {
+  teamsMessage.value = null;
+  teamsError.value = null;
+
+  const payload = {
+    name: teamForm.name.trim(),
+    code: teamForm.code.trim().toUpperCase() || null,
+    country: teamForm.country.trim() || null,
+    logo_url: teamForm.logo_url.trim() || null,
+    api_team_id: teamForm.api_team_id.trim()
+      ? Number(teamForm.api_team_id.trim())
+      : null,
+    source_provider: teamForm.source_provider.trim() || "manual",
+    is_national: Boolean(teamForm.is_national),
+  };
+
+  if (!payload.name) {
+    teamsError.value = "El nombre del equipo es obligatorio.";
+    return;
+  }
+
+  if (
+    payload.api_team_id !== null &&
+    (Number.isNaN(payload.api_team_id) || payload.api_team_id <= 0)
+  ) {
+    teamsError.value = "api_team_id debe ser un numero positivo.";
+    return;
+  }
+
+  savingTeamProfile.value = true;
+
+  try {
+    if (teamForm.id) {
+      await adminFetch(`/api/admin/team-profiles/${teamForm.id}`, {
+        method: "PATCH",
+        body: payload,
+      });
+      teamsMessage.value = "Equipo actualizado correctamente.";
+    } else {
+      await adminFetch("/api/admin/team-profiles", {
+        method: "POST",
+        body: payload,
+      });
+      teamsMessage.value = "Equipo creado correctamente.";
+      resetTeamForm();
+    }
+
+    await loadTeamProfiles();
+  } catch (error: any) {
+    teamsError.value =
+      error?.data?.message || error?.message || "No se pudo guardar el equipo";
+  } finally {
+    savingTeamProfile.value = false;
+  }
+};
+
+const deleteTeamProfile = async (item: TeamProfileItem) => {
+  teamsMessage.value = null;
+  teamsError.value = null;
+
+  if (!isGlobalAdmin.value) {
+    teamsError.value = "Solo global admin puede eliminar equipos del catalogo.";
+    return;
+  }
+
+  if (process.client) {
+    const warning = forceDeleteTeamProfile.value
+      ? "Se eliminara el equipo y se limpiaran referencias de campeon en quinielas. Continuar?"
+      : "Si el equipo esta en uso, no se eliminara. Deseas continuar?";
+
+    const confirmed = window.confirm(warning);
+    if (!confirmed) {
+      return;
+    }
+  }
+
+  deletingTeamProfileId.value = item.id;
+
+  try {
+    const result = await adminFetch<{
+      deletedName: string;
+      force: boolean;
+      usage: { total: number };
+      cleanup: {
+        quinielasChampionCleared: number;
+        membersChampionCleared: number;
+      };
+    }>(`/api/admin/team-profiles/${item.id}`, {
+      method: "DELETE",
+      body: {
+        force: forceDeleteTeamProfile.value,
+      },
+    });
+
+    teamsMessage.value = `Equipo eliminado: ${result.deletedName}. Limpieza quinielas: ${result.cleanup.quinielasChampionCleared}, miembros: ${result.cleanup.membersChampionCleared}.`;
+
+    if (teamForm.id === item.id) {
+      resetTeamForm();
+    }
+
+    await loadTeamProfiles();
+  } catch (error: any) {
+    teamsError.value =
+      error?.data?.message || error?.message || "No se pudo eliminar el equipo";
+  } finally {
+    deletingTeamProfileId.value = null;
+  }
+};
+
+const refreshCurrentSection = async () => {
+  if (adminSection.value === "overview") {
+    await Promise.all([
+      loadActiveQuiniela(),
+      loadGlobalStats(true),
+      loadTeamProfiles(),
+      loadSyncStatus(),
+    ]);
+    return;
+  }
+
+  if (adminSection.value === "quinielas") {
+    await loadGlobalStats(true);
+    return;
+  }
+
+  if (adminSection.value === "teams") {
+    await loadTeamProfiles();
+    return;
+  }
+
+  await Promise.all([loadSyncStatus(), loadIngestionLogs()]);
+};
+
 onMounted(async () => {
   await loadActiveQuiniela();
   await loadSyncStatus();
   await loadIngestionLogs();
   await loadGlobalStats(true);
+  await loadTeamProfiles();
 });
 </script>
 
@@ -422,461 +670,94 @@ onMounted(async () => {
       </div>
       <button
         class="rounded-full border border-white/12 px-4 py-2 text-sm text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100"
-        @click="loadIngestionLogs"
+        @click="refreshCurrentSection"
       >
-        Refrescar log
+        Refrescar {{ activeSectionLabel }}
       </button>
     </header>
 
-    <article class="pitch-panel rounded-2xl p-5" v-if="quiniela">
-      <h2 class="text-xl text-emerald-200">Quiniela activa</h2>
-      <p class="mt-2 text-lg text-white">{{ quiniela.name }}</p>
-      <p class="mt-1 text-sm text-(--text-muted)">
-        Access code: {{ quiniela.access_code }}
-      </p>
-      <p class="mt-1 text-sm text-(--text-muted)">
-        Inicio: {{ new Date(quiniela.start_date).toLocaleString("es-MX") }}
-      </p>
-    </article>
-
-    <article class="pitch-panel rounded-2xl p-5" v-if="isGlobalAdmin">
-      <h2 class="text-xl text-white">Dashboard global</h2>
-      <p class="mt-2 text-sm text-(--text-muted)">
-        Como global admin puedes ver metricas totales y gestionar quinielas de
-        toda la plataforma.
-      </p>
-
-      <p v-if="globalLoading" class="mt-4 text-sm text-(--text-muted)">
-        Cargando dashboard global...
-      </p>
-
-      <p
-        v-else-if="globalError"
-        class="mt-4 rounded-xl border border-red-300/20 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+    <nav class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <button
+        v-for="section in adminSections"
+        :key="section.key"
+        class="rounded-2xl border px-4 py-3 text-left transition"
+        :class="
+          adminSection === section.key
+            ? 'border-emerald-300/40 bg-emerald-500/10 text-emerald-100'
+            : 'border-white/10 bg-black/20 text-slate-200 hover:border-white/25 hover:text-white'
+        "
+        @click="adminSection = section.key"
       >
-        {{ globalError }}
-      </p>
+        <p class="text-sm font-semibold">{{ section.label }}</p>
+        <p class="mt-1 text-xs opacity-80">{{ section.description }}</p>
+      </button>
+    </nav>
 
-      <template v-else-if="globalStats">
-        <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-            <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
-              Usuarios
-            </p>
-            <p class="mt-1 text-2xl font-semibold text-white">
-              {{ globalStats.totals.users }}
-            </p>
-          </div>
-          <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-            <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
-              Global admins
-            </p>
-            <p class="mt-1 text-2xl font-semibold text-white">
-              {{ globalStats.totals.globalAdmins }}
-            </p>
-          </div>
-          <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-            <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
-              Quinielas
-            </p>
-            <p class="mt-1 text-2xl font-semibold text-white">
-              {{ globalStats.totals.quinielas }}
-            </p>
-          </div>
-          <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-            <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
-              Miembros
-            </p>
-            <p class="mt-1 text-2xl font-semibold text-white">
-              {{ globalStats.totals.members }}
-            </p>
-          </div>
-          <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-            <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
-              Partidos
-            </p>
-            <p class="mt-1 text-2xl font-semibold text-white">
-              {{ globalStats.totals.matches }}
-            </p>
-          </div>
-          <div class="rounded-xl border border-white/10 bg-black/35 p-4">
-            <p class="text-xs uppercase tracking-[0.12em] text-(--text-muted)">
-              Predicciones
-            </p>
-            <p class="mt-1 text-2xl font-semibold text-white">
-              {{ globalStats.totals.predictions }}
-            </p>
-          </div>
-        </div>
+    <AdminOverviewSection
+      v-if="adminSection === 'overview'"
+      :quiniela="quiniela"
+      :global-stats="globalStats"
+      :teams-total="teamsTotal"
+      :sync-status="syncStatus"
+      @navigate="adminSection = $event"
+    />
 
-        <div class="mt-6 rounded-xl border border-white/10 bg-black/25 p-4">
-          <h3 class="text-lg text-emerald-200">
-            {{ quinielaForm.id ? "Editar quiniela" : "Crear quiniela" }}
-          </h3>
+    <AdminQuinielasSection
+      v-if="adminSection === 'quinielas'"
+      :is-global-admin="isGlobalAdmin"
+      :global-loading="globalLoading"
+      :global-error="globalError"
+      :global-message="globalMessage"
+      :global-stats="globalStats"
+      :managed-quinielas="managedQuinielas"
+      :quiniela-form="quinielaForm"
+      :saving-quiniela="savingQuiniela"
+      :deleting-quiniela-id="deletingQuinielaId"
+      @random-access-code="randomAccessCode"
+      @save-quiniela="saveQuiniela"
+      @reset-quiniela-form="resetQuinielaForm"
+      @edit-quiniela="editQuiniela"
+      @delete-quiniela="deleteQuiniela"
+    />
 
-          <div class="mt-4 grid gap-3 md:grid-cols-2">
-            <div class="space-y-1">
-              <label
-                class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
-              >
-                Nombre
-              </label>
-              <input
-                v-model="quinielaForm.name"
-                class="w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-slate-100 outline-none focus:border-emerald-400"
-                placeholder="Quiniela principal"
-              />
-            </div>
+    <AdminTeamsSection
+      v-if="adminSection === 'teams'"
+      :team-profiles="teamProfiles"
+      :teams-total="teamsTotal"
+      :teams-loading="teamsLoading"
+      :teams-error="teamsError"
+      :teams-message="teamsMessage"
+      :teams-search="teamsSearch"
+      :saving-team-profile="savingTeamProfile"
+      :deleting-team-profile-id="deletingTeamProfileId"
+      :force-delete-team-profile="forceDeleteTeamProfile"
+      :is-global-admin="isGlobalAdmin"
+      :team-form="teamForm"
+      @load-team-profiles="loadTeamProfiles"
+      @save-team-profile="saveTeamProfile"
+      @reset-team-form="resetTeamForm"
+      @edit-team-profile="editTeamProfile"
+      @delete-team-profile="deleteTeamProfile"
+      @update:teams-search="teamsSearch = $event"
+      @update:force-delete-team-profile="forceDeleteTeamProfile = $event"
+    />
 
-            <div class="space-y-1">
-              <label
-                class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
-              >
-                Access code
-              </label>
-              <div class="flex gap-2">
-                <input
-                  v-model="quinielaForm.access_code"
-                  maxlength="12"
-                  class="w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 uppercase text-slate-100 outline-none focus:border-emerald-400"
-                  placeholder="ABC123"
-                />
-                <button
-                  class="rounded-xl border border-white/15 px-3 text-xs text-slate-200 transition hover:border-emerald-300/45 hover:text-emerald-100"
-                  @click="randomAccessCode"
-                >
-                  Generar
-                </button>
-              </div>
-            </div>
-
-            <div class="space-y-1">
-              <label
-                class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
-              >
-                Admin user id
-              </label>
-              <input
-                v-model="quinielaForm.admin_id"
-                class="w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-slate-100 outline-none focus:border-emerald-400"
-                placeholder="uuid del admin"
-              />
-            </div>
-
-            <div class="space-y-1">
-              <label
-                class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
-              >
-                Inicio
-              </label>
-              <input
-                v-model="quinielaForm.start_date"
-                type="datetime-local"
-                class="w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-slate-100 outline-none focus:border-emerald-400"
-              />
-            </div>
-
-            <div class="space-y-1 md:col-span-2">
-              <label
-                class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
-              >
-                Fin (opcional)
-              </label>
-              <input
-                v-model="quinielaForm.end_date"
-                type="datetime-local"
-                class="w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-slate-100 outline-none focus:border-emerald-400"
-              />
-            </div>
-
-            <div class="space-y-1 md:col-span-2">
-              <label
-                class="text-xs uppercase tracking-[0.12em] text-(--text-muted)"
-              >
-                Descripcion
-              </label>
-              <textarea
-                v-model="quinielaForm.description"
-                rows="3"
-                class="w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-slate-100 outline-none focus:border-emerald-400"
-                placeholder="Descripcion de la quiniela"
-              />
-            </div>
-          </div>
-
-          <div class="mt-4 flex flex-wrap gap-2">
-            <button
-              class="rounded-full border border-emerald-300/45 px-4 py-2 text-sm text-emerald-100 transition hover:border-emerald-200 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-              :disabled="savingQuiniela"
-              @click="saveQuiniela"
-            >
-              {{
-                savingQuiniela
-                  ? "Guardando..."
-                  : quinielaForm.id
-                    ? "Guardar cambios"
-                    : "Crear quiniela"
-              }}
-            </button>
-            <button
-              v-if="quinielaForm.id"
-              class="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-100 transition hover:border-white/35"
-              @click="resetQuinielaForm"
-            >
-              Cancelar edicion
-            </button>
-          </div>
-
-          <p
-            v-if="globalMessage"
-            class="mt-3 rounded-lg border border-emerald-300/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100"
-          >
-            {{ globalMessage }}
-          </p>
-
-          <p
-            v-if="globalError"
-            class="mt-3 rounded-lg border border-red-300/20 bg-red-500/10 px-3 py-2 text-xs text-red-200"
-          >
-            {{ globalError }}
-          </p>
-        </div>
-
-        <div class="mt-6 overflow-hidden rounded-xl border border-white/8">
-          <table class="min-w-full text-sm">
-            <thead
-              class="bg-black/35 text-left text-xs uppercase tracking-[0.12em] text-(--text-muted)"
-            >
-              <tr>
-                <th class="px-4 py-3">Quiniela</th>
-                <th class="px-4 py-3">Admin</th>
-                <th class="px-4 py-3">Codigo</th>
-                <th class="px-4 py-3">Inicio</th>
-                <th class="px-4 py-3 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="item in managedQuinielas"
-                :key="item.id"
-                class="border-t border-white/8"
-              >
-                <td class="px-4 py-3">
-                  <p class="font-semibold text-slate-100">{{ item.name }}</p>
-                  <p class="text-xs text-(--text-muted)">
-                    {{ item.description || "Sin descripcion" }}
-                  </p>
-                </td>
-                <td class="px-4 py-3">
-                  <p class="text-slate-100">{{ item.admin_username }}</p>
-                  <p class="text-xs text-(--text-muted)">{{ item.admin_id }}</p>
-                </td>
-                <td class="px-4 py-3 uppercase">{{ item.access_code }}</td>
-                <td class="px-4 py-3 text-(--text-muted)">
-                  {{ new Date(item.start_date).toLocaleString("es-MX") }}
-                </td>
-                <td class="px-4 py-3">
-                  <div class="flex justify-end gap-2">
-                    <button
-                      class="rounded-full border border-white/15 px-3 py-1 text-xs text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100"
-                      @click="editQuiniela(item)"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      class="rounded-full border border-red-300/25 px-3 py-1 text-xs text-red-100 transition hover:border-red-200 hover:text-red-50 disabled:opacity-55"
-                      :disabled="deletingQuinielaId === item.id"
-                      @click="deleteQuiniela(item.id)"
-                    >
-                      {{
-                        deletingQuinielaId === item.id
-                          ? "Eliminando..."
-                          : "Borrar"
-                      }}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </template>
-    </article>
-
-    <article
-      v-else
-      class="pitch-panel rounded-2xl border border-amber-300/20 bg-amber-500/5 p-5"
-    >
-      <h2 class="text-xl text-amber-100">Acceso admin local</h2>
-      <p class="mt-2 text-sm text-amber-100/85">
-        Tu acceso actual permite administrar la quiniela activa. El dashboard
-        global solo aparece para usuarios con flag is_global_admin.
-      </p>
-    </article>
-
-    <article class="pitch-panel rounded-2xl p-5">
-      <h2 class="text-xl text-white">Monitoreo de ingesta de API</h2>
-      <p class="mt-2 text-sm text-(--text-muted)">
-        Este bloque muestra los ultimos partidos actualizados en la tabla
-        matches para verificar el pulso de ingesta.
-      </p>
-
-      <div
-        class="mt-4 rounded-xl border border-white/10 bg-black/30 p-4 space-y-3"
-      >
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="text-sm text-slate-200">
-            <p>
-              Cuota API-FOOTBALL hoy:
-              <span class="font-semibold text-emerald-200">
-                {{ syncStatus?.requestsUsedToday ?? 0 }}/{{
-                  syncStatus?.dailyBudget ?? 0
-                }}
-              </span>
-              <span class="ml-2 text-(--text-muted)">
-                (restantes: {{ syncStatus?.remainingToday ?? 0 }})
-              </span>
-            </p>
-            <p class="mt-1 text-(--text-muted)">
-              Ultimo sync:
-              {{
-                syncStatus?.state?.lastSyncedAt
-                  ? new Date(syncStatus.state.lastSyncedAt).toLocaleString(
-                      "es-MX",
-                      {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      },
-                    )
-                  : "sin ejecuciones"
-              }}
-            </p>
-          </div>
-
-          <div class="flex items-center gap-3">
-            <label
-              class="inline-flex items-center gap-2 text-xs text-(--text-muted)"
-            >
-              <input
-                v-model="forceSync"
-                type="checkbox"
-                class="h-4 w-4 rounded border-white/20 bg-black/50"
-              />
-              Forzar sync
-            </label>
-
-            <button
-              class="rounded-full border border-emerald-300/45 px-4 py-2 text-sm text-emerald-100 transition hover:border-emerald-200 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-              :disabled="syncingFixtures"
-              @click="runFixturesSync"
-            >
-              {{
-                syncingFixtures ? "Sincronizando..." : "Sincronizar fixtures"
-              }}
-            </button>
-
-            <button
-              class="rounded-full border border-sky-300/45 px-4 py-2 text-sm text-sky-100 transition hover:border-sky-200 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-              :disabled="syncingTeams"
-              @click="runTeamsSync"
-            >
-              {{
-                syncingTeams
-                  ? "Sincronizando..."
-                  : "Sincronizar selecciones y logos"
-              }}
-            </button>
-          </div>
-        </div>
-
-        <p
-          v-if="syncStatus?.state?.lastError"
-          class="rounded-lg border border-red-300/20 bg-red-500/10 px-3 py-2 text-xs text-red-200"
-        >
-          Ultimo error: {{ syncStatus.state.lastError }}
-        </p>
-
-        <p
-          v-if="syncMessage"
-          class="rounded-lg border border-emerald-300/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100"
-        >
-          {{ syncMessage }}
-        </p>
-
-        <p
-          v-if="teamsSyncMessage"
-          class="rounded-lg border border-sky-300/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-100"
-        >
-          {{ teamsSyncMessage }}
-        </p>
-
-        <p
-          v-if="syncError"
-          class="rounded-lg border border-red-300/20 bg-red-500/10 px-3 py-2 text-xs text-red-200"
-        >
-          {{ syncError }}
-        </p>
-
-        <p
-          v-if="teamsSyncError"
-          class="rounded-lg border border-red-300/20 bg-red-500/10 px-3 py-2 text-xs text-red-200"
-        >
-          {{ teamsSyncError }}
-        </p>
-      </div>
-
-      <p v-if="loadingLogs" class="mt-4 text-sm text-(--text-muted)">
-        Cargando log...
-      </p>
-      <p
-        v-else-if="logsError"
-        class="mt-4 rounded-xl border border-red-300/20 bg-red-500/10 px-4 py-3 text-sm text-red-200"
-      >
-        {{ logsError }}
-      </p>
-
-      <div v-else class="mt-4 overflow-hidden rounded-xl border border-white/8">
-        <table class="min-w-full text-sm">
-          <thead
-            class="bg-black/35 text-left text-xs uppercase tracking-[0.12em] text-(--text-muted)"
-          >
-            <tr>
-              <th class="px-4 py-3">Partido</th>
-              <th class="px-4 py-3">Estado</th>
-              <th class="px-4 py-3">Actualizado</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="entry in latestMatches"
-              :key="entry.id"
-              class="border-t border-white/8"
-            >
-              <td class="px-4 py-3">
-                {{ entry.home_team }} vs {{ entry.away_team }}
-              </td>
-              <td class="px-4 py-3">
-                <span
-                  class="rounded-full px-2 py-1 text-xs font-semibold"
-                  :class="[
-                    entry.status === 'finished' &&
-                      'bg-slate-200/15 text-slate-100',
-                    entry.status === 'in_progress' &&
-                      'bg-emerald-400/25 text-emerald-100',
-                    entry.status === 'pending' &&
-                      'bg-amber-400/20 text-amber-100',
-                  ]"
-                >
-                  {{ entry.status }}
-                </span>
-              </td>
-              <td class="px-4 py-3 text-(--text-muted)">
-                {{ entry.updated_at }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </article>
+    <AdminIngestionSection
+      v-if="adminSection === 'ingestion'"
+      :sync-status="syncStatus"
+      :force-sync="forceSync"
+      :syncing-fixtures="syncingFixtures"
+      :syncing-teams="syncingTeams"
+      :sync-message="syncMessage"
+      :teams-sync-message="teamsSyncMessage"
+      :sync-error="syncError"
+      :teams-sync-error="teamsSyncError"
+      :loading-logs="loadingLogs"
+      :logs-error="logsError"
+      :latest-matches="latestMatches"
+      @run-fixtures-sync="runFixturesSync"
+      @run-teams-sync="runTeamsSync"
+      @update:force-sync="forceSync = $event"
+    />
   </section>
 </template>
