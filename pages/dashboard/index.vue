@@ -36,6 +36,11 @@ const selectQuiniela = async (quinielaId: string) => {
 
 const quickLinks = [
   {
+    title: "Mi quiniela",
+    to: "/dashboard/mi-quiniela",
+    text: "Mira tus respuestas, estado de aciertos y puntos en un solo lugar.",
+  },
+  {
     title: "Fase de grupos",
     to: "/dashboard/grupos",
     text: "Carga y ajusta predicciones por cada grupo del torneo.",
@@ -92,7 +97,7 @@ const quickLinks = [
       </div>
     </article>
 
-    <div class="grid gap-4 md:grid-cols-3">
+    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <NuxtLink
         v-for="item in quickLinks"
         :key="item.to"

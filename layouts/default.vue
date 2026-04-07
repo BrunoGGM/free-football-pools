@@ -6,6 +6,7 @@ const { clearActiveQuiniela } = useActiveQuiniela();
 
 const links = [
   { to: "/dashboard", label: "Dashboard" },
+  { to: "/dashboard/mi-quiniela", label: "Mi quiniela" },
   { to: "/dashboard/grupos", label: "Grupos" },
   { to: "/dashboard/eliminatorias", label: "Eliminatorias" },
   { to: "/dashboard/posiciones", label: "Posiciones" },
