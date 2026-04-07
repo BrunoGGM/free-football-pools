@@ -168,6 +168,11 @@ const triggerSaveCelebration = () => {
   }
 
   showSaveCelebration.value = true;
+
+  if (process.client) {
+    window.dispatchEvent(new CustomEvent("quiniela:celebration"));
+  }
+
   celebrationTimer = setTimeout(() => {
     showSaveCelebration.value = false;
   }, 2200);

@@ -84,6 +84,8 @@ h3,
 }
 
 .pitch-panel {
+  position: relative;
+  overflow: hidden;
   border: 1px solid
     color-mix(in oklab, var(--color-base-content) 14%, transparent);
   background: linear-gradient(
@@ -107,6 +109,263 @@ h3,
     inset 0 1px 0 color-mix(in oklab, #fff 32%, transparent),
     0 26px 44px color-mix(in oklab, #000 25%, transparent),
     0 0 0 1px color-mix(in oklab, var(--color-warning) 18%, transparent);
+}
+
+.pitch-panel::after {
+  content: "";
+  position: absolute;
+  inset: -10% -20%;
+  background: linear-gradient(
+    120deg,
+    transparent 32%,
+    color-mix(in oklab, var(--color-primary) 15%, transparent) 48%,
+    transparent 64%
+  );
+  transform: translateX(-120%);
+  opacity: 0;
+  animation: none;
+  pointer-events: none;
+}
+
+.pitch-panel:hover::after {
+  opacity: 1;
+  animation: panel-scan 1.6s linear 1;
+}
+
+.card {
+  transition:
+    transform 190ms ease,
+    box-shadow 190ms ease,
+    border-color 190ms ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px color-mix(in oklab, #000 18%, transparent);
+}
+
+.alert {
+  position: relative;
+  overflow: hidden;
+}
+
+.alert::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 20%,
+    color-mix(in oklab, #fff 22%, transparent) 48%,
+    transparent 72%
+  );
+  transform: translateX(-125%);
+  animation: alert-scan 5.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.arena-entry > section > * {
+  opacity: 0;
+  animation: section-cascade 460ms ease-out forwards;
+}
+
+.arena-entry > section > *:nth-child(1) {
+  animation-delay: 40ms;
+}
+
+.arena-entry > section > *:nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.arena-entry > section > *:nth-child(3) {
+  animation-delay: 140ms;
+}
+
+.arena-entry > section > *:nth-child(4) {
+  animation-delay: 190ms;
+}
+
+.arena-entry > section > *:nth-child(5) {
+  animation-delay: 240ms;
+}
+
+.arena-entry > section > *:nth-child(6) {
+  animation-delay: 290ms;
+}
+
+.badge {
+  animation: badge-breathe 3.4s ease-in-out infinite;
+}
+
+.logo-font {
+  text-shadow: 0 0 10px
+    color-mix(in oklab, var(--color-primary) 26%, transparent);
+}
+
+.table thead th {
+  position: relative;
+}
+
+.table thead th::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--color-primary) 35%, transparent),
+    transparent
+  );
+}
+
+.arena-entry {
+  animation: arena-entry 420ms ease-out both;
+}
+
+.btn,
+.input,
+.select,
+.textarea,
+.badge,
+.link {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    filter 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  filter: saturate(1.04);
+}
+
+.btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  box-shadow:
+    0 0 0 2px color-mix(in oklab, var(--color-primary) 22%, transparent),
+    0 8px 24px color-mix(in oklab, var(--color-primary) 20%, transparent);
+}
+
+.table tbody tr {
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease;
+}
+
+.table tbody tr:hover {
+  transform: translateX(2px);
+  background: color-mix(in oklab, var(--color-primary) 8%, transparent);
+}
+
+.leader-podium {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--color-warning) 24%, transparent),
+    color-mix(in oklab, var(--color-success) 14%, transparent)
+  );
+}
+
+.leader-podium::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    transparent 28%,
+    color-mix(in oklab, #fff 32%, transparent) 48%,
+    transparent 68%
+  );
+  transform: translateX(-120%);
+  animation: podium-scan 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.leader-points {
+  color: color-mix(in oklab, var(--color-warning) 86%, #fff);
+  text-shadow: 0 0 12px
+    color-mix(in oklab, var(--color-warning) 45%, transparent);
+  animation: points-glow 1.7s ease-in-out infinite;
+}
+
+.leader-row {
+  position: relative;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-warning) 15%, transparent),
+    color-mix(in oklab, var(--color-warning) 7%, transparent)
+  );
+}
+
+.leader-row td {
+  border-color: color-mix(in oklab, var(--color-warning) 35%, transparent);
+}
+
+.leader-row:hover {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-warning) 22%, transparent),
+    color-mix(in oklab, var(--color-warning) 11%, transparent)
+  ) !important;
+}
+
+.leader-crown {
+  display: inline-block;
+  transform-origin: 50% 100%;
+  animation: crown-float 1.8s ease-in-out infinite;
+}
+
+.leader-medal {
+  display: inline-block;
+  animation: medal-pop 1.6s ease-in-out infinite;
+}
+
+.leader-medal-gold {
+  filter: drop-shadow(
+    0 0 8px color-mix(in oklab, var(--color-warning) 42%, transparent)
+  );
+}
+
+.leader-avatar-ring {
+  box-shadow:
+    0 0 0 2px color-mix(in oklab, var(--color-warning) 45%, transparent),
+    0 0 0 6px color-mix(in oklab, var(--color-warning) 0%, transparent);
+  animation: leader-ring 2s ease-out infinite;
+}
+
+.leader-tag {
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 0.15rem 0.45rem;
+  color: color-mix(in oklab, var(--color-warning) 94%, #fff);
+  border: 1px solid color-mix(in oklab, var(--color-warning) 42%, transparent);
+  background: color-mix(in oklab, var(--color-warning) 18%, transparent);
+}
+.champion-picker-host {
+  overflow: visible !important;
+}
+.champion-picker-host::after {
+  display: none;
+}
+
+.leader-jackpot {
+  color: color-mix(in oklab, var(--color-warning) 92%, #fff);
+  text-shadow: 0 0 10px
+    color-mix(in oklab, var(--color-warning) 42%, transparent);
+  animation: jackpot-pulse 1.6s ease-in-out infinite;
 }
 
 .neon-border {
@@ -160,6 +419,75 @@ h3,
     box-shadow:
       0 0 0 0 color-mix(in oklab, var(--color-success) 0%, transparent),
       0 0 12px color-mix(in oklab, var(--color-success) 90%, transparent);
+  }
+}
+
+@keyframes podium-scan {
+  0% {
+    transform: translateX(-120%);
+  }
+  45% {
+    transform: translateX(120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes points-glow {
+  0%,
+  100% {
+    text-shadow: 0 0 8px
+      color-mix(in oklab, var(--color-warning) 35%, transparent);
+  }
+  50% {
+    text-shadow: 0 0 16px
+      color-mix(in oklab, var(--color-warning) 58%, transparent);
+  }
+}
+
+@keyframes crown-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-3px) rotate(4deg);
+  }
+}
+
+@keyframes medal-pop {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+@keyframes leader-ring {
+  0% {
+    box-shadow:
+      0 0 0 2px color-mix(in oklab, var(--color-warning) 45%, transparent),
+      0 0 0 2px color-mix(in oklab, var(--color-warning) 0%, transparent);
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px color-mix(in oklab, var(--color-warning) 45%, transparent),
+      0 0 0 8px color-mix(in oklab, var(--color-warning) 0%, transparent);
+  }
+}
+
+@keyframes jackpot-pulse {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(-1px);
+    opacity: 1;
   }
 }
 
@@ -340,6 +668,66 @@ h3,
   }
 }
 
+@keyframes panel-scan {
+  0% {
+    transform: translateX(-120%);
+  }
+  45% {
+    transform: translateX(120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes alert-scan {
+  0% {
+    transform: translateX(-125%);
+  }
+  35% {
+    transform: translateX(125%);
+  }
+  100% {
+    transform: translateX(125%);
+  }
+}
+
+@keyframes section-cascade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes badge-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0
+      color-mix(in oklab, var(--color-primary) 20%, transparent);
+  }
+  50% {
+    transform: scale(1.03);
+    box-shadow: 0 0 0 6px
+      color-mix(in oklab, var(--color-primary) 0%, transparent);
+  }
+}
+
+@keyframes arena-entry {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes card-hit {
   0% {
     transform: translateY(0) scale(1);
@@ -438,17 +826,34 @@ h3,
   .btn-bet-glow,
   .odds-track,
   .odds-chip-pot,
+  .leader-podium::before,
+  .leader-points,
+  .leader-crown,
+  .leader-medal,
+  .leader-avatar-ring,
+  .leader-jackpot,
+  .pitch-panel::after,
+  .alert::before,
+  .badge,
+  .arena-entry > section > *,
   .wow-save-burst::after,
   .wow-save-ring,
   .wow-save-check,
   .wow-save-ray,
-  body::after {
+  body::after,
+  .arena-entry {
     animation: none !important;
   }
 
   .wow-burst-enter-active,
   .wow-burst-leave-active,
-  .pitch-panel {
+  .pitch-panel,
+  .card,
+  .btn,
+  .input,
+  .select,
+  .textarea,
+  .table tbody tr {
     transition: none !important;
   }
 }

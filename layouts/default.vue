@@ -23,6 +23,74 @@ interface HeaderMetric {
 
 const headerMetrics = ref<HeaderMetric[]>([]);
 let metricsRefreshTimer: ReturnType<typeof setInterval> | null = null;
+const soundEnabled = ref(true);
+let audioContext: AudioContext | null = null;
+let clickSoundListener: ((event: PointerEvent) => void) | null = null;
+let celebrationSoundListener: ((event: Event) => void) | null = null;
+let lastSoundAt = 0;
+
+const ensureAudioContext = () => {
+  if (!process.client || !soundEnabled.value) {
+    return null;
+  }
+
+  if (!audioContext) {
+    const Context = window.AudioContext || (window as any).webkitAudioContext;
+    if (!Context) {
+      return null;
+    }
+    audioContext = new Context();
+  }
+
+  if (audioContext.state === "suspended") {
+    void audioContext.resume();
+  }
+
+  return audioContext;
+};
+
+const playSoftTone = (
+  frequency: number,
+  duration: number,
+  volume: number,
+  type: OscillatorType,
+  offset = 0,
+) => {
+  const ctx = ensureAudioContext();
+  if (!ctx) {
+    return;
+  }
+
+  const now = ctx.currentTime + offset;
+  const oscillator = ctx.createOscillator();
+  const gainNode = ctx.createGain();
+
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency, now);
+
+  gainNode.gain.setValueAtTime(0.0001, now);
+  gainNode.gain.exponentialRampToValueAtTime(volume, now + 0.015);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+  oscillator.connect(gainNode);
+  gainNode.connect(ctx.destination);
+  oscillator.start(now);
+  oscillator.stop(now + duration + 0.01);
+};
+
+const playSoftClick = () => {
+  playSoftTone(420, 0.07, 0.012, "triangle");
+};
+
+const playSoftSuccess = () => {
+  playSoftTone(620, 0.13, 0.014, "sine");
+  playSoftTone(860, 0.15, 0.01, "triangle", 0.06);
+};
+
+const toggleSound = () => {
+  soundEnabled.value = !soundEnabled.value;
+  localStorage.setItem("quiniela-sound", soundEnabled.value ? "on" : "off");
+};
 
 const formatKickoff = (value: string | null) => {
   if (!value) {
@@ -111,7 +179,7 @@ const loadHeaderMetrics = async () => {
     { label: "Finalizados", value: String(finishedCount) },
     { label: "Jugadores", value: String(memberCount) },
     {
-      label: "Bolsa total",
+      label: "Premio 1er lugar",
       value: formatMoney(totalPot),
       highlight: true,
     },
@@ -226,6 +294,9 @@ onMounted(() => {
     setTheme("dark");
   }
 
+  const storedSound = localStorage.getItem("quiniela-sound");
+  soundEnabled.value = storedSound !== "off";
+
   if (user.value) {
     void loadActiveQuiniela();
     void loadHeaderMetrics();
@@ -234,6 +305,41 @@ onMounted(() => {
       void loadHeaderMetrics();
     }, 30000);
   }
+
+  clickSoundListener = (event: PointerEvent) => {
+    if (!soundEnabled.value) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (!target) {
+      return;
+    }
+
+    const actionable = target.closest("button, a, [role='button'], .btn");
+    if (!actionable) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastSoundAt < 70) {
+      return;
+    }
+
+    lastSoundAt = now;
+    playSoftClick();
+  };
+
+  celebrationSoundListener = () => {
+    if (!soundEnabled.value) {
+      return;
+    }
+
+    playSoftSuccess();
+  };
+
+  document.addEventListener("pointerdown", clickSoundListener);
+  window.addEventListener("quiniela:celebration", celebrationSoundListener);
 });
 
 watch(
@@ -270,6 +376,22 @@ watch(
 onBeforeUnmount(() => {
   if (metricsRefreshTimer) {
     clearInterval(metricsRefreshTimer);
+  }
+
+  if (clickSoundListener) {
+    document.removeEventListener("pointerdown", clickSoundListener);
+  }
+
+  if (celebrationSoundListener) {
+    window.removeEventListener(
+      "quiniela:celebration",
+      celebrationSoundListener,
+    );
+  }
+
+  if (audioContext && audioContext.state !== "closed") {
+    void audioContext.close();
+    audioContext = null;
   }
 });
 </script>
@@ -310,6 +432,11 @@ onBeforeUnmount(() => {
 
         <div class="flex items-center gap-2">
           <label for="theme-selector" class="sr-only">Tema</label>
+
+          <button class="btn btn-outline btn-sm" @click="toggleSound">
+            {{ soundEnabled ? "Sonido ON" : "Sonido OFF" }}
+          </button>
+
           <select
             id="theme-selector"
             class="select select-bordered select-sm w-44"
@@ -381,7 +508,9 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <main class="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+    <main
+      class="arena-entry mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8"
+    >
       <slot />
     </main>
   </div>
