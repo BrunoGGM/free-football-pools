@@ -91,7 +91,7 @@ const highlights = [
           </p>
         </li>
         <li class="rounded-xl border border-white/8 bg-black/20 p-3">
-          <p class="font-semibold text-amber-200">20 puntos bonus</p>
+          <p class="font-semibold text-amber-200">10 puntos bonus</p>
           <p class="text-(--text-muted)">
             Acertar campeon predicho antes del inicio del torneo.
           </p>

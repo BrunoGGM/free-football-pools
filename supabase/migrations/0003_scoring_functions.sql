@@ -58,7 +58,7 @@ begin
       when qm.predicted_champion is null then 0
       when qm.champion_predicted_at is null then 0
       when qm.champion_predicted_at >= q.start_date then 0
-      when lower(trim(qm.predicted_champion)) = lower(trim(q.champion_team)) then 20
+      when lower(trim(qm.predicted_champion)) = lower(trim(q.champion_team)) then 10
       else 0
     end
   into v_bonus

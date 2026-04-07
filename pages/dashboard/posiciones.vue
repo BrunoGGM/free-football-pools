@@ -154,7 +154,7 @@ onMounted(() => {
     <article v-else class="pitch-panel rounded-2xl p-5">
       <h2 class="text-lg text-emerald-200">Prediccion de campeon</h2>
       <p class="mt-1 text-sm text-(--text-muted)">
-        Si aciertas antes del inicio del torneo, sumas 20 puntos bonus.
+        Si aciertas antes del inicio del torneo, sumas 10 puntos bonus.
       </p>
 
       <div class="mt-4 flex flex-wrap gap-3">

@@ -96,7 +96,7 @@ const quickLinks = [
       <p class="mt-2 text-sm text-(--text-muted)">
         Define tu campeon en la pantalla de posiciones antes de
         {{ quiniela?.start_date || "la fecha de inicio" }} para habilitar el
-        bonus de 20 puntos.
+        bonus de 10 puntos.
       </p>
     </article>
   </section>
