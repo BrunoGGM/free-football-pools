@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import KnockoutBracketViewer from "~/components/dashboard/KnockoutBracketViewer.client.vue";
+
 definePageMeta({
   middleware: ["auth"],
 });
@@ -17,6 +19,9 @@ const knockoutStages = [
 const { matches, loading, errorMessage, refresh } =
   useMatchesRealtime(knockoutStages);
 
+type EliminatoriasViewMode = "cards" | "bracket";
+
+const viewMode = ref<EliminatoriasViewMode>("cards");
 const activeStage = ref<string>(knockoutStages[0] ?? "round_32");
 const autoStageSelected = ref(false);
 
@@ -165,72 +170,114 @@ watch(
 
     <div v-else class="space-y-5">
       <article class="pitch-panel rounded-2xl p-4 md:p-5">
-        <div class="flex gap-2 overflow-x-auto pb-2">
+        <div class="flex flex-wrap items-center gap-2">
           <button
-            v-for="stage in knockoutStages"
-            :key="stage"
-            class="min-w-fit rounded-full border px-4 py-2 text-sm transition"
+            class="rounded-full border px-4 py-2 text-sm transition"
             :class="
-              activeStage === stage
+              viewMode === 'cards'
                 ? 'border-emerald-300/45 bg-emerald-500/15 text-emerald-100'
                 : 'border-white/12 text-slate-200 hover:border-white/30 hover:text-white'
             "
-            @click="activeStage = stage"
+            @click="viewMode = 'cards'"
           >
-            {{ stageName(stage) }}
-            <span class="ml-2 rounded-full bg-black/30 px-2 py-0.5 text-xs">
-              {{ stageMatchCount(stage) }}
-            </span>
+            Rondas
+          </button>
+          <button
+            class="rounded-full border px-4 py-2 text-sm transition"
+            :class="
+              viewMode === 'bracket'
+                ? 'border-emerald-300/45 bg-emerald-500/15 text-emerald-100'
+                : 'border-white/12 text-slate-200 hover:border-white/30 hover:text-white'
+            "
+            @click="viewMode = 'bracket'"
+          >
+            Bracket visual
           </button>
         </div>
 
-        <div class="mt-4 grid items-center gap-3 md:grid-cols-[auto_1fr_auto]">
-          <button
-            class="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100 disabled:cursor-not-allowed disabled:opacity-45"
-            :disabled="!hasPrevStage"
-            @click="goPrevStage"
-          >
-            Anterior
-          </button>
-
-          <div
-            class="rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-center"
-          >
-            <h2 class="text-lg text-emerald-200">
-              {{ stageName(activeStage) }}
-            </h2>
-            <p class="mt-1 text-xs text-(--text-muted)">
-              {{ stageHint(activeStage) }}
-            </p>
-          </div>
-
-          <button
-            class="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100 disabled:cursor-not-allowed disabled:opacity-45"
-            :disabled="!hasNextStage"
-            @click="goNextStage"
-          >
-            Siguiente
-          </button>
-        </div>
+        <p class="mt-3 text-xs text-(--text-muted)">
+          {{
+            viewMode === "cards"
+              ? "Vista detallada por ronda para capturar y editar predicciones."
+              : "Vista de llaves estilo cuadro para seguir el camino a la final."
+          }}
+        </p>
       </article>
 
-      <section class="mx-auto w-full max-w-6xl">
-        <div class="grid gap-4 2xl:grid-cols-2">
-          <MatchCard
-            v-for="match in activeStageMatches"
-            :key="match.id"
-            :match="match"
-            :editable="Boolean(activeQuinielaId)"
-          />
-        </div>
+      <template v-if="viewMode === 'cards'">
+        <article class="pitch-panel rounded-2xl p-4 md:p-5">
+          <div class="flex gap-2 overflow-x-auto pb-2">
+            <button
+              v-for="stage in knockoutStages"
+              :key="stage"
+              class="min-w-fit rounded-full border px-4 py-2 text-sm transition"
+              :class="
+                activeStage === stage
+                  ? 'border-emerald-300/45 bg-emerald-500/15 text-emerald-100'
+                  : 'border-white/12 text-slate-200 hover:border-white/30 hover:text-white'
+              "
+              @click="activeStage = stage"
+            >
+              {{ stageName(stage) }}
+              <span class="ml-2 rounded-full bg-black/30 px-2 py-0.5 text-xs">
+                {{ stageMatchCount(stage) }}
+              </span>
+            </button>
+          </div>
 
-        <article
-          v-if="activeStageMatches.length === 0"
-          class="rounded-2xl border border-dashed border-white/12 bg-black/15 p-5 text-sm text-(--text-muted)"
-        >
-          Sin partidos cargados para {{ stageName(activeStage).toLowerCase() }}.
+          <div
+            class="mt-4 grid items-center gap-3 md:grid-cols-[auto_1fr_auto]"
+          >
+            <button
+              class="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100 disabled:cursor-not-allowed disabled:opacity-45"
+              :disabled="!hasPrevStage"
+              @click="goPrevStage"
+            >
+              Anterior
+            </button>
+
+            <div
+              class="rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-center"
+            >
+              <h2 class="text-lg text-emerald-200">
+                {{ stageName(activeStage) }}
+              </h2>
+              <p class="mt-1 text-xs text-(--text-muted)">
+                {{ stageHint(activeStage) }}
+              </p>
+            </div>
+
+            <button
+              class="rounded-full border border-white/15 px-4 py-2 text-sm text-slate-100 transition hover:border-emerald-300/45 hover:text-emerald-100 disabled:cursor-not-allowed disabled:opacity-45"
+              :disabled="!hasNextStage"
+              @click="goNextStage"
+            >
+              Siguiente
+            </button>
+          </div>
         </article>
-      </section>
+
+        <section class="mx-auto w-full max-w-6xl">
+          <div class="grid gap-4 2xl:grid-cols-2">
+            <MatchCard
+              v-for="match in activeStageMatches"
+              :key="match.id"
+              :match="match"
+              :editable="Boolean(activeQuinielaId)"
+            />
+          </div>
+
+          <article
+            v-if="activeStageMatches.length === 0"
+            class="rounded-2xl border border-dashed border-white/12 bg-black/15 p-5 text-sm text-(--text-muted)"
+          >
+            Sin partidos cargados para
+            {{ stageName(activeStage).toLowerCase() }}.
+          </article>
+        </section>
+      </template>
+
+      <KnockoutBracketViewer v-else :matches="matches" />
     </div>
   </section>
 </template>

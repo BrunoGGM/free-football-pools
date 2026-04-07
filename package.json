@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@nuxtjs/supabase": "^1.5.0",
+    "brackets-viewer": "^1.9.0",
     "nuxt": "^4.0.0"
   },
   "devDependencies": {
