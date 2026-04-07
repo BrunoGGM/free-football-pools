@@ -1,6 +1,10 @@
 import { createError, readBody } from 'h3'
 import { serverSupabaseServiceRole } from '#supabase/server'
 import { requireGlobalAdminAccess } from '../../utils/adminAccess'
+import {
+  DEFAULT_QUINIELA_RULES,
+  parseQuinielaRulesInput,
+} from '../../utils/quinielaRules'
 
 type CreateQuinielaBody = {
   name?: string
@@ -10,6 +14,13 @@ type CreateQuinielaBody = {
   end_date?: string | null
   admin_id?: string
   ticket_price?: number | string
+  exact_score_points?: number | string
+  correct_outcome_points?: number | string
+  champion_bonus_points?: number | string
+  exact_hit_min_points?: number | string
+  streak_hit_min_points?: number | string
+  streak_bonus_3_points?: number | string
+  streak_bonus_5_points?: number | string
 }
 
 const parseTicketPrice = (value: unknown) => {
@@ -38,6 +49,9 @@ export default defineEventHandler(async (event) => {
   const endDate = body.end_date || null
   const adminId = (body.admin_id || user.id).trim()
   const ticketPrice = parseTicketPrice(body.ticket_price)
+  const { merged: rulesPayload } = parseQuinielaRulesInput(body, {
+    base: DEFAULT_QUINIELA_RULES,
+  })
 
   if (name.length < 3 || name.length > 120) {
     throw createError({ statusCode: 400, statusMessage: 'Nombre invalido (3 a 120 caracteres)' })
@@ -83,6 +97,24 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: error.message })
   }
 
+  const { error: rulesError } = await supabase
+    .from('quiniela_rules')
+    .upsert({
+      quiniela_id: data.id,
+      ...rulesPayload,
+    }, { onConflict: 'quiniela_id' })
+
+  if (rulesError) {
+    if (rulesError.code === '42P01') {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Reglas no disponibles aun. Aplica la migracion 0017.',
+      })
+    }
+
+    throw createError({ statusCode: 500, statusMessage: rulesError.message })
+  }
+
   await supabase.from('quiniela_members').upsert(
     {
       user_id: adminId,
@@ -93,6 +125,9 @@ export default defineEventHandler(async (event) => {
 
   return {
     ok: true,
-    quiniela: data,
+    quiniela: {
+      ...data,
+      rules: rulesPayload,
+    },
   }
 })

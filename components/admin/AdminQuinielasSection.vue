@@ -23,6 +23,15 @@ defineProps<{
     start_date: string;
     admin_id: string;
     admin_username: string;
+    rules: {
+      exact_score_points: number;
+      correct_outcome_points: number;
+      champion_bonus_points: number;
+      exact_hit_min_points: number;
+      streak_hit_min_points: number;
+      streak_bonus_3_points: number;
+      streak_bonus_5_points: number;
+    };
   }>;
   quinielaForm: {
     id: string;
@@ -33,6 +42,13 @@ defineProps<{
     start_date: string;
     end_date: string;
     admin_id: string;
+    exact_score_points: number;
+    correct_outcome_points: number;
+    champion_bonus_points: number;
+    exact_hit_min_points: number;
+    streak_hit_min_points: number;
+    streak_bonus_3_points: number;
+    streak_bonus_5_points: number;
   };
   savingQuiniela: boolean;
   deletingQuinielaId: string | null;
@@ -239,6 +255,124 @@ const emit = defineEmits<{
               placeholder="Descripcion de la quiniela"
             />
           </div>
+
+          <div class="space-y-1 md:col-span-2">
+            <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
+              Reglas de puntuacion
+            </p>
+          </div>
+
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Puntos marcador exacto
+            </label>
+            <input
+              v-model.number="quinielaForm.exact_score_points"
+              type="number"
+              min="1"
+              max="20"
+              step="1"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Puntos por signo
+            </label>
+            <input
+              v-model.number="quinielaForm.correct_outcome_points"
+              type="number"
+              min="0"
+              max="20"
+              step="1"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Bonus campeon
+            </label>
+            <input
+              v-model.number="quinielaForm.champion_bonus_points"
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Umbral exact hit
+            </label>
+            <input
+              v-model.number="quinielaForm.exact_hit_min_points"
+              type="number"
+              min="1"
+              max="20"
+              step="1"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Umbral racha
+            </label>
+            <input
+              v-model.number="quinielaForm.streak_hit_min_points"
+              type="number"
+              min="1"
+              max="20"
+              step="1"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Bonus racha 3
+            </label>
+            <input
+              v-model.number="quinielaForm.streak_bonus_3_points"
+              type="number"
+              min="0"
+              max="20"
+              step="1"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Bonus racha 5
+            </label>
+            <input
+              v-model.number="quinielaForm.streak_bonus_5_points"
+              type="number"
+              min="0"
+              max="20"
+              step="1"
+              class="input input-bordered w-full"
+            />
+          </div>
         </div>
 
         <div class="mt-4 flex flex-wrap gap-2">
@@ -375,6 +509,7 @@ const emit = defineEmits<{
               <th class="px-4 py-3">Admin</th>
               <th class="px-4 py-3">Boleto</th>
               <th class="px-4 py-3">Codigo</th>
+              <th class="px-4 py-3">Reglas</th>
               <th class="px-4 py-3">Inicio</th>
               <th class="px-4 py-3 text-right">Acciones</th>
             </tr>
@@ -404,6 +539,12 @@ const emit = defineEmits<{
                 }}
               </td>
               <td class="px-4 py-3 uppercase">{{ item.access_code }}</td>
+              <td class="text-base-content/70 px-4 py-3 text-xs">
+                E{{ item.rules.exact_score_points }} / S{{
+                  item.rules.correct_outcome_points
+                }}
+                / C{{ item.rules.champion_bonus_points }}
+              </td>
               <td class="text-base-content/70 px-4 py-3">
                 {{ new Date(item.start_date).toLocaleString("es-MX") }}
               </td>

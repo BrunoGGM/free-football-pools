@@ -43,6 +43,10 @@ const gamificationSupported = useState<boolean | null>(
   "gamification-supported",
   () => null,
 );
+const weeklyRankingSupported = useState<boolean | null>(
+  "weekly-ranking-supported",
+  () => null,
+);
 
 const rows = ref<PositionRow[]>([]);
 const loading = ref(false);
@@ -176,8 +180,17 @@ const firstPlacePrizeText = computed(() => {
     maximumFractionDigits: 2,
   });
 });
+
+const getCurrentWeekStartDate = () => {
+  const today = new Date();
+  const dayOffset = (today.getUTCDay() + 6) % 7;
+  today.setUTCDate(today.getUTCDate() - dayOffset);
+  today.setUTCHours(0, 0, 0, 0);
+  return today.toISOString().slice(0, 10);
+};
+
 const weeklyPeriodText = computed(() => {
-  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const since = new Date(`${getCurrentWeekStartDate()}T00:00:00.000Z`);
   return since.toLocaleDateString("es-MX", {
     day: "2-digit",
     month: "short",
@@ -344,6 +357,27 @@ const isMissingGamificationTableError = (error: any) => {
   );
 };
 
+const isMissingWeeklyRankingTableError = (error: any) => {
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    error?.code === "42P01" ||
+    message.includes("quiniela_weekly_rankings") ||
+    (message.includes("relation") && message.includes("weekly"))
+  );
+};
+
+const appendGamificationMessage = (message: string) => {
+  if (!gamificationMessage.value) {
+    gamificationMessage.value = message;
+    return;
+  }
+
+  if (!gamificationMessage.value.includes(message)) {
+    gamificationMessage.value = `${gamificationMessage.value} ${message}`;
+  }
+};
+
 const loadRanking = async () => {
   if (!activeQuinielaId.value) {
     rows.value = [];
@@ -486,8 +520,9 @@ const loadRanking = async () => {
 
     if (streakError && isMissingGamificationTableError(streakError)) {
       gamificationSupported.value = false;
-      gamificationMessage.value =
-        "Gamificacion no disponible aun. Aplica la migracion 0015 para rachas y medallas.";
+      appendGamificationMessage(
+        "Gamificacion no disponible aun. Aplica la migracion 0015 para rachas y medallas.",
+      );
     } else if (streakError) {
       loading.value = false;
       errorMessage.value = streakError.message;
@@ -517,8 +552,9 @@ const loadRanking = async () => {
       isMissingGamificationTableError(achievementsError)
     ) {
       gamificationSupported.value = false;
-      gamificationMessage.value =
-        "Gamificacion no disponible aun. Aplica la migracion 0015 para rachas y medallas.";
+      appendGamificationMessage(
+        "Gamificacion no disponible aun. Aplica la migracion 0015 para rachas y medallas.",
+      );
     } else if (achievementsError) {
       loading.value = false;
       errorMessage.value = achievementsError.message;
@@ -582,16 +618,53 @@ const loadRanking = async () => {
 
   previousOwnRank.value = ownRow?.rank ?? null;
   championInput.value = ownRow?.predicted_champion ?? "";
-  const weekStartIso = new Date(
-    Date.now() - 7 * 24 * 60 * 60 * 1000,
-  ).toISOString();
+  const weekStartDate = getCurrentWeekStartDate();
+  let weeklyLoadedFromMaterialized = false;
 
-  if (userIds.length > 0) {
+  if (userIds.length > 0 && weeklyRankingSupported.value !== false) {
+    const { data: weeklyRows, error: weeklyRowsError } = await client
+      .from("quiniela_weekly_rankings")
+      .select("user_id, rank, weekly_points, exact_hits")
+      .eq("quiniela_id", activeQuinielaId.value)
+      .eq("week_start_date", weekStartDate)
+      .order("rank", { ascending: true })
+      .limit(5);
+
+    if (weeklyRowsError && isMissingWeeklyRankingTableError(weeklyRowsError)) {
+      weeklyRankingSupported.value = false;
+      appendGamificationMessage(
+        "Ranking semanal materializado no disponible aun. Aplica la migracion 0016 para habilitarlo.",
+      );
+    } else if (weeklyRowsError) {
+      loading.value = false;
+      errorMessage.value = weeklyRowsError.message;
+      return;
+    } else {
+      weeklyRankingSupported.value = true;
+      weeklyLoadedFromMaterialized = true;
+
+      weeklyLeaders.value =
+        (
+          weeklyRows as Array<{
+            user_id: string;
+            weekly_points: number | null;
+            exact_hits: number | null;
+          }> | null
+        )?.map((row) => ({
+          user_id: row.user_id,
+          username: usernameByUserId.get(row.user_id) ?? "Jugador",
+          weekly_points: Number(row.weekly_points ?? 0),
+          exact_hits: Number(row.exact_hits ?? 0),
+        })) ?? [];
+    }
+  }
+
+  if (!weeklyLoadedFromMaterialized && userIds.length > 0) {
     const { data: recentMatches, error: recentMatchesError } = await client
       .from("matches")
       .select("id")
       .eq("status", "finished")
-      .gte("match_time", weekStartIso);
+      .gte("match_time", `${weekStartDate}T00:00:00.000Z`);
 
     if (!recentMatchesError) {
       const matchIds = (recentMatches ?? [])

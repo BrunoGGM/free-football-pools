@@ -1,6 +1,12 @@
 import { createError, readBody } from 'h3'
 import { serverSupabaseServiceRole } from '#supabase/server'
 import { requireGlobalAdminAccess } from '../../../utils/adminAccess'
+import {
+  DEFAULT_QUINIELA_RULES,
+  hasRulePayloadChanges,
+  parseQuinielaRulesInput,
+  type QuinielaRulesPayload,
+} from '../../../utils/quinielaRules'
 
 type UpdateQuinielaBody = {
   name?: string
@@ -11,6 +17,13 @@ type UpdateQuinielaBody = {
   admin_id?: string
   champion_team?: string | null
   ticket_price?: number | string
+  exact_score_points?: number | string
+  correct_outcome_points?: number | string
+  champion_bonus_points?: number | string
+  exact_hit_min_points?: number | string
+  streak_hit_min_points?: number | string
+  streak_bonus_3_points?: number | string
+  streak_bonus_5_points?: number | string
 }
 
 const parseTicketPrice = (value: unknown) => {
@@ -35,6 +48,15 @@ export default defineEventHandler(async (event) => {
   const body = (await readBody(event).catch(() => ({}))) as UpdateQuinielaBody
 
   const payload: Record<string, any> = {}
+  const rawRuleInput = {
+    exact_score_points: body.exact_score_points,
+    correct_outcome_points: body.correct_outcome_points,
+    champion_bonus_points: body.champion_bonus_points,
+    exact_hit_min_points: body.exact_hit_min_points,
+    streak_hit_min_points: body.streak_hit_min_points,
+    streak_bonus_3_points: body.streak_bonus_3_points,
+    streak_bonus_5_points: body.streak_bonus_5_points,
+  }
 
   if (typeof body.name === 'string') {
     const value = body.name.trim()
@@ -103,19 +125,100 @@ export default defineEventHandler(async (event) => {
     payload.ticket_price = parseTicketPrice(body.ticket_price)
   }
 
-  if (Object.keys(payload).length === 0) {
+  let mergedRules: QuinielaRulesPayload | null = null
+
+  const hasIncomingRuleValues = Object.values(rawRuleInput).some((value) => value !== undefined)
+
+  if (hasIncomingRuleValues) {
+    const { data: currentRules, error: currentRulesError } = await supabase
+      .from('quiniela_rules')
+      .select('exact_score_points, correct_outcome_points, champion_bonus_points, exact_hit_min_points, streak_hit_min_points, streak_bonus_3_points, streak_bonus_5_points')
+      .eq('quiniela_id', quinielaId)
+      .maybeSingle()
+
+    if (currentRulesError && currentRulesError.code === '42P01') {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Reglas no disponibles aun. Aplica la migracion 0017.',
+      })
+    }
+
+    if (currentRulesError) {
+      throw createError({ statusCode: 500, statusMessage: currentRulesError.message })
+    }
+
+    const baseRules: QuinielaRulesPayload = currentRules
+      ? {
+        exact_score_points: Number(currentRules.exact_score_points),
+        correct_outcome_points: Number(currentRules.correct_outcome_points),
+        champion_bonus_points: Number(currentRules.champion_bonus_points),
+        exact_hit_min_points: Number(currentRules.exact_hit_min_points),
+        streak_hit_min_points: Number(currentRules.streak_hit_min_points),
+        streak_bonus_3_points: Number(currentRules.streak_bonus_3_points),
+        streak_bonus_5_points: Number(currentRules.streak_bonus_5_points),
+      }
+      : DEFAULT_QUINIELA_RULES
+
+    const { parsed: parsedRuleChanges, merged } = parseQuinielaRulesInput(rawRuleInput, {
+      base: baseRules,
+    })
+
+    mergedRules = merged
+
+    if (hasRulePayloadChanges(parsedRuleChanges)) {
+      const { error: rulesError } = await supabase
+        .from('quiniela_rules')
+        .upsert({
+          quiniela_id: quinielaId,
+          ...parsedRuleChanges,
+        }, { onConflict: 'quiniela_id' })
+
+      if (rulesError) {
+        throw createError({ statusCode: 500, statusMessage: rulesError.message })
+      }
+
+      const { error: recalcError } = await supabase
+        .rpc('recalculate_quiniela_scoring', {
+          p_quiniela_id: quinielaId,
+        })
+
+      if (recalcError) {
+        throw createError({ statusCode: 500, statusMessage: recalcError.message })
+      }
+    }
+  }
+
+  if (Object.keys(payload).length === 0 && !hasIncomingRuleValues) {
     throw createError({ statusCode: 400, statusMessage: 'No hay campos para actualizar' })
   }
 
-  const { data, error } = await supabase
-    .from('quinielas')
-    .update(payload)
-    .eq('id', quinielaId)
-    .select('id, name, access_code, admin_id, start_date, end_date, ticket_price')
-    .single()
+  let data: any = null
 
-  if (error) {
-    throw createError({ statusCode: 500, statusMessage: error.message })
+  if (Object.keys(payload).length > 0) {
+    const result = await supabase
+      .from('quinielas')
+      .update(payload)
+      .eq('id', quinielaId)
+      .select('id, name, access_code, admin_id, start_date, end_date, ticket_price')
+      .single()
+
+    data = result.data
+
+    if (result.error) {
+      throw createError({ statusCode: 500, statusMessage: result.error.message })
+    }
+  } else {
+    const result = await supabase
+      .from('quinielas')
+      .select('id, name, access_code, admin_id, start_date, end_date, ticket_price')
+      .eq('id', quinielaId)
+      .single()
+
+    data = result.data
+
+    if (result.error) {
+      throw createError({ statusCode: 500, statusMessage: result.error.message })
+    }
   }
 
   if (payload.admin_id) {
@@ -130,6 +233,13 @@ export default defineEventHandler(async (event) => {
 
   return {
     ok: true,
-    quiniela: data,
+    quiniela: {
+      ...data,
+      ...(mergedRules
+        ? {
+          rules: mergedRules,
+        }
+        : {}),
+    },
   }
 })

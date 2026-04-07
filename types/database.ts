@@ -164,6 +164,45 @@ export type Database = {
         }
         Relationships: []
       }
+      mission_definitions: {
+        Row: {
+          code: string
+          created_at: string
+          default_reward_points: number
+          default_target_value: number
+          description: string | null
+          id: string
+          is_active: boolean
+          mission_type: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          default_reward_points?: number
+          default_target_value?: number
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          mission_type: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          default_reward_points?: number
+          default_target_value?: number
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          mission_type?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       predictions: {
         Row: {
           away_score: number
@@ -385,6 +424,54 @@ export type Database = {
           },
         ]
       }
+      quiniela_missions: {
+        Row: {
+          created_at: string
+          display_order: number
+          is_active: boolean
+          mission_id: string
+          quiniela_id: string
+          reward_points: number
+          target_value: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number
+          is_active?: boolean
+          mission_id: string
+          quiniela_id: string
+          reward_points: number
+          target_value: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number
+          is_active?: boolean
+          mission_id?: string
+          quiniela_id?: string
+          reward_points?: number
+          target_value?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiniela_missions_mission_id_fkey"
+            columns: ["mission_id"]
+            isOneToOne: false
+            referencedRelation: "mission_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiniela_missions_quiniela_id_fkey"
+            columns: ["quiniela_id"]
+            isOneToOne: false
+            referencedRelation: "quinielas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quiniela_rankings: {
         Row: {
           automatic_points: number
@@ -423,6 +510,98 @@ export type Database = {
           },
           {
             foreignKeyName: "quiniela_rankings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiniela_rules: {
+        Row: {
+          champion_bonus_points: number
+          correct_outcome_points: number
+          created_at: string
+          exact_hit_min_points: number
+          exact_score_points: number
+          quiniela_id: string
+          streak_bonus_3_points: number
+          streak_bonus_5_points: number
+          streak_hit_min_points: number
+          updated_at: string
+        }
+        Insert: {
+          champion_bonus_points?: number
+          correct_outcome_points?: number
+          created_at?: string
+          exact_hit_min_points?: number
+          exact_score_points?: number
+          quiniela_id: string
+          streak_bonus_3_points?: number
+          streak_bonus_5_points?: number
+          streak_hit_min_points?: number
+          updated_at?: string
+        }
+        Update: {
+          champion_bonus_points?: number
+          correct_outcome_points?: number
+          created_at?: string
+          exact_hit_min_points?: number
+          exact_score_points?: number
+          quiniela_id?: string
+          streak_bonus_3_points?: number
+          streak_bonus_5_points?: number
+          streak_hit_min_points?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiniela_rules_quiniela_id_fkey"
+            columns: ["quiniela_id"]
+            isOneToOne: true
+            referencedRelation: "quinielas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiniela_weekly_rankings: {
+        Row: {
+          exact_hits: number
+          quiniela_id: string
+          rank: number
+          updated_at: string
+          user_id: string
+          week_start_date: string
+          weekly_points: number
+        }
+        Insert: {
+          exact_hits?: number
+          quiniela_id: string
+          rank: number
+          updated_at?: string
+          user_id: string
+          week_start_date: string
+          weekly_points?: number
+        }
+        Update: {
+          exact_hits?: number
+          quiniela_id?: string
+          rank?: number
+          updated_at?: string
+          user_id?: string
+          week_start_date?: string
+          weekly_points?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiniela_weekly_rankings_quiniela_id_fkey"
+            columns: ["quiniela_id"]
+            isOneToOne: false
+            referencedRelation: "quinielas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiniela_weekly_rankings_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -571,6 +750,73 @@ export type Database = {
           },
         ]
       }
+      user_mission_progress: {
+        Row: {
+          claimed_at: string | null
+          completed_at: string | null
+          is_claimed: boolean
+          is_completed: boolean
+          mission_id: string
+          period_start_date: string
+          progress_value: number
+          quiniela_id: string
+          reward_points: number
+          target_value: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          claimed_at?: string | null
+          completed_at?: string | null
+          is_claimed?: boolean
+          is_completed?: boolean
+          mission_id: string
+          period_start_date: string
+          progress_value?: number
+          quiniela_id: string
+          reward_points: number
+          target_value: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          claimed_at?: string | null
+          completed_at?: string | null
+          is_claimed?: boolean
+          is_completed?: boolean
+          mission_id?: string
+          period_start_date?: string
+          progress_value?: number
+          quiniela_id?: string
+          reward_points?: number
+          target_value?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_mission_progress_mission_id_fkey"
+            columns: ["mission_id"]
+            isOneToOne: false
+            referencedRelation: "mission_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_mission_progress_quiniela_id_fkey"
+            columns: ["quiniela_id"]
+            isOneToOne: false
+            referencedRelation: "quinielas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_mission_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -589,6 +835,57 @@ export type Database = {
         }
         Returns: number
       }
+      calculate_prediction_points_for_quiniela: {
+        Args: {
+          actual_away: number
+          actual_home: number
+          p_quiniela_id: string
+          predicted_away: number
+          predicted_home: number
+        }
+        Returns: number
+      }
+      claim_user_mission_reward: {
+        Args: {
+          p_mission_code: string
+          p_period_start_date: string
+          p_quiniela_id: string
+        }
+        Returns: Json
+      }
+      get_quiniela_rules: {
+        Args: { p_quiniela_id: string }
+        Returns: {
+          champion_bonus_points: number
+          correct_outcome_points: number
+          exact_hit_min_points: number
+          exact_score_points: number
+          streak_bonus_3_points: number
+          streak_bonus_5_points: number
+          streak_hit_min_points: number
+        }[]
+      }
+      get_user_missions_snapshot: {
+        Args: {
+          p_period_start_date: string
+          p_quiniela_id: string
+          p_user_id: string
+        }
+        Returns: {
+          claimed_at: string
+          completed_at: string
+          is_claimed: boolean
+          is_completed: boolean
+          mission_code: string
+          mission_description: string
+          mission_name: string
+          period_start_date: string
+          progress_value: number
+          reward_points: number
+          target_value: number
+        }[]
+      }
+      get_week_start_date: { Args: { p_timestamp: string }; Returns: string }
       grant_achievement_by_code: {
         Args: {
           p_code: string
@@ -630,8 +927,32 @@ export type Database = {
         Args: { p_quiniela_id: string }
         Returns: undefined
       }
+      recalculate_quiniela_scoring: {
+        Args: { p_quiniela_id: string }
+        Returns: undefined
+      }
+      recalculate_user_missions_for_week: {
+        Args: {
+          p_period_start_date: string
+          p_quiniela_id: string
+          p_user_id: string
+        }
+        Returns: undefined
+      }
+      recalculate_weekly_ranking_for_week: {
+        Args: { p_quiniela_id: string; p_week_start_date: string }
+        Returns: undefined
+      }
       refresh_member_gamification: {
         Args: { p_quiniela_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      refresh_user_missions_for_prediction: {
+        Args: { p_match_id: string; p_quiniela_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      refresh_weekly_ranking_for_match_and_quiniela: {
+        Args: { p_match_id: string; p_quiniela_id: string }
         Returns: undefined
       }
       unaccent: { Args: { "": string }; Returns: string }

@@ -1,6 +1,7 @@
 import { createError } from 'h3'
 import { serverSupabaseServiceRole } from '#supabase/server'
 import { requireGlobalAdminAccess } from '../../utils/adminAccess'
+import { DEFAULT_QUINIELA_RULES } from '../../utils/quinielaRules'
 
 export default defineEventHandler(async (event) => {
   const supabase = serverSupabaseServiceRole<any>(event)
@@ -33,7 +34,9 @@ export default defineEventHandler(async (event) => {
   }
 
   const adminIds = Array.from(new Set((quinielas || []).map((q: any) => q.admin_id).filter(Boolean)))
+  const quinielaIds = (quinielas || []).map((q: any) => q.id).filter(Boolean)
   const adminMap = new Map<string, string>()
+  const ruleMap = new Map<string, typeof DEFAULT_QUINIELA_RULES>()
 
   if (adminIds.length > 0) {
     const { data: admins, error: adminsError } = await supabase
@@ -47,6 +50,31 @@ export default defineEventHandler(async (event) => {
 
     for (const admin of admins || []) {
       adminMap.set(admin.id as string, (admin.username as string) || 'N/A')
+    }
+  }
+
+  if (quinielaIds.length > 0) {
+    const { data: rules, error: rulesError } = await supabase
+      .from('quiniela_rules')
+      .select('quiniela_id, exact_score_points, correct_outcome_points, champion_bonus_points, exact_hit_min_points, streak_hit_min_points, streak_bonus_3_points, streak_bonus_5_points')
+      .in('quiniela_id', quinielaIds)
+
+    if (rulesError && rulesError.code !== '42P01') {
+      throw createError({ statusCode: 500, statusMessage: rulesError.message })
+    }
+
+    for (const item of rules || []) {
+      const quinielaId = item.quiniela_id as string
+
+      ruleMap.set(quinielaId, {
+        exact_score_points: Number(item.exact_score_points ?? DEFAULT_QUINIELA_RULES.exact_score_points),
+        correct_outcome_points: Number(item.correct_outcome_points ?? DEFAULT_QUINIELA_RULES.correct_outcome_points),
+        champion_bonus_points: Number(item.champion_bonus_points ?? DEFAULT_QUINIELA_RULES.champion_bonus_points),
+        exact_hit_min_points: Number(item.exact_hit_min_points ?? DEFAULT_QUINIELA_RULES.exact_hit_min_points),
+        streak_hit_min_points: Number(item.streak_hit_min_points ?? DEFAULT_QUINIELA_RULES.streak_hit_min_points),
+        streak_bonus_3_points: Number(item.streak_bonus_3_points ?? DEFAULT_QUINIELA_RULES.streak_bonus_3_points),
+        streak_bonus_5_points: Number(item.streak_bonus_5_points ?? DEFAULT_QUINIELA_RULES.streak_bonus_5_points),
+      })
     }
   }
 
@@ -73,6 +101,7 @@ export default defineEventHandler(async (event) => {
       ticket_price: Number(q.ticket_price || 0),
       admin_username: adminMap.get(q.admin_id as string) || 'N/A',
       created_at: q.created_at,
+      rules: ruleMap.get(q.id as string) || DEFAULT_QUINIELA_RULES,
     })),
   }
 })

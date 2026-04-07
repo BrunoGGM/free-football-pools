@@ -15,6 +15,15 @@ interface ManagedQuiniela {
   admin_id: string;
   admin_username: string;
   created_at: string;
+  rules: {
+    exact_score_points: number;
+    correct_outcome_points: number;
+    champion_bonus_points: number;
+    exact_hit_min_points: number;
+    streak_hit_min_points: number;
+    streak_bonus_3_points: number;
+    streak_bonus_5_points: number;
+  };
 }
 
 interface GlobalStatsPayload {
@@ -122,6 +131,13 @@ const quinielaForm = reactive({
   start_date: "",
   end_date: "",
   admin_id: "",
+  exact_score_points: 3,
+  correct_outcome_points: 1,
+  champion_bonus_points: 10,
+  exact_hit_min_points: 3,
+  streak_hit_min_points: 1,
+  streak_bonus_3_points: 1,
+  streak_bonus_5_points: 2,
 });
 
 const manualPointsForm = reactive({
@@ -232,6 +248,13 @@ const resetQuinielaForm = () => {
   quinielaForm.start_date = "";
   quinielaForm.end_date = "";
   quinielaForm.admin_id = "";
+  quinielaForm.exact_score_points = 3;
+  quinielaForm.correct_outcome_points = 1;
+  quinielaForm.champion_bonus_points = 10;
+  quinielaForm.exact_hit_min_points = 3;
+  quinielaForm.streak_hit_min_points = 1;
+  quinielaForm.streak_bonus_3_points = 1;
+  quinielaForm.streak_bonus_5_points = 2;
 };
 
 const editQuiniela = (item: ManagedQuiniela) => {
@@ -243,6 +266,25 @@ const editQuiniela = (item: ManagedQuiniela) => {
   quinielaForm.start_date = toInputDateTime(item.start_date);
   quinielaForm.end_date = toInputDateTime(item.end_date);
   quinielaForm.admin_id = item.admin_id;
+  quinielaForm.exact_score_points = Number(item.rules?.exact_score_points ?? 3);
+  quinielaForm.correct_outcome_points = Number(
+    item.rules?.correct_outcome_points ?? 1,
+  );
+  quinielaForm.champion_bonus_points = Number(
+    item.rules?.champion_bonus_points ?? 10,
+  );
+  quinielaForm.exact_hit_min_points = Number(
+    item.rules?.exact_hit_min_points ?? 3,
+  );
+  quinielaForm.streak_hit_min_points = Number(
+    item.rules?.streak_hit_min_points ?? 1,
+  );
+  quinielaForm.streak_bonus_3_points = Number(
+    item.rules?.streak_bonus_3_points ?? 1,
+  );
+  quinielaForm.streak_bonus_5_points = Number(
+    item.rules?.streak_bonus_5_points ?? 2,
+  );
   manualPointsForm.quiniela_id = item.id;
   globalMessage.value = null;
   globalError.value = null;
@@ -339,6 +381,13 @@ const saveQuiniela = async () => {
     start_date: toIsoOrNull(quinielaForm.start_date),
     end_date: toIsoOrNull(quinielaForm.end_date),
     admin_id: quinielaForm.admin_id.trim() || undefined,
+    exact_score_points: Number(quinielaForm.exact_score_points),
+    correct_outcome_points: Number(quinielaForm.correct_outcome_points),
+    champion_bonus_points: Number(quinielaForm.champion_bonus_points),
+    exact_hit_min_points: Number(quinielaForm.exact_hit_min_points),
+    streak_hit_min_points: Number(quinielaForm.streak_hit_min_points),
+    streak_bonus_3_points: Number(quinielaForm.streak_bonus_3_points),
+    streak_bonus_5_points: Number(quinielaForm.streak_bonus_5_points),
   };
 
   if (!payload.name || !payload.access_code || !payload.start_date) {
@@ -350,6 +399,43 @@ const saveQuiniela = async () => {
   if (Number.isNaN(payload.ticket_price) || payload.ticket_price < 0) {
     globalError.value =
       "El costo por boleto debe ser un numero mayor o igual a 0.";
+    return;
+  }
+
+  const integerRuleFields: Array<keyof typeof payload> = [
+    "exact_score_points",
+    "correct_outcome_points",
+    "champion_bonus_points",
+    "exact_hit_min_points",
+    "streak_hit_min_points",
+    "streak_bonus_3_points",
+    "streak_bonus_5_points",
+  ];
+
+  for (const field of integerRuleFields) {
+    const value = Number(payload[field]);
+
+    if (!Number.isInteger(value)) {
+      globalError.value = `El campo ${field} debe ser un entero.`;
+      return;
+    }
+  }
+
+  if (payload.correct_outcome_points > payload.exact_score_points) {
+    globalError.value =
+      "Puntos por signo no puede ser mayor que puntos por marcador exacto.";
+    return;
+  }
+
+  if (payload.exact_hit_min_points > payload.exact_score_points) {
+    globalError.value =
+      "Umbral exact hit no puede ser mayor que puntos por marcador exacto.";
+    return;
+  }
+
+  if (payload.streak_hit_min_points > payload.exact_score_points) {
+    globalError.value =
+      "Umbral de racha no puede ser mayor que puntos por marcador exacto.";
     return;
   }
 
