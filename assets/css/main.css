@@ -1,0 +1,133 @@
+@import url("https://fonts.googleapis.com/css2?family=Anton&family=Chakra+Petch:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --bg-base: #050b08;
+  --bg-layer: #0c1712;
+  --bg-soft: #112319;
+  --text-main: #ecfff5;
+  --text-muted: #9fc5b0;
+  --emerald-live: #00f5a0;
+  --emerald-soft: #00b774;
+  --amber-accent: #f4bb2a;
+  --danger: #ff6b6b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#__nuxt {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Chakra Petch", sans-serif;
+  color: var(--text-main);
+  background:
+    radial-gradient(
+      circle at 18% -5%,
+      rgba(0, 245, 160, 0.24),
+      transparent 36%
+    ),
+    radial-gradient(
+      circle at 82% 0%,
+      rgba(244, 187, 42, 0.16),
+      transparent 28%
+    ),
+    linear-gradient(160deg, #04110a, #09160f 46%, #020705 100%);
+  background-attachment: fixed;
+}
+
+h1,
+h2,
+h3,
+.logo-font {
+  font-family: "Anton", sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.pitch-panel {
+  border: 1px solid rgba(0, 245, 160, 0.2);
+  background: linear-gradient(
+    180deg,
+    rgba(17, 35, 25, 0.9),
+    rgba(10, 22, 16, 0.96)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 20px 40px rgba(0, 0, 0, 0.35);
+}
+
+.neon-border {
+  position: relative;
+}
+
+.neon-border::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 245, 160, 0.7),
+    rgba(244, 187, 42, 0.35)
+  );
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.live-signal {
+  height: 0.6rem;
+  width: 0.6rem;
+  border-radius: 9999px;
+  background: var(--emerald-live);
+  box-shadow:
+    0 0 0 0 rgba(0, 245, 160, 0.65),
+    0 0 12px rgba(0, 245, 160, 0.9);
+  animation: live-pulse 1.3s infinite;
+}
+
+@keyframes live-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow:
+      0 0 0 0 rgba(0, 245, 160, 0.65),
+      0 0 12px rgba(0, 245, 160, 0.9);
+  }
+  70% {
+    transform: scale(1.1);
+    box-shadow:
+      0 0 0 10px rgba(0, 245, 160, 0),
+      0 0 16px rgba(0, 245, 160, 0.9);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 0 0 0 rgba(0, 245, 160, 0),
+      0 0 12px rgba(0, 245, 160, 0.9);
+  }
+}
+
+.sweep-in {
+  animation: sweep-in 420ms ease-out both;
+}
+
+@keyframes sweep-in {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
