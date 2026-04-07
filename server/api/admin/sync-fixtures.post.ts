@@ -1,12 +1,22 @@
 import { createError, readBody } from 'h3'
 import { serverSupabaseServiceRole } from '#supabase/server'
-import { formatUtcDate, normalizeApiFootballStage, normalizeApiFootballStatus } from '../../utils/apiFootball'
+import {
+  formatTimeInTimeZone,
+  formatUtcDate,
+  normalizeApiFootballStage,
+  normalizeApiFootballStatus,
+} from '../../utils/apiFootball'
 import { requireAdminAccess } from '../../utils/adminAccess'
+import { resolveTeamCode } from '../../../utils/teamMeta'
 
 type ApiFootballFixture = {
   fixture?: {
     id?: number
     date?: string
+    timezone?: string
+    venue?: {
+      name?: string
+    }
     status?: {
       short?: string
     }
@@ -139,11 +149,16 @@ export default defineEventHandler(async (event) => {
     api_fixture_id: number
     home_team: string
     away_team: string
+    home_team_code: string | null
+    away_team_code: string | null
     home_score: number | null
     away_score: number | null
     status: 'pending' | 'in_progress' | 'finished'
     match_time: string
     stage: string
+    venue: string | null
+    source_time: string | null
+    source_timezone: string
   }> = []
 
   let skippedUnknownStage = 0
@@ -154,6 +169,8 @@ export default defineEventHandler(async (event) => {
     const awayTeam = (fixture.teams?.away?.name || '').trim()
     const matchTime = fixture.fixture?.date
     const stage = normalizeApiFootballStage(fixture.league?.round)
+    const venue = (fixture.fixture?.venue?.name || '').trim() || null
+    const sourceTime = matchTime ? formatTimeInTimeZone(matchTime, 'America/New_York') : null
 
     if (!fixtureId || !homeTeam || !awayTeam || !matchTime || !stage) {
       skippedUnknownStage += 1
@@ -164,18 +181,23 @@ export default defineEventHandler(async (event) => {
       api_fixture_id: fixtureId,
       home_team: homeTeam,
       away_team: awayTeam,
+      home_team_code: resolveTeamCode(homeTeam),
+      away_team_code: resolveTeamCode(awayTeam),
       home_score: fixture.goals?.home ?? null,
       away_score: fixture.goals?.away ?? null,
       status: normalizeApiFootballStatus(fixture.fixture?.status?.short),
       match_time: matchTime,
       stage,
+      venue,
+      source_time: sourceTime,
+      source_timezone: 'America/New_York',
     })
   }
 
   if (rowsToUpsert.length > 0) {
     const { error: upsertError } = await supabase
       .from('matches')
-      .upsert(rowsToUpsert, { onConflict: 'api_fixture_id' })
+      .upsert(rowsToUpsert, { onConflict: 'stage,match_time,home_team,away_team' })
 
     if (upsertError) {
       throw createError({ statusCode: 500, statusMessage: upsertError.message })

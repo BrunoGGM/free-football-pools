@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { MatchItem } from "~/composables/useMatchesRealtime";
+import { resolveTeamCode, teamFlagEmojiFromCode } from "~/utils/teamMeta";
 
 const props = withDefaults(
   defineProps<{
@@ -58,6 +59,25 @@ const kickoffText = computed(() => {
     dateStyle: "medium",
     timeStyle: "short",
   });
+});
+
+const homeTeamCode = computed(
+  () => props.match.home_team_code || resolveTeamCode(props.match.home_team),
+);
+
+const awayTeamCode = computed(
+  () => props.match.away_team_code || resolveTeamCode(props.match.away_team),
+);
+
+const homeTeamFlag = computed(() => teamFlagEmojiFromCode(homeTeamCode.value));
+const awayTeamFlag = computed(() => teamFlagEmojiFromCode(awayTeamCode.value));
+
+const sourceTimeLabel = computed(() => {
+  if (!props.match.source_time) {
+    return null;
+  }
+
+  return props.match.source_time.slice(0, 5);
 });
 
 const isLive = computed(() => props.match.status === "in_progress");
@@ -164,12 +184,20 @@ watch(
 
     <div class="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
       <div class="rounded-xl bg-black/20 p-3 text-center">
+        <p class="text-2xl leading-none">{{ homeTeamFlag }}</p>
         <p class="text-base font-semibold">{{ props.match.home_team }}</p>
+        <p class="text-xs text-(--text-muted)">{{ homeTeamCode || "--" }}</p>
       </div>
 
       <div class="text-center">
         <p class="text-sm text-(--text-muted)">Kickoff</p>
         <p class="text-sm font-semibold">{{ kickoffText }}</p>
+        <p v-if="sourceTimeLabel" class="text-xs text-(--text-muted)">
+          ET {{ sourceTimeLabel }}
+        </p>
+        <p v-if="props.match.venue" class="mt-1 text-xs text-(--text-muted)">
+          {{ props.match.venue }}
+        </p>
         <p class="mt-2 text-xl font-bold text-emerald-300">
           {{ props.match.home_score ?? "-" }} :
           {{ props.match.away_score ?? "-" }}
@@ -177,7 +205,9 @@ watch(
       </div>
 
       <div class="rounded-xl bg-black/20 p-3 text-center">
+        <p class="text-2xl leading-none">{{ awayTeamFlag }}</p>
         <p class="text-base font-semibold">{{ props.match.away_team }}</p>
+        <p class="text-xs text-(--text-muted)">{{ awayTeamCode || "--" }}</p>
       </div>
     </div>
 

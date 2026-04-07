@@ -14,45 +14,114 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_provider_sync_state: {
+        Row: {
+          created_at: string
+          last_error: string | null
+          last_response_count: number
+          last_status: string
+          last_synced_at: string | null
+          provider: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          last_error?: string | null
+          last_response_count?: number
+          last_status?: string
+          last_synced_at?: string | null
+          provider: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          last_error?: string | null
+          last_response_count?: number
+          last_status?: string
+          last_synced_at?: string | null
+          provider?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      api_provider_usage: {
+        Row: {
+          created_at: string
+          provider: string
+          requests_used: number
+          updated_at: string
+          usage_date: string
+        }
+        Insert: {
+          created_at?: string
+          provider: string
+          requests_used?: number
+          updated_at?: string
+          usage_date: string
+        }
+        Update: {
+          created_at?: string
+          provider?: string
+          requests_used?: number
+          updated_at?: string
+          usage_date?: string
+        }
+        Relationships: []
+      }
       matches: {
         Row: {
           api_fixture_id: number
           away_score: number | null
           away_team: string
+          away_team_code: string | null
           created_at: string
           home_score: number | null
           home_team: string
+          home_team_code: string | null
           id: string
           match_time: string
+          source_time: string | null
+          source_timezone: string
           stage: Database["public"]["Enums"]["match_stage"]
           status: Database["public"]["Enums"]["match_status"]
           updated_at: string
+          venue: string | null
         }
         Insert: {
           api_fixture_id: number
           away_score?: number | null
           away_team: string
+          away_team_code?: string | null
           created_at?: string
           home_score?: number | null
           home_team: string
+          home_team_code?: string | null
           id?: string
           match_time: string
+          source_time?: string | null
+          source_timezone?: string
           stage: Database["public"]["Enums"]["match_stage"]
           status?: Database["public"]["Enums"]["match_status"]
           updated_at?: string
+          venue?: string | null
         }
         Update: {
           api_fixture_id?: number
           away_score?: number | null
           away_team?: string
+          away_team_code?: string | null
           created_at?: string
           home_score?: number | null
           home_team?: string
+          home_team_code?: string | null
           id?: string
           match_time?: string
+          source_time?: string | null
+          source_timezone?: string
           stage?: Database["public"]["Enums"]["match_stage"]
           status?: Database["public"]["Enums"]["match_status"]
           updated_at?: string
+          venue?: string | null
         }
         Relationships: []
       }
@@ -109,6 +178,7 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           id: string
+          is_global_admin: boolean
           updated_at: string
           username: string
         }
@@ -116,6 +186,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           id: string
+          is_global_admin?: boolean
           updated_at?: string
           username: string
         }
@@ -123,6 +194,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           id?: string
+          is_global_admin?: boolean
           updated_at?: string
           username?: string
         }
@@ -238,14 +310,18 @@ export type Database = {
         Args: { p_quiniela_id: string; p_user_id: string }
         Returns: boolean
       }
+      is_global_admin: { Args: { p_user_id: string }; Returns: boolean }
       is_member_of_quiniela: {
         Args: { p_quiniela_id: string; p_user_id: string }
         Returns: boolean
       }
+      map_team_code: { Args: { p_name: string }; Returns: string }
+      normalize_team_key: { Args: { p_name: string }; Returns: string }
       recalculate_member_total_points: {
         Args: { p_quiniela_id: string; p_user_id: string }
         Returns: undefined
       }
+      unaccent: { Args: { "": string }; Returns: string }
     }
     Enums: {
       match_stage:

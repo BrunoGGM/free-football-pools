@@ -73,3 +73,29 @@ export function normalizeApiFootballStage(round: string | null | undefined): Mat
 export function formatUtcDate(input: Date): string {
   return input.toISOString().slice(0, 10)
 }
+
+export function formatTimeInTimeZone(
+  input: string | Date,
+  timeZone: string = 'America/New_York',
+): string | null {
+  const date = input instanceof Date ? input : new Date(input)
+
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(date)
+
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  const hh = byType.hour || '00'
+  const mm = byType.minute || '00'
+  const ss = byType.second || '00'
+
+  return `${hh}:${mm}:${ss}`
+}
