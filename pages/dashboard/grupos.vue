@@ -291,24 +291,6 @@ watch(
       </article>
 
       <section class="space-y-3">
-        <h2 class="text-xl text-emerald-200">{{ stageTitle(activeStage) }}</h2>
-        <div v-if="activeMatches.length" class="grid gap-4 lg:grid-cols-2">
-          <MatchCard
-            v-for="match in activeMatches"
-            :key="match.id"
-            :match="match"
-            :editable="Boolean(activeQuinielaId)"
-          />
-        </div>
-        <article
-          v-else
-          class="pitch-panel rounded-2xl p-5 text-sm text-(--text-muted)"
-        >
-          Todavia no hay partidos cargados para este grupo.
-        </article>
-      </section>
-
-      <section class="space-y-3">
         <div class="flex items-center justify-between gap-3">
           <h2 class="text-xl text-emerald-200">
             Rendimiento de {{ stageTitle(activeStage) }}
@@ -383,6 +365,24 @@ watch(
               </tr>
             </tbody>
           </table>
+        </article>
+      </section>
+
+      <section class="space-y-3">
+        <h2 class="text-xl text-emerald-200">{{ stageTitle(activeStage) }}</h2>
+        <div v-if="activeMatches.length" class="grid gap-4 lg:grid-cols-2">
+          <MatchCard
+            v-for="match in activeMatches"
+            :key="match.id"
+            :match="match"
+            :editable="Boolean(activeQuinielaId)"
+          />
+        </div>
+        <article
+          v-else
+          class="pitch-panel rounded-2xl p-5 text-sm text-(--text-muted)"
+        >
+          Todavia no hay partidos cargados para este grupo.
         </article>
       </section>
     </div>
