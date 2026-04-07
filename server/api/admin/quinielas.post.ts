@@ -9,6 +9,21 @@ type CreateQuinielaBody = {
   start_date?: string
   end_date?: string | null
   admin_id?: string
+  ticket_price?: number | string
+}
+
+const parseTicketPrice = (value: unknown) => {
+  if (value === undefined || value === null || value === '') {
+    return 0
+  }
+
+  const parsed = typeof value === 'number' ? value : Number(value)
+
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw createError({ statusCode: 400, statusMessage: 'ticket_price invalido (debe ser numero >= 0)' })
+  }
+
+  return Number(parsed.toFixed(2))
 }
 
 export default defineEventHandler(async (event) => {
@@ -22,6 +37,7 @@ export default defineEventHandler(async (event) => {
   const startDate = body.start_date || null
   const endDate = body.end_date || null
   const adminId = (body.admin_id || user.id).trim()
+  const ticketPrice = parseTicketPrice(body.ticket_price)
 
   if (name.length < 3 || name.length > 120) {
     throw createError({ statusCode: 400, statusMessage: 'Nombre invalido (3 a 120 caracteres)' })
@@ -58,8 +74,9 @@ export default defineEventHandler(async (event) => {
       start_date: startDate,
       end_date: endDate,
       admin_id: adminId,
+      ticket_price: ticketPrice,
     })
-    .select('id, name, access_code, admin_id, start_date, end_date')
+    .select('id, name, access_code, admin_id, start_date, end_date, ticket_price')
     .single()
 
   if (error) {

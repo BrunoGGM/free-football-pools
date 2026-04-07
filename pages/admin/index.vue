@@ -8,6 +8,7 @@ interface ManagedQuiniela {
   name: string;
   description: string | null;
   access_code: string;
+  ticket_price: number;
   start_date: string;
   end_date: string | null;
   champion_team: string | null;
@@ -114,6 +115,7 @@ const quinielaForm = reactive({
   name: "",
   description: "",
   access_code: "",
+  ticket_price: 0,
   start_date: "",
   end_date: "",
   admin_id: "",
@@ -216,6 +218,7 @@ const resetQuinielaForm = () => {
   quinielaForm.name = "";
   quinielaForm.description = "";
   quinielaForm.access_code = "";
+  quinielaForm.ticket_price = 0;
   quinielaForm.start_date = "";
   quinielaForm.end_date = "";
   quinielaForm.admin_id = "";
@@ -226,6 +229,7 @@ const editQuiniela = (item: ManagedQuiniela) => {
   quinielaForm.name = item.name;
   quinielaForm.description = item.description ?? "";
   quinielaForm.access_code = item.access_code;
+  quinielaForm.ticket_price = Number(item.ticket_price ?? 0);
   quinielaForm.start_date = toInputDateTime(item.start_date);
   quinielaForm.end_date = toInputDateTime(item.end_date);
   quinielaForm.admin_id = item.admin_id;
@@ -266,6 +270,7 @@ const saveQuiniela = async () => {
     name: quinielaForm.name.trim(),
     description: quinielaForm.description.trim() || null,
     access_code: quinielaForm.access_code.trim().toUpperCase(),
+    ticket_price: Number(quinielaForm.ticket_price),
     start_date: toIsoOrNull(quinielaForm.start_date),
     end_date: toIsoOrNull(quinielaForm.end_date),
     admin_id: quinielaForm.admin_id.trim() || undefined,
@@ -274,6 +279,12 @@ const saveQuiniela = async () => {
   if (!payload.name || !payload.access_code || !payload.start_date) {
     globalError.value =
       "Completa nombre, access code y fecha de inicio para guardar.";
+    return;
+  }
+
+  if (Number.isNaN(payload.ticket_price) || payload.ticket_price < 0) {
+    globalError.value =
+      "El costo por boleto debe ser un numero mayor o igual a 0.";
     return;
   }
 

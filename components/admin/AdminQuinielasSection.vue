@@ -19,6 +19,7 @@ defineProps<{
     name: string;
     description: string | null;
     access_code: string;
+    ticket_price: number;
     start_date: string;
     admin_id: string;
     admin_username: string;
@@ -28,6 +29,7 @@ defineProps<{
     name: string;
     description: string;
     access_code: string;
+    ticket_price: number;
     start_date: string;
     end_date: string;
     admin_id: string;
@@ -176,6 +178,22 @@ const emit = defineEmits<{
             <label
               class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
             >
+              Costo por boleto
+            </label>
+            <input
+              v-model.number="quinielaForm.ticket_price"
+              type="number"
+              min="0"
+              step="0.01"
+              class="input input-bordered w-full"
+              placeholder="0.00"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
               Inicio
             </label>
             <input
@@ -253,6 +271,7 @@ const emit = defineEmits<{
             <tr>
               <th class="px-4 py-3">Quiniela</th>
               <th class="px-4 py-3">Admin</th>
+              <th class="px-4 py-3">Boleto</th>
               <th class="px-4 py-3">Codigo</th>
               <th class="px-4 py-3">Inicio</th>
               <th class="px-4 py-3 text-right">Acciones</th>
@@ -273,6 +292,14 @@ const emit = defineEmits<{
               <td class="px-4 py-3">
                 <p class="text-base-content">{{ item.admin_username }}</p>
                 <p class="text-base-content/70 text-xs">{{ item.admin_id }}</p>
+              </td>
+              <td class="text-warning px-4 py-3 font-semibold">
+                {{
+                  Number(item.ticket_price || 0).toLocaleString("es-MX", {
+                    style: "currency",
+                    currency: "MXN",
+                  })
+                }}
               </td>
               <td class="px-4 py-3 uppercase">{{ item.access_code }}</td>
               <td class="text-base-content/70 px-4 py-3">

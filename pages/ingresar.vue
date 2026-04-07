@@ -122,6 +122,18 @@ const submit = async () => {
           <p class="text-base-content/70 mt-1 text-xs">
             {{ membership.quiniela?.description || "Sin descripcion." }}
           </p>
+          <p class="text-primary mt-2 text-xs font-semibold">
+            Boleto:
+            {{
+              Number(membership.quiniela?.ticket_price || 0).toLocaleString(
+                "es-MX",
+                {
+                  style: "currency",
+                  currency: "MXN",
+                },
+              )
+            }}
+          </p>
           <p class="text-warning mt-2 text-xs">
             Puntos actuales: {{ membership.total_points }}
           </p>

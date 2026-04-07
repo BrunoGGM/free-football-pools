@@ -10,6 +10,17 @@ type UpdateQuinielaBody = {
   end_date?: string | null
   admin_id?: string
   champion_team?: string | null
+  ticket_price?: number | string
+}
+
+const parseTicketPrice = (value: unknown) => {
+  const parsed = typeof value === 'number' ? value : Number(value)
+
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw createError({ statusCode: 400, statusMessage: 'ticket_price invalido (debe ser numero >= 0)' })
+  }
+
+  return Number(parsed.toFixed(2))
 }
 
 export default defineEventHandler(async (event) => {
@@ -88,6 +99,10 @@ export default defineEventHandler(async (event) => {
     payload.champion_team = null
   }
 
+  if (body.ticket_price !== undefined) {
+    payload.ticket_price = parseTicketPrice(body.ticket_price)
+  }
+
   if (Object.keys(payload).length === 0) {
     throw createError({ statusCode: 400, statusMessage: 'No hay campos para actualizar' })
   }
@@ -96,7 +111,7 @@ export default defineEventHandler(async (event) => {
     .from('quinielas')
     .update(payload)
     .eq('id', quinielaId)
-    .select('id, name, access_code, admin_id, start_date, end_date')
+    .select('id, name, access_code, admin_id, start_date, end_date, ticket_price')
     .single()
 
   if (error) {

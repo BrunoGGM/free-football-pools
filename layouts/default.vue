@@ -1,5 +1,6 @@
 <script setup lang="ts">
 const route = useRoute();
+const client = useSupabaseClient<any>();
 const user = useSupabaseUser();
 const { signOut, loading } = useSupabaseAuth();
 const { clearActiveQuiniela, quiniela, loadActiveQuiniela, activeQuinielaId } =
@@ -13,6 +14,128 @@ const links = [
   { to: "/dashboard/posiciones", label: "Posiciones" },
   { to: "/admin", label: "Admin" },
 ];
+
+interface HeaderMetric {
+  label: string;
+  value: string;
+  highlight?: boolean;
+}
+
+const headerMetrics = ref<HeaderMetric[]>([]);
+let metricsRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
+const formatKickoff = (value: string | null) => {
+  if (!value) {
+    return "-";
+  }
+
+  return new Date(value).toLocaleString("es-MX", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+};
+
+const formatMoney = (amount: number) => {
+  return amount.toLocaleString("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
+
+const loadHeaderMetrics = async () => {
+  if (!user.value || !activeQuinielaId.value) {
+    headerMetrics.value = [];
+    return;
+  }
+
+  const [liveRes, pendingRes, finishedRes, membersRes, nextKickoffRes] =
+    await Promise.all([
+      client
+        .from("matches")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "in_progress"),
+      client
+        .from("matches")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending"),
+      client
+        .from("matches")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "finished"),
+      client
+        .from("quiniela_members")
+        .select("user_id, total_points", { count: "exact" })
+        .eq("quiniela_id", activeQuinielaId.value)
+        .order("total_points", { ascending: false }),
+      client
+        .from("matches")
+        .select("match_time")
+        .eq("status", "pending")
+        .order("match_time", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  if (
+    liveRes.error ||
+    pendingRes.error ||
+    finishedRes.error ||
+    membersRes.error ||
+    nextKickoffRes.error
+  ) {
+    return;
+  }
+
+  const members =
+    (membersRes.data as Array<{
+      user_id: string;
+      total_points: number | null;
+    }> | null) ?? [];
+
+  const ownIndex = members.findIndex(
+    (member) => member.user_id === user.value?.id,
+  );
+  const ownRow = ownIndex >= 0 ? members[ownIndex] : null;
+  const memberCount = Number(membersRes.count ?? members.length ?? 0);
+  const liveCount = Number(liveRes.count ?? 0);
+  const pendingCount = Number(pendingRes.count ?? 0);
+  const finishedCount = Number(finishedRes.count ?? 0);
+  const ticketPrice = Number(quiniela.value?.ticket_price ?? 0);
+  const totalPot = ticketPrice * memberCount;
+
+  headerMetrics.value = [
+    { label: "En vivo", value: String(liveCount) },
+    { label: "Pendientes", value: String(pendingCount) },
+    { label: "Finalizados", value: String(finishedCount) },
+    { label: "Jugadores", value: String(memberCount) },
+    {
+      label: "Bolsa total",
+      value: formatMoney(totalPot),
+      highlight: true,
+    },
+    { label: "Mis puntos", value: String(Number(ownRow?.total_points ?? 0)) },
+    {
+      label: "Mi puesto",
+      value:
+        ownIndex >= 0 && memberCount > 0
+          ? `#${ownIndex + 1}/${memberCount}`
+          : "-",
+    },
+    {
+      label: "Prox. kickoff",
+      value: formatKickoff(
+        (nextKickoffRes.data?.match_time as string | null) ?? null,
+      ),
+    },
+  ];
+};
+
+const metricsTape = computed(() => [
+  ...headerMetrics.value,
+  ...headerMetrics.value,
+]);
 
 const availableThemes = [
   "light",
@@ -105,6 +228,11 @@ onMounted(() => {
 
   if (user.value) {
     void loadActiveQuiniela();
+    void loadHeaderMetrics();
+
+    metricsRefreshTimer = setInterval(() => {
+      void loadHeaderMetrics();
+    }, 30000);
   }
 });
 
@@ -113,9 +241,37 @@ watch(
   () => {
     if (user.value) {
       void loadActiveQuiniela();
+      void loadHeaderMetrics();
     }
   },
 );
+
+watch(
+  () => quiniela.value?.ticket_price,
+  () => {
+    if (user.value) {
+      void loadHeaderMetrics();
+    }
+  },
+);
+
+watch(
+  () => user.value?.id,
+  () => {
+    if (user.value) {
+      void loadHeaderMetrics();
+      return;
+    }
+
+    headerMetrics.value = [];
+  },
+);
+
+onBeforeUnmount(() => {
+  if (metricsRefreshTimer) {
+    clearInterval(metricsRefreshTimer);
+  }
+});
 </script>
 
 <template>
@@ -203,6 +359,24 @@ watch(
           >
             Seleccionar o unirme a una quiniela
           </NuxtLink>
+        </div>
+      </div>
+
+      <div v-if="user && metricsTape.length" class="odds-strip">
+        <div class="odds-track">
+          <span
+            v-for="(item, index) in metricsTape"
+            :key="`${item.label}-${index}`"
+            class="odds-chip"
+            :class="item.highlight && 'odds-chip-pot'"
+          >
+            <span class="odds-market">{{ item.label }}</span>
+            <strong
+              class="odds-price"
+              :class="item.highlight && 'odds-price-pot'"
+              >{{ item.value }}</strong
+            >
+          </span>
         </div>
       </div>
     </header>

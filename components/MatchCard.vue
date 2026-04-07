@@ -33,6 +33,8 @@ const loading = ref(false);
 const saveError = ref<string | null>(null);
 const savedOnce = ref(false);
 const pointsEarned = ref<number | null>(null);
+const showSaveCelebration = ref(false);
+let celebrationTimer: ReturnType<typeof setTimeout> | null = null;
 
 const canEdit = computed(() => {
   if (!props.editable || !user.value) {
@@ -159,6 +161,17 @@ const predictionSummary = computed(() => {
 
   return `Empate (${home}-${away})`;
 });
+
+const triggerSaveCelebration = () => {
+  if (celebrationTimer) {
+    clearTimeout(celebrationTimer);
+  }
+
+  showSaveCelebration.value = true;
+  celebrationTimer = setTimeout(() => {
+    showSaveCelebration.value = false;
+  }, 2200);
+};
 
 const loadPrediction = async () => {
   if (!user.value || !activeQuinielaId.value) {
@@ -333,29 +346,41 @@ const savePrediction = async () => {
   loading.value = false;
 
   if (error) {
+    showSaveCelebration.value = false;
     saveError.value = error.message;
     return;
   }
 
   savedOnce.value = true;
   pointsEarned.value = data?.points_earned ?? null;
+  triggerSaveCelebration();
   emit("saved", { matchId: props.match.id, points: pointsEarned.value });
 };
 
 watch(
   () => [props.match.id, user.value?.id, activeQuinielaId.value],
   () => {
+    showSaveCelebration.value = false;
     savedOnce.value = false;
     saveError.value = null;
     void loadPrediction();
   },
   { immediate: true },
 );
+
+onBeforeUnmount(() => {
+  if (celebrationTimer) {
+    clearTimeout(celebrationTimer);
+  }
+});
 </script>
 
 <template>
   <article
-    class="pitch-panel card sweep-in overflow-hidden rounded-2xl border border-base-300 bg-base-200/70 p-4 md:p-5"
+    :class="[
+      'pitch-panel card sweep-in overflow-hidden rounded-2xl border border-base-300 bg-base-200/70 p-4 md:p-5',
+      showSaveCelebration && 'bet-card-hit',
+    ]"
   >
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-3">
@@ -484,12 +509,19 @@ watch(
 
         <button
           :disabled="!canEdit || loading"
-          class="btn btn-primary btn-sm"
+          class="btn btn-primary btn-sm btn-bet-glow"
           @click="savePrediction"
         >
           {{ loading ? "Guardando..." : "Guardar prediccion" }}
         </button>
       </div>
+
+      <WowSaveBurst
+        :visible="showSaveCelebration"
+        class="mt-3"
+        title="Ticket confirmado"
+        subtitle="Tu pick ya esta en juego"
+      />
 
       <p v-if="savedOnce" class="text-success mt-3 text-sm">
         Prediccion guardada.

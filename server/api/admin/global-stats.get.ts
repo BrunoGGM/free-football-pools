@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
 
   const { data: quinielas, error: quinielasError } = await supabase
     .from('quinielas')
-    .select('id, name, description, access_code, start_date, end_date, champion_team, admin_id, created_at')
+    .select('id, name, description, access_code, start_date, end_date, champion_team, admin_id, ticket_price, created_at')
     .order('created_at', { ascending: false })
     .limit(200)
 
@@ -70,6 +70,7 @@ export default defineEventHandler(async (event) => {
       end_date: q.end_date,
       champion_team: q.champion_team,
       admin_id: q.admin_id,
+      ticket_price: Number(q.ticket_price || 0),
       admin_username: adminMap.get(q.admin_id as string) || 'N/A',
       created_at: q.created_at,
     })),

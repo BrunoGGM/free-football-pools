@@ -21,6 +21,19 @@ const loading = ref(false);
 const errorMessage = ref<string | null>(null);
 const championInput = ref("");
 const savingChampion = ref(false);
+const championSaved = ref(false);
+let championSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+const triggerChampionCelebration = () => {
+  if (championSaveTimer) {
+    clearTimeout(championSaveTimer);
+  }
+
+  championSaved.value = true;
+  championSaveTimer = setTimeout(() => {
+    championSaved.value = false;
+  }, 2300);
+};
 
 const loadRanking = async () => {
   if (!activeQuinielaId.value) {
@@ -110,15 +123,23 @@ const saveChampion = async () => {
   savingChampion.value = false;
 
   if (error) {
+    championSaved.value = false;
     errorMessage.value = error.message;
     return;
   }
 
+  triggerChampionCelebration();
   await loadRanking();
 };
 
 onMounted(() => {
   void loadRanking();
+});
+
+onBeforeUnmount(() => {
+  if (championSaveTimer) {
+    clearTimeout(championSaveTimer);
+  }
 });
 </script>
 
@@ -160,12 +181,19 @@ onMounted(() => {
         />
         <button
           :disabled="savingChampion"
-          class="btn btn-primary"
+          class="btn btn-primary btn-bet-glow"
           @click="saveChampion"
         >
           {{ savingChampion ? "Guardando..." : "Guardar campeon" }}
         </button>
       </div>
+
+      <WowSaveBurst
+        :visible="championSaved"
+        class="mt-3"
+        title="Campeon bloqueado"
+        subtitle="Bonus potencial de 10 puntos"
+      />
     </article>
 
     <article v-if="loading" class="alert rounded-2xl text-sm">

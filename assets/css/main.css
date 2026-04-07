@@ -37,6 +37,42 @@ body {
       var(--color-base-200) 100%
     );
   background-attachment: fixed;
+  overflow-x: hidden;
+}
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+body::before {
+  background:
+    repeating-linear-gradient(
+      115deg,
+      color-mix(in oklab, var(--color-primary) 5%, transparent) 0,
+      color-mix(in oklab, var(--color-primary) 5%, transparent) 2px,
+      transparent 2px,
+      transparent 28px
+    ),
+    linear-gradient(
+      0deg,
+      color-mix(in oklab, #000 8%, transparent),
+      transparent 35%
+    );
+  opacity: 0.35;
+}
+
+body::after {
+  background: radial-gradient(
+    circle at var(--spot-x, 10%) var(--spot-y, 10%),
+    color-mix(in oklab, var(--color-warning) 18%, transparent),
+    transparent 32%
+  );
+  animation: floating-spot 9s ease-in-out infinite alternate;
 }
 
 h1,
@@ -58,6 +94,19 @@ h3,
   box-shadow:
     inset 0 1px 0 color-mix(in oklab, #fff 32%, transparent),
     0 20px 40px color-mix(in oklab, #000 20%, transparent);
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+.pitch-panel:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklab, var(--color-primary) 42%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, #fff 32%, transparent),
+    0 26px 44px color-mix(in oklab, #000 25%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--color-warning) 18%, transparent);
 }
 
 .neon-border {
@@ -126,5 +175,280 @@ h3,
   100% {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+.bet-card-hit {
+  animation: card-hit 700ms ease-out;
+}
+
+.btn-bet-glow {
+  box-shadow:
+    0 0 0 0 color-mix(in oklab, var(--color-warning) 42%, transparent),
+    0 10px 18px color-mix(in oklab, var(--color-primary) 26%, transparent);
+  animation: button-bet-pulse 1.7s ease-out infinite;
+}
+
+.wow-save-burst {
+  position: relative;
+  overflow: hidden;
+}
+
+.wow-save-burst::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    color-mix(in oklab, #fff 52%, transparent) 48%,
+    transparent 66%
+  );
+  transform: translateX(-120%);
+  animation: shine-pass 1200ms ease-out;
+}
+
+.wow-save-icon {
+  flex: 0 0 auto;
+}
+
+.wow-save-ring {
+  stroke: color-mix(in oklab, var(--color-success) 85%, #fff);
+  stroke-width: 2.5;
+  fill: color-mix(in oklab, var(--color-success) 16%, transparent);
+  stroke-dasharray: 120;
+  stroke-dashoffset: 120;
+  animation: ring-draw 380ms ease-out forwards;
+}
+
+.wow-save-check {
+  stroke: color-mix(in oklab, var(--color-success) 95%, #fff);
+  stroke-width: 3;
+  stroke-dasharray: 32;
+  stroke-dashoffset: 32;
+  animation: check-draw 260ms 150ms ease-out forwards;
+}
+
+.wow-save-ray {
+  stroke: color-mix(in oklab, var(--color-warning) 80%, #fff);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  opacity: 0;
+  animation: ray-pop 380ms ease-out forwards;
+}
+
+.wow-save-ray.delay-1 {
+  animation-delay: 120ms;
+}
+
+.wow-save-ray.delay-2 {
+  animation-delay: 190ms;
+}
+
+.wow-save-ray.delay-3 {
+  animation-delay: 240ms;
+}
+
+.wow-save-ray.delay-4 {
+  animation-delay: 300ms;
+}
+
+.wow-burst-enter-active,
+.wow-burst-leave-active {
+  transition: all 230ms ease;
+}
+
+.wow-burst-enter-from,
+.wow-burst-leave-to {
+  opacity: 0;
+  transform: translateY(5px) scale(0.98);
+}
+
+.odds-strip {
+  position: relative;
+  overflow: hidden;
+  border-top: 1px solid
+    color-mix(in oklab, var(--color-primary) 28%, transparent);
+  border-bottom: 1px solid
+    color-mix(in oklab, var(--color-primary) 28%, transparent);
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-base-300) 80%, transparent),
+    color-mix(in oklab, var(--color-base-200) 75%, transparent)
+  );
+}
+
+.odds-track {
+  display: flex;
+  gap: 2rem;
+  width: max-content;
+  padding: 0.5rem 0;
+  white-space: nowrap;
+  animation: odds-scroll 22s linear infinite;
+}
+
+.odds-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--color-warning) 35%, transparent);
+  padding: 0.25rem 0.65rem;
+  background: color-mix(in oklab, var(--color-warning) 12%, transparent);
+}
+
+.odds-market {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--color-base-content) 70%, transparent);
+}
+
+.odds-price {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--color-warning);
+}
+
+.odds-chip-pot {
+  border-color: color-mix(in oklab, var(--color-success) 48%, transparent);
+  background: linear-gradient(
+    120deg,
+    color-mix(in oklab, var(--color-success) 22%, transparent),
+    color-mix(in oklab, var(--color-warning) 22%, transparent)
+  );
+  box-shadow:
+    0 0 0 0 color-mix(in oklab, var(--color-success) 40%, transparent),
+    0 0 16px color-mix(in oklab, var(--color-success) 22%, transparent);
+  animation: pot-glow 1.8s ease-in-out infinite;
+}
+
+.odds-price-pot {
+  color: color-mix(in oklab, var(--color-success) 88%, #fff);
+  text-shadow: 0 0 10px
+    color-mix(in oklab, var(--color-success) 40%, transparent);
+}
+
+@keyframes floating-spot {
+  0% {
+    --spot-x: 12%;
+    --spot-y: 8%;
+  }
+  100% {
+    --spot-x: 84%;
+    --spot-y: 22%;
+  }
+}
+
+@keyframes card-hit {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  35% {
+    transform: translateY(-4px) scale(1.01);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes button-bet-pulse {
+  0% {
+    box-shadow:
+      0 0 0 0 color-mix(in oklab, var(--color-warning) 42%, transparent),
+      0 10px 18px color-mix(in oklab, var(--color-primary) 26%, transparent);
+  }
+  70% {
+    box-shadow:
+      0 0 0 9px color-mix(in oklab, var(--color-warning) 0%, transparent),
+      0 10px 18px color-mix(in oklab, var(--color-primary) 30%, transparent);
+  }
+  100% {
+    box-shadow:
+      0 0 0 0 color-mix(in oklab, var(--color-warning) 0%, transparent),
+      0 10px 18px color-mix(in oklab, var(--color-primary) 26%, transparent);
+  }
+}
+
+@keyframes shine-pass {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes ring-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes ray-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+}
+
+@keyframes odds-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes pot-glow {
+  0% {
+    box-shadow:
+      0 0 0 0 color-mix(in oklab, var(--color-success) 38%, transparent),
+      0 0 16px color-mix(in oklab, var(--color-success) 22%, transparent);
+  }
+  70% {
+    box-shadow:
+      0 0 0 8px color-mix(in oklab, var(--color-success) 0%, transparent),
+      0 0 22px color-mix(in oklab, var(--color-success) 28%, transparent);
+  }
+  100% {
+    box-shadow:
+      0 0 0 0 color-mix(in oklab, var(--color-success) 0%, transparent),
+      0 0 16px color-mix(in oklab, var(--color-success) 22%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-signal,
+  .sweep-in,
+  .btn-bet-glow,
+  .odds-track,
+  .odds-chip-pot,
+  .wow-save-burst::after,
+  .wow-save-ring,
+  .wow-save-check,
+  .wow-save-ray,
+  body::after {
+    animation: none !important;
+  }
+
+  .wow-burst-enter-active,
+  .wow-burst-leave-active,
+  .pitch-panel {
+    transition: none !important;
   }
 }
