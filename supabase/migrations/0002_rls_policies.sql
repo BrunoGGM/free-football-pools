@@ -165,7 +165,10 @@ create policy "Users can read own predictions"
 on public.predictions
 for select
 to authenticated
-using (auth.uid() = user_id);
+using (
+  auth.uid() = user_id
+  and public.is_member_of_quiniela(quiniela_id, auth.uid())
+);
 
 drop policy if exists "Users can create predictions before kickoff" on public.predictions;
 create policy "Users can create predictions before kickoff"
@@ -174,6 +177,7 @@ for insert
 to authenticated
 with check (
   auth.uid() = user_id
+  and public.is_member_of_quiniela(quiniela_id, auth.uid())
   and exists (
     select 1
     from public.matches m
@@ -190,6 +194,7 @@ for update
 to authenticated
 using (
   auth.uid() = user_id
+  and public.is_member_of_quiniela(quiniela_id, auth.uid())
   and exists (
     select 1
     from public.matches m
@@ -200,6 +205,7 @@ using (
 )
 with check (
   auth.uid() = user_id
+  and public.is_member_of_quiniela(quiniela_id, auth.uid())
   and exists (
     select 1
     from public.matches m
@@ -216,6 +222,7 @@ for delete
 to authenticated
 using (
   auth.uid() = user_id
+  and public.is_member_of_quiniela(quiniela_id, auth.uid())
   and exists (
     select 1
     from public.matches m

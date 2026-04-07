@@ -50,7 +50,8 @@ begin
   select coalesce(sum(p.points_earned), 0)
   into v_points
   from public.predictions p
-  where p.user_id = p_user_id;
+  where p.user_id = p_user_id
+    and p.quiniela_id = p_quiniela_id;
 
   select
     case

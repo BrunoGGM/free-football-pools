@@ -41,9 +41,14 @@ interface RawPredictionRow {
 const user = useSupabaseUser();
 const client = useSupabaseClient<any>();
 const { quiniela, activeQuinielaId, loadActiveQuiniela } = useActiveQuiniela();
+const predictionsByQuinielaSupported = useState<boolean | null>(
+  "predictions-by-quiniela-supported",
+  () => null,
+);
 
 const loading = ref(false);
 const errorMessage = ref<string | null>(null);
+const compatibilityMessage = ref<string | null>(null);
 const memberTotalPoints = ref(0);
 const predictedChampion = ref<string | null>(null);
 const predictions = ref<PredictionRow[]>([]);
@@ -72,6 +77,16 @@ const kickoffText = (value: string) =>
 const teamFlag = (code: string | null, team: string) => {
   const resolvedCode = code || resolveTeamCode(team);
   return teamFlagEmojiFromCode(resolvedCode);
+};
+
+const isMissingQuinielaColumnError = (error: any) => {
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    error?.code === "42703" ||
+    message.includes("predictions.quiniela_id") ||
+    (message.includes("column") && message.includes("quiniela_id"))
+  );
 };
 
 type MatchOutcome = "home" | "away" | "draw";
@@ -202,22 +217,55 @@ const loadMyQuinielaView = async () => {
 
   loading.value = true;
   errorMessage.value = null;
+  compatibilityMessage.value = null;
 
-  const [memberResult, predictionsResult] = await Promise.all([
-    client
-      .from("quiniela_members")
-      .select("total_points, predicted_champion")
-      .eq("user_id", user.value.id)
-      .eq("quiniela_id", activeQuinielaId.value)
-      .maybeSingle(),
-    client
-      .from("predictions")
-      .select(
-        "id, home_score, away_score, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url)",
-      )
-      .eq("user_id", user.value.id)
-      .order("match_time", { ascending: true, referencedTable: "matches" }),
-  ]);
+  const memberPromise = client
+    .from("quiniela_members")
+    .select("total_points, predicted_champion")
+    .eq("user_id", user.value.id)
+    .eq("quiniela_id", activeQuinielaId.value)
+    .maybeSingle();
+
+  const scopedPredictionsPromise = client
+    .from("predictions")
+    .select(
+      "id, home_score, away_score, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url)",
+    )
+    .eq("user_id", user.value.id)
+    .eq("quiniela_id", activeQuinielaId.value)
+    .order("match_time", { ascending: true, referencedTable: "matches" });
+
+  const legacyPredictionsPromise = client
+    .from("predictions")
+    .select(
+      "id, home_score, away_score, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url)",
+    )
+    .eq("user_id", user.value.id)
+    .order("match_time", { ascending: true, referencedTable: "matches" });
+
+  const memberResult = await memberPromise;
+  let predictionsResult: any;
+
+  if (predictionsByQuinielaSupported.value === false) {
+    predictionsResult = await legacyPredictionsPromise;
+    compatibilityMessage.value =
+      "Tu base de datos aun no tiene soporte por quiniela en predicciones. Aplica la migracion 0012 para separar completamente por quiniela.";
+  } else {
+    const scopedResult = await scopedPredictionsPromise;
+
+    if (
+      scopedResult.error &&
+      isMissingQuinielaColumnError(scopedResult.error)
+    ) {
+      predictionsByQuinielaSupported.value = false;
+      predictionsResult = await legacyPredictionsPromise;
+      compatibilityMessage.value =
+        "Tu base de datos aun no tiene soporte por quiniela en predicciones. Aplica la migracion 0012 para separar completamente por quiniela.";
+    } else {
+      predictionsByQuinielaSupported.value = true;
+      predictionsResult = scopedResult;
+    }
+  }
 
   loading.value = false;
 
@@ -326,6 +374,13 @@ watch(
           </p>
         </div>
       </div>
+
+      <p
+        v-if="compatibilityMessage"
+        class="mt-4 rounded-xl border border-amber-300/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
+      >
+        {{ compatibilityMessage }}
+      </p>
     </article>
 
     <article

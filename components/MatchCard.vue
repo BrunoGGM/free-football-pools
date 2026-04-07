@@ -18,6 +18,11 @@ const emit = defineEmits<{
 
 const client = useSupabaseClient<any>();
 const user = useSupabaseUser();
+const activeQuinielaId = useCookie<string | null>("active_quiniela_id");
+const predictionsByQuinielaSupported = useState<boolean | null>(
+  "predictions-by-quiniela-supported",
+  () => null,
+);
 
 type PredictionOutcome = "home" | "draw" | "away";
 
@@ -88,6 +93,16 @@ const awayLogoUrl = computed(() => props.match.away_team_logo_url || null);
 
 const isLive = computed(() => props.match.status === "in_progress");
 
+const isMissingQuinielaColumnError = (error: any) => {
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    error?.code === "42703" ||
+    message.includes("predictions.quiniela_id") ||
+    (message.includes("column") && message.includes("quiniela_id"))
+  );
+};
+
 const outcomeFromScores = (home: number, away: number): PredictionOutcome => {
   if (home > away) {
     return "home";
@@ -146,7 +161,7 @@ const predictionSummary = computed(() => {
 });
 
 const loadPrediction = async () => {
-  if (!user.value) {
+  if (!user.value || !activeQuinielaId.value) {
     homePrediction.value = "";
     awayPrediction.value = "";
     selectedOutcome.value = null;
@@ -154,16 +169,57 @@ const loadPrediction = async () => {
     return;
   }
 
-  const { data, error } = await client
-    .from("predictions")
-    .select("home_score, away_score, points_earned")
-    .eq("user_id", user.value.id)
-    .eq("match_id", props.match.id)
-    .maybeSingle();
+  let data: any = null;
 
-  if (error) {
-    saveError.value = error.message;
-    return;
+  if (predictionsByQuinielaSupported.value === false) {
+    const legacyResult = await client
+      .from("predictions")
+      .select("home_score, away_score, points_earned")
+      .eq("user_id", user.value.id)
+      .eq("match_id", props.match.id)
+      .maybeSingle();
+
+    if (legacyResult.error) {
+      saveError.value = legacyResult.error.message;
+      return;
+    }
+
+    data = legacyResult.data;
+  } else {
+    const scopedResult = await client
+      .from("predictions")
+      .select("home_score, away_score, points_earned")
+      .eq("user_id", user.value.id)
+      .eq("quiniela_id", activeQuinielaId.value)
+      .eq("match_id", props.match.id)
+      .maybeSingle();
+
+    if (
+      scopedResult.error &&
+      isMissingQuinielaColumnError(scopedResult.error)
+    ) {
+      predictionsByQuinielaSupported.value = false;
+
+      const legacyResult = await client
+        .from("predictions")
+        .select("home_score, away_score, points_earned")
+        .eq("user_id", user.value.id)
+        .eq("match_id", props.match.id)
+        .maybeSingle();
+
+      if (legacyResult.error) {
+        saveError.value = legacyResult.error.message;
+        return;
+      }
+
+      data = legacyResult.data;
+    } else if (scopedResult.error) {
+      saveError.value = scopedResult.error.message;
+      return;
+    } else {
+      predictionsByQuinielaSupported.value = true;
+      data = scopedResult.data;
+    }
   }
 
   homePrediction.value = data?.home_score?.toString() ?? "";
@@ -180,7 +236,7 @@ const loadPrediction = async () => {
 };
 
 const savePrediction = async () => {
-  if (!user.value || !canEdit.value) {
+  if (!user.value || !canEdit.value || !activeQuinielaId.value) {
     return;
   }
 
@@ -209,19 +265,70 @@ const savePrediction = async () => {
   loading.value = true;
   saveError.value = null;
 
-  const { data, error } = await client
-    .from("predictions")
-    .upsert(
-      {
-        user_id: user.value.id,
-        match_id: props.match.id,
-        home_score: home,
-        away_score: away,
-      },
-      { onConflict: "user_id,match_id" },
-    )
-    .select("points_earned")
-    .maybeSingle();
+  let data: any = null;
+  let error: any = null;
+
+  if (predictionsByQuinielaSupported.value === false) {
+    const legacyResult = await client
+      .from("predictions")
+      .upsert(
+        {
+          user_id: user.value.id,
+          match_id: props.match.id,
+          home_score: home,
+          away_score: away,
+        },
+        { onConflict: "user_id,match_id" },
+      )
+      .select("points_earned")
+      .maybeSingle();
+
+    data = legacyResult.data;
+    error = legacyResult.error;
+  } else {
+    const scopedResult = await client
+      .from("predictions")
+      .upsert(
+        {
+          user_id: user.value.id,
+          quiniela_id: activeQuinielaId.value,
+          match_id: props.match.id,
+          home_score: home,
+          away_score: away,
+        },
+        { onConflict: "user_id,quiniela_id,match_id" },
+      )
+      .select("points_earned")
+      .maybeSingle();
+
+    if (
+      scopedResult.error &&
+      isMissingQuinielaColumnError(scopedResult.error)
+    ) {
+      predictionsByQuinielaSupported.value = false;
+
+      const legacyResult = await client
+        .from("predictions")
+        .upsert(
+          {
+            user_id: user.value.id,
+            match_id: props.match.id,
+            home_score: home,
+            away_score: away,
+          },
+          { onConflict: "user_id,match_id" },
+        )
+        .select("points_earned")
+        .maybeSingle();
+
+      data = legacyResult.data;
+      error = legacyResult.error;
+    } else {
+      predictionsByQuinielaSupported.value = true;
+      data = scopedResult.data;
+      error = scopedResult.error;
+    }
+  }
 
   loading.value = false;
 
@@ -236,7 +343,7 @@ const savePrediction = async () => {
 };
 
 watch(
-  () => [props.match.id, user.value?.id],
+  () => [props.match.id, user.value?.id, activeQuinielaId.value],
   () => {
     savedOnce.value = false;
     saveError.value = null;

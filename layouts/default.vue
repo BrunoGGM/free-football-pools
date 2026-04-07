@@ -2,7 +2,8 @@
 const route = useRoute();
 const user = useSupabaseUser();
 const { signOut, loading } = useSupabaseAuth();
-const { clearActiveQuiniela } = useActiveQuiniela();
+const { clearActiveQuiniela, quiniela, loadActiveQuiniela, activeQuinielaId } =
+  useActiveQuiniela();
 
 const links = [
   { to: "/dashboard", label: "Dashboard" },
@@ -30,6 +31,21 @@ const logout = async () => {
   clearActiveQuiniela();
   await navigateTo("/");
 };
+
+onMounted(() => {
+  if (user.value) {
+    void loadActiveQuiniela();
+  }
+});
+
+watch(
+  () => activeQuinielaId.value,
+  () => {
+    if (user.value) {
+      void loadActiveQuiniela();
+    }
+  },
+);
 </script>
 
 <template>
@@ -88,6 +104,34 @@ const logout = async () => {
           >
             {{ loading ? "Saliendo..." : "Salir" }}
           </button>
+        </div>
+      </div>
+
+      <div v-if="user" class="mx-auto w-full max-w-7xl px-4 pb-3 sm:px-6">
+        <div
+          v-if="quiniela"
+          class="rounded-2xl border border-emerald-300/35 bg-emerald-500/10 px-4 py-3"
+        >
+          <p class="text-xs uppercase tracking-[0.14em] text-emerald-200">
+            Quiniela activa
+          </p>
+          <p class="mt-1 text-lg font-semibold text-white sm:text-xl">
+            {{ quiniela.name }}
+          </p>
+        </div>
+        <div
+          v-else
+          class="rounded-2xl border border-amber-300/35 bg-amber-500/10 px-4 py-3"
+        >
+          <p class="text-xs uppercase tracking-[0.14em] text-amber-200">
+            Sin quiniela activa
+          </p>
+          <NuxtLink
+            to="/ingresar"
+            class="mt-1 inline-flex text-sm font-semibold text-amber-100 underline underline-offset-4"
+          >
+            Seleccionar o unirme a una quiniela
+          </NuxtLink>
         </div>
       </div>
     </header>

@@ -89,13 +89,14 @@ create table if not exists public.matches (
 create table if not exists public.predictions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
+  quiniela_id uuid not null references public.quinielas(id) on delete cascade,
   match_id uuid not null references public.matches(id) on delete cascade,
   home_score integer not null,
   away_score integer not null,
   points_earned integer not null default 0,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
-  constraint predictions_unique_user_match unique (user_id, match_id),
+  constraint predictions_unique_user_match_quiniela unique (user_id, quiniela_id, match_id),
   constraint predictions_scores_non_negative check (home_score >= 0 and away_score >= 0),
   constraint predictions_points_range check (points_earned between 0 and 3)
 );
@@ -108,6 +109,7 @@ create index if not exists idx_matches_status on public.matches(status);
 create index if not exists idx_matches_stage on public.matches(stage);
 create index if not exists idx_predictions_match_id on public.predictions(match_id);
 create index if not exists idx_predictions_user_id on public.predictions(user_id);
+create index if not exists idx_predictions_quiniela_id on public.predictions(quiniela_id);
 
 create or replace function public.set_updated_at()
 returns trigger
