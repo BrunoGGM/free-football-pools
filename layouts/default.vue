@@ -15,12 +15,12 @@ const {
 const { lastEvent } = useGameUx();
 
 const links = [
-  { to: "/dashboard", label: "Dashboard" },
   { to: "/dashboard/mi-quiniela", label: "Mi quiniela" },
   { to: "/dashboard/grupos", label: "Grupos" },
   { to: "/dashboard/eliminatorias", label: "Eliminatorias" },
   { to: "/dashboard/posiciones", label: "Posiciones" },
   { to: "/dashboard/estadisticas", label: "Estadisticas" },
+  { to: "/dashboard", label: "Dashboard" },
   { to: "/admin", label: "Admin", requiresAdmin: true },
 ];
 
