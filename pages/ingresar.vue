@@ -47,7 +47,7 @@ const submit = async () => {
 
   const { data: quiniela, error: quinielaError } = await client
     .from("quinielas")
-    .select("id, name")
+    .select("id, name, has_test_data")
     .eq("access_code", code)
     .maybeSingle();
 
@@ -55,6 +55,13 @@ const submit = async () => {
     loading.value = false;
     errorMessage.value =
       quinielaError?.message ?? "No se encontro una quiniela con ese codigo.";
+    return;
+  }
+
+  if (Boolean(quiniela.has_test_data)) {
+    loading.value = false;
+    errorMessage.value =
+      "Esta quiniela esta en modo pruebas y se encuentra bloqueada para usuarios reales.";
     return;
   }
 

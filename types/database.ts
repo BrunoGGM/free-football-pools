@@ -170,6 +170,7 @@ export type Database = {
           created_at: string
           home_score: number
           id: string
+          is_test_record: boolean
           match_id: string
           points_earned: number
           quiniela_id: string
@@ -181,6 +182,7 @@ export type Database = {
           created_at?: string
           home_score: number
           id?: string
+          is_test_record?: boolean
           match_id: string
           points_earned?: number
           quiniela_id: string
@@ -192,6 +194,7 @@ export type Database = {
           created_at?: string
           home_score?: number
           id?: string
+          is_test_record?: boolean
           match_id?: string
           points_earned?: number
           quiniela_id?: string
@@ -228,6 +231,7 @@ export type Database = {
           created_at: string
           id: string
           is_global_admin: boolean
+          is_test_user: boolean
           updated_at: string
           username: string
         }
@@ -236,6 +240,7 @@ export type Database = {
           created_at?: string
           id: string
           is_global_admin?: boolean
+          is_test_user?: boolean
           updated_at?: string
           username: string
         }
@@ -244,6 +249,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_global_admin?: boolean
+          is_test_user?: boolean
           updated_at?: string
           username?: string
         }
@@ -344,6 +350,7 @@ export type Database = {
         Row: {
           champion_predicted_at: string | null
           created_at: string
+          is_test_record: boolean
           predicted_champion: string | null
           quiniela_id: string
           total_points: number
@@ -353,6 +360,7 @@ export type Database = {
         Insert: {
           champion_predicted_at?: string | null
           created_at?: string
+          is_test_record?: boolean
           predicted_champion?: string | null
           quiniela_id: string
           total_points?: number
@@ -362,6 +370,7 @@ export type Database = {
         Update: {
           champion_predicted_at?: string | null
           created_at?: string
+          is_test_record?: boolean
           predicted_champion?: string | null
           quiniela_id?: string
           total_points?: number
@@ -533,6 +542,7 @@ export type Database = {
           created_at: string
           description: string | null
           end_date: string | null
+          has_test_data: boolean
           id: string
           name: string
           start_date: string
@@ -546,6 +556,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           end_date?: string | null
+          has_test_data?: boolean
           id?: string
           name: string
           start_date: string
@@ -559,6 +570,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           end_date?: string | null
+          has_test_data?: boolean
           id?: string
           name?: string
           start_date?: string
@@ -771,6 +783,10 @@ export type Database = {
       }
       refresh_member_gamification: {
         Args: { p_quiniela_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      refresh_quiniela_test_lock: {
+        Args: { p_quiniela_id: string }
         Returns: undefined
       }
       refresh_weekly_ranking_for_match_and_quiniela: {

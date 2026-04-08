@@ -19,6 +19,7 @@ defineProps<{
     name: string;
     description: string | null;
     access_code: string;
+    has_test_data: boolean;
     ticket_price: number;
     start_date: string;
     admin_id: string;
@@ -63,6 +64,26 @@ defineProps<{
   applyingManualPoints: boolean;
   manualPointsMessage: string | null;
   manualPointsError: string | null;
+  simulationForm: {
+    quiniela_id: string;
+    segment:
+      | "all"
+      | "group_stage"
+      | "round_32"
+      | "round_16"
+      | "quarter_final"
+      | "semi_final"
+      | "third_place"
+      | "final";
+    simulate_scores: boolean;
+    simulate_population: boolean;
+    test_users_count: number;
+    reset_test_data: boolean;
+  };
+  runningSimulation: boolean;
+  clearingSimulationData: boolean;
+  simulationMessage: string | null;
+  simulationError: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -72,6 +93,8 @@ const emit = defineEmits<{
   editQuiniela: [item: any];
   deleteQuiniela: [id: string];
   applyManualPoints: [];
+  runSimulation: [];
+  clearSimulationData: [];
 }>();
 </script>
 
@@ -551,6 +574,147 @@ const emit = defineEmits<{
         </p>
       </div>
 
+      <div
+        v-if="isGlobalAdmin"
+        class="card mt-6 rounded-xl border border-warning/40 bg-base-100/70 p-4"
+      >
+        <h3 class="text-warning text-lg">Simulacion de pruebas</h3>
+        <p class="text-base-content/70 mt-1 text-sm">
+          Ejecuta poblacion y marcadores aleatorios por segmento para validar
+          ranking, estadisticas y flujo de quiniela.
+        </p>
+
+        <div class="mt-4 grid gap-3 md:grid-cols-2">
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Quiniela destino
+            </label>
+            <select
+              v-model="simulationForm.quiniela_id"
+              class="select select-bordered w-full"
+            >
+              <option value="">Selecciona quiniela</option>
+              <option
+                v-for="item in managedQuinielas"
+                :key="`sim-${item.id}`"
+                :value="item.id"
+              >
+                {{ item.name }} ({{ item.has_test_data ? "LOCK" : "OK" }})
+              </option>
+            </select>
+          </div>
+
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Segmento
+            </label>
+            <select
+              v-model="simulationForm.segment"
+              class="select select-bordered w-full"
+            >
+              <option value="all">Todo el torneo</option>
+              <option value="group_stage">Fase de grupos</option>
+              <option value="round_32">Dieciseisavos</option>
+              <option value="round_16">Octavos</option>
+              <option value="quarter_final">Cuartos</option>
+              <option value="semi_final">Semifinal</option>
+              <option value="third_place">Tercer lugar</option>
+              <option value="final">Final</option>
+            </select>
+          </div>
+
+          <div class="space-y-1 md:col-span-2">
+            <label class="label cursor-pointer justify-start gap-3">
+              <input
+                v-model="simulationForm.simulate_scores"
+                type="checkbox"
+                class="toggle toggle-warning"
+              />
+              <span class="text-base-content/70 text-sm">
+                Simular marcadores oficiales aleatorios para el segmento
+              </span>
+            </label>
+
+            <label class="label cursor-pointer justify-start gap-3">
+              <input
+                v-model="simulationForm.simulate_population"
+                type="checkbox"
+                class="toggle toggle-warning"
+              />
+              <span class="text-base-content/70 text-sm">
+                Simular alta de usuarios y predicciones aleatorias
+              </span>
+            </label>
+
+            <label class="label cursor-pointer justify-start gap-3">
+              <input
+                v-model="simulationForm.reset_test_data"
+                type="checkbox"
+                class="toggle toggle-warning"
+                :disabled="!simulationForm.simulate_population"
+              />
+              <span class="text-base-content/70 text-sm">
+                Limpiar registros de prueba previos antes de simular poblacion
+              </span>
+            </label>
+          </div>
+
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Usuarios de prueba
+            </label>
+            <input
+              v-model.number="simulationForm.test_users_count"
+              type="number"
+              min="1"
+              max="120"
+              step="1"
+              class="input input-bordered w-full"
+              :disabled="!simulationForm.simulate_population"
+            />
+          </div>
+        </div>
+
+        <p class="alert alert-warning mt-3 text-xs">
+          Si la quiniela contiene registros de prueba, queda bloqueada para
+          usuarios reales hasta limpiar datos simulados.
+        </p>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button
+            class="btn btn-warning btn-sm"
+            :disabled="runningSimulation"
+            @click="emit('runSimulation')"
+          >
+            {{ runningSimulation ? "Simulando..." : "Ejecutar simulacion" }}
+          </button>
+          <button
+            class="btn btn-outline btn-sm"
+            :disabled="clearingSimulationData"
+            @click="emit('clearSimulationData')"
+          >
+            {{
+              clearingSimulationData
+                ? "Limpiando..."
+                : "Limpiar registros de prueba"
+            }}
+          </button>
+        </div>
+
+        <p v-if="simulationMessage" class="alert alert-success mt-3 text-xs">
+          {{ simulationMessage }}
+        </p>
+        <p v-if="simulationError" class="alert alert-error mt-3 text-xs">
+          {{ simulationError }}
+        </p>
+      </div>
+
       <div class="mt-6 overflow-hidden rounded-xl border border-base-300">
         <table class="table min-w-full text-sm">
           <thead
@@ -599,6 +763,10 @@ const emit = defineEmits<{
                 <span class="block mt-1">
                   Quiniela visible:
                   {{ item.rules.allow_member_predictions_view ? "SI" : "NO" }}
+                </span>
+                <span class="block mt-1">
+                  Lock pruebas:
+                  {{ item.has_test_data ? "ACTIVO" : "INACTIVO" }}
                 </span>
               </td>
               <td class="text-base-content/70 px-4 py-3">

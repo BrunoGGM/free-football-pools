@@ -112,6 +112,48 @@ const awayLogoUrl = computed(() => props.match.away_team_logo_url || null);
 
 const isLive = computed(() => props.match.status === "in_progress");
 
+const KNOCKOUT_STAGES = new Set([
+  "round_32",
+  "round_16",
+  "quarter_final",
+  "semi_final",
+  "third_place",
+  "final",
+]);
+
+const qualifiedTeamLabel = computed(() => {
+  if (!KNOCKOUT_STAGES.has(props.match.stage)) {
+    return null;
+  }
+
+  if (
+    props.match.status !== "finished" ||
+    props.match.home_score === null ||
+    props.match.away_score === null
+  ) {
+    return null;
+  }
+
+  if (props.match.home_score === props.match.away_score) {
+    return "Sin clasificado (empate)";
+  }
+
+  const winner =
+    props.match.home_score > props.match.away_score
+      ? props.match.home_team
+      : props.match.away_team;
+
+  if (props.match.stage === "final") {
+    return `Campeon: ${winner}`;
+  }
+
+  if (props.match.stage === "third_place") {
+    return `Tercer lugar: ${winner}`;
+  }
+
+  return `Clasifica: ${winner}`;
+});
+
 const isMissingQuinielaColumnError = (error: any) => {
   const message = String(error?.message || "").toLowerCase();
 
@@ -459,6 +501,17 @@ onBeforeUnmount(() => {
         <p class="text-primary mt-2 text-xl font-bold">
           {{ props.match.home_score ?? "-" }} :
           {{ props.match.away_score ?? "-" }}
+        </p>
+        <p
+          v-if="qualifiedTeamLabel"
+          class="mt-1 text-xs font-semibold"
+          :class="
+            qualifiedTeamLabel.includes('Sin clasificado')
+              ? 'text-warning'
+              : 'text-success'
+          "
+        >
+          {{ qualifiedTeamLabel }}
         </p>
       </div>
 

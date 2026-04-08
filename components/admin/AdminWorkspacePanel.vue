@@ -82,6 +82,7 @@ interface ManagedQuiniela {
   name: string;
   description: string | null;
   access_code: string;
+  has_test_data: boolean;
   ticket_price: number;
   start_date: string;
   end_date: string | null;
@@ -129,6 +130,15 @@ interface TeamProfileItem {
 
 type AdminSectionKey = "overview" | "quinielas" | "teams" | "ingestion";
 type MatchStatus = "pending" | "in_progress" | "finished";
+type SimulationSegment =
+  | "all"
+  | "group_stage"
+  | "round_32"
+  | "round_16"
+  | "quarter_final"
+  | "semi_final"
+  | "third_place"
+  | "final";
 
 const client = useSupabaseClient<any>();
 const { quiniela, loadActiveQuiniela } = useActiveQuiniela();
@@ -245,6 +255,19 @@ const manualPointsForm = reactive({
   reason: "",
 });
 
+const simulationForm = reactive({
+  quiniela_id: "",
+  segment: "all" as SimulationSegment,
+  simulate_scores: true,
+  simulate_population: false,
+  test_users_count: 12,
+  reset_test_data: true,
+});
+const runningSimulation = ref(false);
+const clearingSimulationData = ref(false);
+const simulationMessage = ref<string | null>(null);
+const simulationError = ref<string | null>(null);
+
 const teamProfiles = ref<TeamProfileItem[]>([]);
 const teamsTotal = ref(0);
 const teamsLoading = ref(false);
@@ -267,6 +290,16 @@ const teamForm = reactive({
 
 const isGlobalAdmin = computed(() => Boolean(globalStats.value?.isGlobalAdmin));
 const managedQuinielas = computed(() => globalStats.value?.quinielas ?? []);
+const globalStatsForView = computed(() => {
+  if (!globalStats.value) {
+    return null;
+  }
+
+  return {
+    ...globalStats.value,
+    totals: globalStats.value.totals ?? undefined,
+  };
+});
 const adminRoleLabel = computed(() => {
   if (isGlobalAdmin.value) {
     return "Admin global";
@@ -521,6 +554,145 @@ const applyManualPoints = async () => {
       "No se pudo aplicar el ajuste manual";
   } finally {
     applyingManualPoints.value = false;
+  }
+};
+
+const simulationSegmentLabel = (segment: SimulationSegment) => {
+  const labels: Record<SimulationSegment, string> = {
+    all: "Todo el torneo",
+    group_stage: "Fase de grupos",
+    round_32: "Dieciseisavos",
+    round_16: "Octavos",
+    quarter_final: "Cuartos",
+    semi_final: "Semifinal",
+    third_place: "Tercer lugar",
+    final: "Final",
+  };
+
+  return labels[segment];
+};
+
+const runSimulation = async () => {
+  simulationMessage.value = null;
+  simulationError.value = null;
+
+  if (!canUseGlobalFeatures.value) {
+    simulationError.value = "Solo admin global puede ejecutar simulaciones.";
+    return;
+  }
+
+  const quinielaId = simulationForm.quiniela_id.trim();
+
+  if (!quinielaId) {
+    simulationError.value = "Selecciona una quiniela para simular.";
+    return;
+  }
+
+  if (!simulationForm.simulate_scores && !simulationForm.simulate_population) {
+    simulationError.value = "Activa al menos una opcion de simulacion.";
+    return;
+  }
+
+  if (
+    simulationForm.simulate_population &&
+    (!Number.isInteger(simulationForm.test_users_count) ||
+      simulationForm.test_users_count < 1)
+  ) {
+    simulationError.value =
+      "La cantidad de usuarios de prueba debe ser un entero >= 1.";
+    return;
+  }
+
+  runningSimulation.value = true;
+
+  try {
+    const result = await adminFetch<{
+      summary: {
+        scores_updated: number;
+        knockout_ties_resolved: number;
+        users_created: number;
+        users_reused: number;
+        predictions_upserted: number;
+        admin_predictions_generated: number;
+      };
+      quiniela: {
+        has_test_data: boolean;
+      };
+      segment: {
+        key: SimulationSegment;
+      };
+    }>(`/api/admin/quinielas/${quinielaId}/simulate`, {
+      method: "POST",
+      body: {
+        segment: simulationForm.segment,
+        simulate_scores: simulationForm.simulate_scores,
+        simulate_population: simulationForm.simulate_population,
+        test_users_count: simulationForm.test_users_count,
+        reset_test_data:
+          simulationForm.simulate_population && simulationForm.reset_test_data,
+      },
+    });
+
+    simulationMessage.value = `Simulacion ejecutada (${simulationSegmentLabel(result.segment.key)}). Marcadores actualizados: ${result.summary.scores_updated}, empates KO resueltos: ${result.summary.knockout_ties_resolved}, usuarios reusados: ${result.summary.users_reused}, usuarios creados: ${result.summary.users_created}, predicciones generadas: ${result.summary.predictions_upserted}, predicciones admin: ${result.summary.admin_predictions_generated}. Lock pruebas: ${result.quiniela.has_test_data ? "ACTIVO" : "INACTIVO"}.`;
+
+    await Promise.all([loadGlobalStats(false), loadIngestionLogs()]);
+  } catch (error: any) {
+    simulationError.value =
+      error?.data?.message ||
+      error?.message ||
+      "No se pudo ejecutar la simulacion";
+  } finally {
+    runningSimulation.value = false;
+  }
+};
+
+const clearSimulationData = async () => {
+  simulationMessage.value = null;
+  simulationError.value = null;
+
+  if (!canUseGlobalFeatures.value) {
+    simulationError.value =
+      "Solo admin global puede limpiar registros de prueba.";
+    return;
+  }
+
+  const quinielaId = simulationForm.quiniela_id.trim();
+
+  if (!quinielaId) {
+    simulationError.value = "Selecciona una quiniela para limpiar pruebas.";
+    return;
+  }
+
+  if (process.client) {
+    const confirmed = window.confirm(
+      "Se eliminaran usuarios/predicciones de prueba de esta quiniela. Continuar?",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+  }
+
+  clearingSimulationData.value = true;
+
+  try {
+    const result = await adminFetch<{
+      quiniela: {
+        has_test_data: boolean;
+      };
+    }>(`/api/admin/quinielas/${quinielaId}/simulate`, {
+      method: "DELETE",
+    });
+
+    simulationMessage.value = `Registros de prueba limpiados. Lock pruebas: ${result.quiniela.has_test_data ? "ACTIVO" : "INACTIVO"}.`;
+    await Promise.all([loadGlobalStats(false), loadIngestionLogs()]);
+  } catch (error: any) {
+    simulationError.value =
+      error?.data?.message ||
+      error?.message ||
+      "No se pudieron limpiar los registros de prueba";
+  } finally {
+    clearingSimulationData.value = false;
   }
 };
 
@@ -1231,6 +1403,17 @@ watch(
 watch(
   () => managedQuinielas.value,
   (items) => {
+    if (
+      simulationForm.quiniela_id &&
+      !items.some((item) => item.id === simulationForm.quiniela_id)
+    ) {
+      simulationForm.quiniela_id = "";
+    }
+
+    if (!simulationForm.quiniela_id && items.length > 0) {
+      simulationForm.quiniela_id = items[0]!.id;
+    }
+
     if (canUseGlobalFeatures.value) {
       return;
     }
@@ -1343,7 +1526,7 @@ watch(
       v-if="!isViewForbidden && adminSection === 'overview'"
       :quiniela="quiniela"
       :is-global-admin="canUseGlobalFeatures"
-      :global-stats="globalStats"
+      :global-stats="globalStatsForView"
       :managed-quinielas-count="managedQuinielas.length"
       :teams-total="teamsTotal"
       :sync-status="syncStatus"
@@ -1356,7 +1539,7 @@ watch(
       :global-loading="globalLoading"
       :global-error="globalError"
       :global-message="globalMessage"
-      :global-stats="globalStats"
+      :global-stats="globalStatsForView"
       :managed-quinielas="managedQuinielas"
       :quiniela-form="quinielaForm"
       :saving-quiniela="savingQuiniela"
@@ -1365,12 +1548,19 @@ watch(
       :applying-manual-points="applyingManualPoints"
       :manual-points-message="manualPointsMessage"
       :manual-points-error="manualPointsError"
+      :simulation-form="simulationForm"
+      :running-simulation="runningSimulation"
+      :clearing-simulation-data="clearingSimulationData"
+      :simulation-message="simulationMessage"
+      :simulation-error="simulationError"
       @random-access-code="randomAccessCode"
       @save-quiniela="saveQuiniela"
       @reset-quiniela-form="resetQuinielaForm"
       @edit-quiniela="editQuiniela"
       @delete-quiniela="deleteQuiniela"
       @apply-manual-points="applyManualPoints"
+      @run-simulation="runSimulation"
+      @clear-simulation-data="clearSimulationData"
     />
 
     <AdminTeamsSection

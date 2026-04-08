@@ -45,12 +45,13 @@ const tags = computed<Tag[]>(() => {
     return result;
   }
 
+  result.push({ label: "Con pick", badgeClass: "badge-info" });
+
   if (
     props.matchStatus !== "finished" ||
     props.officialHomeScore === null ||
     props.officialAwayScore === null
   ) {
-    result.push({ label: "Con pick", badgeClass: "badge-info" });
     return result;
   }
 
@@ -59,8 +60,7 @@ const tags = computed<Tag[]>(() => {
     props.predictedAwayScore === props.officialAwayScore;
 
   if (isExact) {
-    result.push({ label: "Pick correcto +1", badgeClass: "badge-primary" });
-    result.push({ label: "Marcador correcto +3", badgeClass: "badge-success" });
+    result.push({ label: "Exacto", badgeClass: "badge-success" });
     return result;
   }
 
@@ -72,9 +72,9 @@ const tags = computed<Tag[]>(() => {
   );
 
   if (predictedOutcome === officialOutcome) {
-    result.push({ label: "Pick correcto +1", badgeClass: "badge-primary" });
+    result.push({ label: "Acierta ganador", badgeClass: "badge-primary" });
   } else {
-    result.push({ label: "Sin puntos", badgeClass: "badge-error" });
+    result.push({ label: "Sin acierto", badgeClass: "badge-error" });
   }
 
   return result;

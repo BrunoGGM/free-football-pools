@@ -12,7 +12,7 @@ async function loadManagedQuinielas(
 ) {
   let quinielaQuery = supabase
     .from('quinielas')
-    .select('id, name, description, access_code, start_date, end_date, champion_team, admin_id, ticket_price, created_at')
+    .select('id, name, description, access_code, start_date, end_date, champion_team, admin_id, ticket_price, has_test_data, created_at')
     .order('created_at', { ascending: false })
     .limit(options.limit)
 
@@ -83,6 +83,7 @@ async function loadManagedQuinielas(
     start_date: q.start_date,
     end_date: q.end_date,
     champion_team: q.champion_team,
+    has_test_data: Boolean(q.has_test_data),
     admin_id: q.admin_id,
     ticket_price: Number(q.ticket_price || 0),
     admin_username: adminMap.get(q.admin_id as string) || 'N/A',
