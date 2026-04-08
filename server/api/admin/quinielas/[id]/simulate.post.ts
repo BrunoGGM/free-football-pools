@@ -3,6 +3,14 @@ import { serverSupabaseServiceRole } from '#supabase/server'
 import { requireGlobalAdminAccess } from '../../../../utils/adminAccess'
 import { normalizeTeamKey, resolveTeamCode } from '../../../../../utils/teamMeta'
 import {
+  computeGroupRankings,
+  getDefaultSeedPairByMatchNumber,
+  isRound32SeedToken,
+  resolveRound32SeedToken,
+  KNOCKOUT_STAGE_FLOW,
+  type GroupOverrideRow,
+} from '../../../../utils/bracketEngine'
+import {
   getSimulationSegmentLabel,
   getStagesBySegment,
   isSimulationSegment,
@@ -94,145 +102,24 @@ const KNOCKOUT_STAGES_NO_DRAW = new Set([
   'final',
 ])
 
-const KNOCKOUT_STAGE_FLOW = [
-  'round_32',
-  'round_16',
-  'quarter_final',
-  'semi_final',
-  'third_place',
-  'final',
-] as const
+const loadGroupOverrides = async (supabase: any, quinielaId: string): Promise<GroupOverrideRow[]> => {
+  const { data, error } = await supabase
+    .from('quiniela_group_overrides')
+    .select('group_code, position, team_name, team_code, team_logo_url')
+    .eq('quiniela_id', quinielaId)
 
-type GroupStandingRow = {
-  group: string
-  team: string
-  points: number
-  goalsFor: number
-  goalsAgainst: number
-  goalDiff: number
-}
-
-const DIRECT_SEED_TOKEN_RE = /^([12])([A-L])$/i
-const BEST_THIRD_TOKEN_RE = /^mejor\s*3ro\s*([A-L](?:\/[A-L])*)$/i
-
-const isRound32SeedToken = (value: string) => {
-  const token = (value || '').trim()
-  return DIRECT_SEED_TOKEN_RE.test(token) || BEST_THIRD_TOKEN_RE.test(token)
-}
-
-const compareStandings = (a: GroupStandingRow, b: GroupStandingRow) => {
-  return (
-    b.points - a.points
-    || b.goalDiff - a.goalDiff
-    || b.goalsFor - a.goalsFor
-    || a.team.localeCompare(b.team, 'es', { sensitivity: 'base' })
-  )
-}
-
-const computeGroupRankings = (groupMatches: any[]) => {
-  const groups = new Map<string, Map<string, Omit<GroupStandingRow, 'goalDiff'>>>()
-
-  const ensureRow = (group: string, teamName: string) => {
-    let table = groups.get(group)
-
-    if (!table) {
-      table = new Map()
-      groups.set(group, table)
-    }
-
-    const key = (teamName || '').trim()
-    if (!key) {
-      return null
-    }
-
-    if (!table.has(key)) {
-      table.set(key, {
-        group,
-        team: key,
-        points: 0,
-        goalsFor: 0,
-        goalsAgainst: 0,
-      })
-    }
-
-    return table.get(key) || null
+  if (error?.code === '42P01') {
+    return []
   }
 
-  for (const match of groupMatches) {
-    const stage = String(match.stage || '')
-    if (!stage.startsWith('group_')) {
-      continue
-    }
-
-    const group = stage.replace('group_', '').toUpperCase()
-    const home = ensureRow(group, String(match.home_team || ''))
-    const away = ensureRow(group, String(match.away_team || ''))
-
-    if (!home || !away) {
-      continue
-    }
-
-    if (match.status !== 'finished') {
-      continue
-    }
-
-    const homeScore = Number(match.home_score)
-    const awayScore = Number(match.away_score)
-
-    if (!Number.isInteger(homeScore) || !Number.isInteger(awayScore)) {
-      continue
-    }
-
-    home.goalsFor += homeScore
-    home.goalsAgainst += awayScore
-    away.goalsFor += awayScore
-    away.goalsAgainst += homeScore
-
-    if (homeScore > awayScore) {
-      home.points += 3
-    } else if (awayScore > homeScore) {
-      away.points += 3
-    } else {
-      home.points += 1
-      away.points += 1
-    }
+  if (error) {
+    throw createError({ statusCode: 500, statusMessage: error.message })
   }
 
-  const rankedByGroup = new Map<string, GroupStandingRow[]>()
-  const thirdPlaceRows: GroupStandingRow[] = []
-
-  for (const [group, rowsMap] of groups.entries()) {
-    const ranked = [...rowsMap.values()]
-      .map((row) => ({
-        ...row,
-        goalDiff: row.goalsFor - row.goalsAgainst,
-      }))
-      .sort(compareStandings)
-
-    rankedByGroup.set(group, ranked)
-
-    if (ranked[2]) {
-      thirdPlaceRows.push(ranked[2])
-    }
-  }
-
-  thirdPlaceRows.sort((a, b) => {
-    const result = compareStandings(a, b)
-
-    if (result !== 0) {
-      return result
-    }
-
-    return a.group.localeCompare(b.group)
-  })
-
-  return {
-    rankedByGroup,
-    thirdPlaceRows,
-  }
+  return (data || []) as GroupOverrideRow[]
 }
 
-const resolveRound32Participants = async (supabase: any) => {
+const resolveRound32Participants = async (supabase: any, quinielaId: string) => {
   const groupStages = getStagesBySegment('group_stage')
 
   const { data: groupMatches, error: groupMatchesError } = await supabase
@@ -246,14 +133,15 @@ const resolveRound32Participants = async (supabase: any) => {
 
   const { data: round32Matches, error: round32MatchesError } = await supabase
     .from('matches')
-    .select('id, home_team, away_team, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url, match_time, api_fixture_id')
+    .select('*')
     .eq('stage', 'round_32')
 
   if (round32MatchesError) {
     throw createError({ statusCode: 500, statusMessage: round32MatchesError.message })
   }
 
-  const { rankedByGroup, thirdPlaceRows } = computeGroupRankings(groupMatches || [])
+  const overrides = await loadGroupOverrides(supabase, quinielaId)
+  const { rankedByGroup, thirdPlaceRows } = computeGroupRankings(groupMatches || [], overrides)
 
   const thirdPlaceUsedGroups = new Set<string>()
 
@@ -293,41 +181,13 @@ const resolveRound32Participants = async (supabase: any) => {
     }
   }
 
-  const resolveSeedToken = (token: string): string | null => {
-    const normalized = (token || '').trim()
-
-    const directMatch = normalized.match(DIRECT_SEED_TOKEN_RE)
-    if (directMatch?.[1] && directMatch[2]) {
-      const rank = Number(directMatch[1])
-      const group = directMatch[2].toUpperCase()
-      return rankedByGroup.get(group)?.[rank - 1]?.team || null
-    }
-
-    const bestThirdMatch = normalized.match(BEST_THIRD_TOKEN_RE)
-    if (bestThirdMatch?.[1]) {
-      const allowedGroups = bestThirdMatch[1]
-        .split('/')
-        .map((item) => item.trim().toUpperCase())
-        .filter(Boolean)
-
-      for (const candidate of thirdPlaceRows) {
-        if (!allowedGroups.includes(candidate.group)) {
-          continue
-        }
-
-        if (thirdPlaceUsedGroups.has(candidate.group)) {
-          continue
-        }
-
-        thirdPlaceUsedGroups.add(candidate.group)
-        return candidate.team
-      }
-    }
-
-    return null
-  }
-
   const sortedRound32 = [...(round32Matches || [])].sort((a: any, b: any) => {
+    const bracketDiff = Number(a.bracket_match_no || 0) - Number(b.bracket_match_no || 0)
+
+    if (!Number.isNaN(bracketDiff) && bracketDiff !== 0) {
+      return bracketDiff
+    }
+
     const timeDiff =
       new Date(String(a.match_time || '')).getTime()
       - new Date(String(b.match_time || '')).getTime()
@@ -350,18 +210,27 @@ const resolveRound32Participants = async (supabase: any) => {
 
   for (const match of sortedRound32) {
     const patch: Record<string, unknown> = {}
+    const supportsSeedColumns =
+      Object.prototype.hasOwnProperty.call(match, 'home_seed_token')
+      && Object.prototype.hasOwnProperty.call(match, 'away_seed_token')
 
     const applyTeam = (
       side: 'home' | 'away',
+      seedToken: string,
       currentTeam: string,
       currentCode: string | null,
       currentLogo: string | null,
     ) => {
-      if (!isRound32SeedToken(currentTeam)) {
+      if (!isRound32SeedToken(seedToken)) {
         return
       }
 
-      const resolvedTeam = resolveSeedToken(currentTeam)
+      const resolvedTeam = resolveRound32SeedToken(
+        seedToken,
+        rankedByGroup,
+        thirdPlaceRows,
+        thirdPlaceUsedGroups,
+      )
 
       if (!resolvedTeam) {
         unresolvedSlots += 1
@@ -377,10 +246,18 @@ const resolveRound32Participants = async (supabase: any) => {
         patch.home_team = resolvedTeam
         patch.home_team_code = resolvedCode
         patch.home_team_logo_url = resolvedLogo
+
+        if (supportsSeedColumns) {
+          patch.home_seed_token = seedToken
+        }
       } else {
         patch.away_team = resolvedTeam
         patch.away_team_code = resolvedCode
         patch.away_team_logo_url = resolvedLogo
+
+        if (supportsSeedColumns) {
+          patch.away_seed_token = seedToken
+        }
       }
 
       resolvedSlots += 1
@@ -388,6 +265,7 @@ const resolveRound32Participants = async (supabase: any) => {
 
     applyTeam(
       'home',
+      String(match.home_seed_token || match.home_team || ''),
       String(match.home_team || ''),
       match.home_team_code ? String(match.home_team_code) : null,
       match.home_team_logo_url ? String(match.home_team_logo_url) : null,
@@ -395,6 +273,7 @@ const resolveRound32Participants = async (supabase: any) => {
 
     applyTeam(
       'away',
+      String(match.away_seed_token || match.away_team || ''),
       String(match.away_team || ''),
       match.away_team_code ? String(match.away_team_code) : null,
       match.away_team_logo_url ? String(match.away_team_logo_url) : null,
@@ -520,56 +399,6 @@ const getKnockoutStartStageFromStages = (stages: string[]) => {
   return null
 }
 
-const buildExpectedSeedTokenPair = (
-  stage: (typeof KNOCKOUT_STAGE_FLOW)[number],
-  index: number,
-) => {
-  const oneBased = index + 1
-
-  if (stage === 'round_16') {
-    const left = String(oneBased * 2 - 1).padStart(2, '0')
-    const right = String(oneBased * 2).padStart(2, '0')
-    return {
-      home: `Ganador R32-${left}`,
-      away: `Ganador R32-${right}`,
-    }
-  }
-
-  if (stage === 'quarter_final') {
-    const left = String(oneBased * 2 - 1).padStart(2, '0')
-    const right = String(oneBased * 2).padStart(2, '0')
-    return {
-      home: `Ganador R16-${left}`,
-      away: `Ganador R16-${right}`,
-    }
-  }
-
-  if (stage === 'semi_final') {
-    const left = String(oneBased * 2 - 1).padStart(2, '0')
-    const right = String(oneBased * 2).padStart(2, '0')
-    return {
-      home: `Ganador QF-${left}`,
-      away: `Ganador QF-${right}`,
-    }
-  }
-
-  if (stage === 'third_place') {
-    return {
-      home: 'Perdedor SF-01',
-      away: 'Perdedor SF-02',
-    }
-  }
-
-  if (stage === 'final') {
-    return {
-      home: 'Ganador SF-01',
-      away: 'Ganador SF-02',
-    }
-  }
-
-  return null
-}
-
 const resetDownstreamKnockoutSeeds = async (
   supabase: any,
   stages: string[],
@@ -601,7 +430,7 @@ const resetDownstreamKnockoutSeeds = async (
 
     const { data: rows, error: rowsError } = await supabase
       .from('matches')
-      .select('id, match_time, api_fixture_id')
+      .select('*')
       .eq('stage', stage)
 
     if (rowsError) {
@@ -610,17 +439,27 @@ const resetDownstreamKnockoutSeeds = async (
 
     const sortedRows = sortMatchesByStageTime(rows || [])
     const patchRows = sortedRows
-      .map((row: any, index: number) => {
-        const tokens = buildExpectedSeedTokenPair(stage, index)
+      .map((row: any) => {
+        const supportsSeedColumns =
+          Object.prototype.hasOwnProperty.call(row, 'home_seed_token')
+          && Object.prototype.hasOwnProperty.call(row, 'away_seed_token')
 
-        if (!tokens) {
+        const bracketMatchNo = Number(row.bracket_match_no || 0)
+        const mapped = Number.isInteger(bracketMatchNo)
+          ? getDefaultSeedPairByMatchNumber(bracketMatchNo)
+          : null
+
+        const homeSeed = String(row.home_seed_token || mapped?.home || '').trim()
+        const awaySeed = String(row.away_seed_token || mapped?.away || '').trim()
+
+        if (!homeSeed || !awaySeed) {
           return null
         }
 
-        return {
+        const patchRow: Record<string, unknown> = {
           id: String(row.id),
-          home_team: tokens.home,
-          away_team: tokens.away,
+          home_team: homeSeed,
+          away_team: awaySeed,
           home_team_code: null,
           away_team_code: null,
           home_team_logo_url: null,
@@ -631,6 +470,13 @@ const resetDownstreamKnockoutSeeds = async (
           away_penalty_score: null,
           status: 'pending',
         }
+
+        if (supportsSeedColumns) {
+          patchRow.home_seed_token = homeSeed
+          patchRow.away_seed_token = awaySeed
+        }
+
+        return patchRow
       })
       .filter(Boolean)
 
@@ -730,28 +576,65 @@ const captureGlobalMatchesSnapshotIfMissing = async (
     throw createError({ statusCode: 500, statusMessage: matchesError.message })
   }
 
-  const snapshotRows = (matches || []).map((match: any) => ({
-    quiniela_id: quinielaId,
-    match_id: String(match.id),
-    home_team: String(match.home_team || ''),
-    away_team: String(match.away_team || ''),
-    home_team_code: match.home_team_code ? String(match.home_team_code) : null,
-    away_team_code: match.away_team_code ? String(match.away_team_code) : null,
-    home_team_logo_url: match.home_team_logo_url ? String(match.home_team_logo_url) : null,
-    away_team_logo_url: match.away_team_logo_url ? String(match.away_team_logo_url) : null,
-    home_score: Number.isInteger(Number(match.home_score)) ? Number(match.home_score) : null,
-    away_score: Number.isInteger(Number(match.away_score)) ? Number(match.away_score) : null,
-    home_penalty_score: Number.isInteger(Number(match.home_penalty_score)) ? Number(match.home_penalty_score) : null,
-    away_penalty_score: Number.isInteger(Number(match.away_penalty_score)) ? Number(match.away_penalty_score) : null,
-    status: String(match.status || 'pending'),
-  }))
+  const snapshotRows = (matches || []).map((match: any) => {
+    const row: Record<string, unknown> = {
+      quiniela_id: quinielaId,
+      match_id: String(match.id),
+      home_team: String(match.home_team || ''),
+      away_team: String(match.away_team || ''),
+      home_team_code: match.home_team_code ? String(match.home_team_code) : null,
+      away_team_code: match.away_team_code ? String(match.away_team_code) : null,
+      home_team_logo_url: match.home_team_logo_url ? String(match.home_team_logo_url) : null,
+      away_team_logo_url: match.away_team_logo_url ? String(match.away_team_logo_url) : null,
+      home_score: Number.isInteger(Number(match.home_score)) ? Number(match.home_score) : null,
+      away_score: Number.isInteger(Number(match.away_score)) ? Number(match.away_score) : null,
+      home_penalty_score: Number.isInteger(Number(match.home_penalty_score)) ? Number(match.home_penalty_score) : null,
+      away_penalty_score: Number.isInteger(Number(match.away_penalty_score)) ? Number(match.away_penalty_score) : null,
+      status: String(match.status || 'pending'),
+    }
+
+    if (Object.prototype.hasOwnProperty.call(match, 'bracket_match_no')) {
+      row.bracket_match_no = Number.isInteger(Number(match.bracket_match_no))
+        ? Number(match.bracket_match_no)
+        : null
+    }
+
+    if (Object.prototype.hasOwnProperty.call(match, 'home_seed_token')) {
+      row.home_seed_token = match.home_seed_token ? String(match.home_seed_token) : null
+    }
+
+    if (Object.prototype.hasOwnProperty.call(match, 'away_seed_token')) {
+      row.away_seed_token = match.away_seed_token ? String(match.away_seed_token) : null
+    }
+
+    return row
+  })
 
   if (snapshotRows.length > 0) {
     const { error: snapshotError } = await supabase
       .from('simulation_match_snapshots')
       .upsert(snapshotRows, { onConflict: 'quiniela_id,match_id' })
 
-    if (snapshotError) {
+    if (snapshotError?.code === '42703') {
+      const legacyRows = snapshotRows.map((row: Record<string, unknown>) => {
+        const {
+          bracket_match_no: _ignoredMatchNo,
+          home_seed_token: _ignoredHomeSeed,
+          away_seed_token: _ignoredAwaySeed,
+          ...legacy
+        } = row
+
+        return legacy
+      })
+
+      const { error: legacySnapshotError } = await supabase
+        .from('simulation_match_snapshots')
+        .upsert(legacyRows, { onConflict: 'quiniela_id,match_id' })
+
+      if (legacySnapshotError) {
+        throw createError({ statusCode: 500, statusMessage: legacySnapshotError.message })
+      }
+    } else if (snapshotError) {
       throw createError({ statusCode: 500, statusMessage: snapshotError.message })
     }
   }
@@ -825,14 +708,14 @@ export default defineEventHandler(async (event) => {
   }
 
   if (simulateScores && stages.includes('round_32')) {
-    const round32Resolution = await resolveRound32Participants(supabase)
+    const round32Resolution = await resolveRound32Participants(supabase, quinielaId)
     round32SlotsResolved = round32Resolution.resolvedSlots
     round32SlotsUnresolved = round32Resolution.unresolvedSlots
   }
 
   const { data: matches, error: matchesError } = await supabase
     .from('matches')
-    .select('id, stage, match_time, api_fixture_id')
+    .select('*')
     .in('stage', stages)
 
   if (matchesError) {
@@ -845,8 +728,15 @@ export default defineEventHandler(async (event) => {
       stage: String(item.stage),
       match_time: String(item.match_time || ''),
       api_fixture_id: Number(item.api_fixture_id || 0),
+      bracket_match_no: Number(item.bracket_match_no || 0),
     }))
     .sort((a, b) => {
+      const bracketDiff = a.bracket_match_no - b.bracket_match_no
+
+      if (!Number.isNaN(bracketDiff) && bracketDiff !== 0) {
+        return bracketDiff
+      }
+
       const stagePriorityDiff =
         (STAGE_PRIORITY[a.stage] || 999) - (STAGE_PRIORITY[b.stage] || 999)
 

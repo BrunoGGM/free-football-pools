@@ -31,20 +31,38 @@ const restoreMatchesFromSnapshot = async (
     throw createError({ statusCode: 500, statusMessage: snapshotRowsError.message })
   }
 
-  const rows = (snapshotRows || []).map((item: any) => ({
-    id: String(item.match_id),
-    home_team: String(item.home_team || ''),
-    away_team: String(item.away_team || ''),
-    home_team_code: item.home_team_code ? String(item.home_team_code) : null,
-    away_team_code: item.away_team_code ? String(item.away_team_code) : null,
-    home_team_logo_url: item.home_team_logo_url ? String(item.home_team_logo_url) : null,
-    away_team_logo_url: item.away_team_logo_url ? String(item.away_team_logo_url) : null,
-    home_score: Number.isInteger(Number(item.home_score)) ? Number(item.home_score) : null,
-    away_score: Number.isInteger(Number(item.away_score)) ? Number(item.away_score) : null,
-    home_penalty_score: Number.isInteger(Number(item.home_penalty_score)) ? Number(item.home_penalty_score) : null,
-    away_penalty_score: Number.isInteger(Number(item.away_penalty_score)) ? Number(item.away_penalty_score) : null,
-    status: String(item.status || 'pending'),
-  }))
+  const rows = (snapshotRows || []).map((item: any) => {
+    const row: Record<string, unknown> = {
+      id: String(item.match_id),
+      home_team: String(item.home_team || ''),
+      away_team: String(item.away_team || ''),
+      home_team_code: item.home_team_code ? String(item.home_team_code) : null,
+      away_team_code: item.away_team_code ? String(item.away_team_code) : null,
+      home_team_logo_url: item.home_team_logo_url ? String(item.home_team_logo_url) : null,
+      away_team_logo_url: item.away_team_logo_url ? String(item.away_team_logo_url) : null,
+      home_score: Number.isInteger(Number(item.home_score)) ? Number(item.home_score) : null,
+      away_score: Number.isInteger(Number(item.away_score)) ? Number(item.away_score) : null,
+      home_penalty_score: Number.isInteger(Number(item.home_penalty_score)) ? Number(item.home_penalty_score) : null,
+      away_penalty_score: Number.isInteger(Number(item.away_penalty_score)) ? Number(item.away_penalty_score) : null,
+      status: String(item.status || 'pending'),
+    }
+
+    if (Object.prototype.hasOwnProperty.call(item, 'bracket_match_no')) {
+      row.bracket_match_no = Number.isInteger(Number(item.bracket_match_no))
+        ? Number(item.bracket_match_no)
+        : null
+    }
+
+    if (Object.prototype.hasOwnProperty.call(item, 'home_seed_token')) {
+      row.home_seed_token = item.home_seed_token ? String(item.home_seed_token) : null
+    }
+
+    if (Object.prototype.hasOwnProperty.call(item, 'away_seed_token')) {
+      row.away_seed_token = item.away_seed_token ? String(item.away_seed_token) : null
+    }
+
+    return row
+  })
 
   if (rows.length > 0) {
     for (const row of rows) {
@@ -64,7 +82,23 @@ const restoreMatchesFromSnapshot = async (
         .update(patch)
         .eq('id', matchId)
 
-      if (restoreError) {
+      if (restoreError?.code === '42703') {
+        const {
+          bracket_match_no: _ignoredMatchNo,
+          home_seed_token: _ignoredHomeSeed,
+          away_seed_token: _ignoredAwaySeed,
+          ...legacyPatch
+        } = patch
+
+        const { error: legacyRestoreError } = await supabase
+          .from('matches')
+          .update(legacyPatch)
+          .eq('id', matchId)
+
+        if (legacyRestoreError) {
+          throw createError({ statusCode: 500, statusMessage: legacyRestoreError.message })
+        }
+      } else if (restoreError) {
         throw createError({ statusCode: 500, statusMessage: restoreError.message })
       }
     }

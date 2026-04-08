@@ -50,6 +50,14 @@ type SyncBody = {
 }
 
 const PROVIDER = 'api-football'
+const KNOCKOUT_STAGES = new Set([
+  'round_32',
+  'round_16',
+  'quarter_final',
+  'semi_final',
+  'third_place',
+  'final',
+])
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
@@ -264,16 +272,72 @@ export default defineEventHandler(async (event) => {
   }
 
   if (rowsToUpsert.length > 0) {
+    const knockoutFixtureIds = rowsToUpsert
+      .filter((row) => KNOCKOUT_STAGES.has(row.stage))
+      .map((row) => row.api_fixture_id)
+
+    if (knockoutFixtureIds.length > 0) {
+      const { data: existingRows, error: existingRowsError } = await supabase
+        .from('matches')
+        .select('*')
+        .in('api_fixture_id', knockoutFixtureIds)
+
+      if (existingRowsError) {
+        throw createError({ statusCode: 500, statusMessage: existingRowsError.message })
+      }
+
+      const existingByFixture = new Map<number, any>()
+
+      for (const row of existingRows || []) {
+        const fixtureId = Number(row.api_fixture_id || 0)
+
+        if (fixtureId > 0) {
+          existingByFixture.set(fixtureId, row)
+        }
+      }
+
+      for (const row of rowsToUpsert) {
+        if (!KNOCKOUT_STAGES.has(row.stage)) {
+          continue
+        }
+
+        const existing = existingByFixture.get(row.api_fixture_id)
+
+        if (!existing) {
+          continue
+        }
+
+        const hasInternalSeedTokens =
+          Object.prototype.hasOwnProperty.call(existing, 'home_seed_token')
+          && Object.prototype.hasOwnProperty.call(existing, 'away_seed_token')
+          && (Boolean(existing.home_seed_token) || Boolean(existing.away_seed_token))
+
+        if (!hasInternalSeedTokens) {
+          continue
+        }
+
+        row.stage = String(existing.stage || row.stage)
+        row.home_team = String(existing.home_team || row.home_team)
+        row.away_team = String(existing.away_team || row.away_team)
+        row.home_team_code = existing.home_team_code ? String(existing.home_team_code) : row.home_team_code
+        row.away_team_code = existing.away_team_code ? String(existing.away_team_code) : row.away_team_code
+        row.home_team_logo_url = existing.home_team_logo_url ? String(existing.home_team_logo_url) : row.home_team_logo_url
+        row.away_team_logo_url = existing.away_team_logo_url ? String(existing.away_team_logo_url) : row.away_team_logo_url
+      }
+    }
+  }
+
+  if (rowsToUpsert.length > 0) {
     const { error: upsertError } = await supabase
       .from('matches')
-      .upsert(rowsToUpsert, { onConflict: 'stage,match_time,home_team,away_team' })
+      .upsert(rowsToUpsert, { onConflict: 'api_fixture_id' })
 
     if (upsertError?.code === '42703') {
       const legacyRows = rowsToUpsert.map(({ home_penalty_score, away_penalty_score, ...row }) => row)
 
       const { error: legacyUpsertError } = await supabase
         .from('matches')
-        .upsert(legacyRows, { onConflict: 'stage,match_time,home_team,away_team' })
+        .upsert(legacyRows, { onConflict: 'api_fixture_id' })
 
       if (legacyUpsertError) {
         throw createError({ statusCode: 500, statusMessage: legacyUpsertError.message })
