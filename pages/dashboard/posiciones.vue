@@ -855,14 +855,14 @@ const openUserQuinielaModal = async (row: PositionRow) => {
     )
     .eq("quiniela_id", activeQuinielaId.value)
     .eq("user_id", row.user_id)
-    .order("match_time", { ascending: false, referencedTable: "matches" });
+    .order("match_time", { ascending: true, referencedTable: "matches" });
 
   const matchesResult = await client
     .from("matches")
     .select(
       "id, stage, status, match_time, home_team, away_team, home_score, away_score",
     )
-    .order("match_time", { ascending: false });
+    .order("match_time", { ascending: true });
 
   loadingSelectedUserPredictions.value = false;
 

@@ -694,7 +694,7 @@ const loadMyQuinielaView = async () => {
     .select(
       "id, stage, status, match_time, home_team, away_team, home_score, away_score, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url",
     )
-    .order("match_time", { ascending: false });
+    .order("match_time", { ascending: true });
 
   const scopedPredictionsPromise = client
     .from("predictions")
@@ -703,7 +703,7 @@ const loadMyQuinielaView = async () => {
     )
     .eq("user_id", user.value.id)
     .eq("quiniela_id", activeQuinielaId.value)
-    .order("match_time", { ascending: false, referencedTable: "matches" });
+    .order("match_time", { ascending: true, referencedTable: "matches" });
 
   const legacyPredictionsPromise = client
     .from("predictions")
@@ -711,7 +711,7 @@ const loadMyQuinielaView = async () => {
       "id, match_id, home_score, away_score, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url)",
     )
     .eq("user_id", user.value.id)
-    .order("match_time", { ascending: false, referencedTable: "matches" });
+    .order("match_time", { ascending: true, referencedTable: "matches" });
 
   const memberResult = await memberPromise;
   let predictionsResult: any;
