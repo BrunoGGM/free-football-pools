@@ -94,10 +94,6 @@ interface ManagedQuiniela {
     exact_score_points: number;
     correct_outcome_points: number;
     champion_bonus_points: number;
-    exact_hit_min_points: number;
-    streak_hit_min_points: number;
-    streak_bonus_3_points: number;
-    streak_bonus_5_points: number;
     allow_member_predictions_view: boolean;
   };
 }
@@ -246,10 +242,6 @@ const quinielaForm = reactive({
   exact_score_points: 3,
   correct_outcome_points: 1,
   champion_bonus_points: 10,
-  exact_hit_min_points: 3,
-  streak_hit_min_points: 1,
-  streak_bonus_3_points: 1,
-  streak_bonus_5_points: 2,
   allow_member_predictions_view: false,
 });
 
@@ -508,10 +500,6 @@ const resetQuinielaForm = () => {
   quinielaForm.exact_score_points = 3;
   quinielaForm.correct_outcome_points = 1;
   quinielaForm.champion_bonus_points = 10;
-  quinielaForm.exact_hit_min_points = 3;
-  quinielaForm.streak_hit_min_points = 1;
-  quinielaForm.streak_bonus_3_points = 1;
-  quinielaForm.streak_bonus_5_points = 2;
   quinielaForm.allow_member_predictions_view = false;
 };
 
@@ -530,18 +518,6 @@ const editQuiniela = (item: ManagedQuiniela) => {
   );
   quinielaForm.champion_bonus_points = Number(
     item.rules?.champion_bonus_points ?? 10,
-  );
-  quinielaForm.exact_hit_min_points = Number(
-    item.rules?.exact_hit_min_points ?? 3,
-  );
-  quinielaForm.streak_hit_min_points = Number(
-    item.rules?.streak_hit_min_points ?? 1,
-  );
-  quinielaForm.streak_bonus_3_points = Number(
-    item.rules?.streak_bonus_3_points ?? 1,
-  );
-  quinielaForm.streak_bonus_5_points = Number(
-    item.rules?.streak_bonus_5_points ?? 2,
   );
   quinielaForm.allow_member_predictions_view = Boolean(
     item.rules?.allow_member_predictions_view ?? false,
@@ -803,10 +779,6 @@ const saveQuiniela = async () => {
     exact_score_points: Number(quinielaForm.exact_score_points),
     correct_outcome_points: Number(quinielaForm.correct_outcome_points),
     champion_bonus_points: Number(quinielaForm.champion_bonus_points),
-    exact_hit_min_points: Number(quinielaForm.exact_hit_min_points),
-    streak_hit_min_points: Number(quinielaForm.streak_hit_min_points),
-    streak_bonus_3_points: Number(quinielaForm.streak_bonus_3_points),
-    streak_bonus_5_points: Number(quinielaForm.streak_bonus_5_points),
     allow_member_predictions_view: Boolean(
       quinielaForm.allow_member_predictions_view,
     ),
@@ -828,10 +800,6 @@ const saveQuiniela = async () => {
     "exact_score_points",
     "correct_outcome_points",
     "champion_bonus_points",
-    "exact_hit_min_points",
-    "streak_hit_min_points",
-    "streak_bonus_3_points",
-    "streak_bonus_5_points",
   ];
 
   for (const field of integerRuleFields) {
@@ -846,18 +814,6 @@ const saveQuiniela = async () => {
   if (payload.correct_outcome_points > payload.exact_score_points) {
     globalError.value =
       "Puntos por signo no puede ser mayor que puntos por marcador exacto.";
-    return;
-  }
-
-  if (payload.exact_hit_min_points > payload.exact_score_points) {
-    globalError.value =
-      "Umbral exact hit no puede ser mayor que puntos por marcador exacto.";
-    return;
-  }
-
-  if (payload.streak_hit_min_points > payload.exact_score_points) {
-    globalError.value =
-      "Umbral de racha no puede ser mayor que puntos por marcador exacto.";
     return;
   }
 
@@ -967,11 +923,13 @@ const loadIngestionLogs = async () => {
           ? null
           : Number(item.away_score),
       home_penalty_score:
-        item.home_penalty_score === null || item.home_penalty_score === undefined
+        item.home_penalty_score === null ||
+        item.home_penalty_score === undefined
           ? null
           : Number(item.home_penalty_score),
       away_penalty_score:
-        item.away_penalty_score === null || item.away_penalty_score === undefined
+        item.away_penalty_score === null ||
+        item.away_penalty_score === undefined
           ? null
           : Number(item.away_penalty_score),
       status: item.status as string,
@@ -1143,7 +1101,11 @@ const saveMatchScore = async (matchId: string) => {
     return;
   }
 
-  if (draft.status === "finished" && isKnockoutStage && homeScore === awayScore) {
+  if (
+    draft.status === "finished" &&
+    isKnockoutStage &&
+    homeScore === awayScore
+  ) {
     if (homePenaltyScore === null || awayPenaltyScore === null) {
       matchScoreError.value =
         "En eliminatoria, si hay empate debes capturar penales.";
@@ -1156,7 +1118,11 @@ const saveMatchScore = async (matchId: string) => {
     }
   }
 
-  if (draft.status !== "finished" || homeScore !== awayScore || !isKnockoutStage) {
+  if (
+    draft.status !== "finished" ||
+    homeScore !== awayScore ||
+    !isKnockoutStage
+  ) {
     homePenaltyScore = null;
     awayPenaltyScore = null;
   }
