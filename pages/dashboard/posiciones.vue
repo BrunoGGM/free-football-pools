@@ -35,7 +35,11 @@ interface WeeklyLeaderRow {
   exact_hits: number;
 }
 
-type PointHistorySource = "match" | "manual" | "champion_bonus";
+type PointHistorySource =
+  | "pick_outcome"
+  | "exact_score"
+  | "manual"
+  | "champion_bonus";
 
 interface PointHistoryEntry {
   id: string;
@@ -142,6 +146,8 @@ const pointsHistoryTargetRow = ref<PositionRow | null>(null);
 const pointsHistoryEntries = ref<PointHistoryEntry[]>([]);
 const pointsHistorySummary = ref({
   matchPoints: 0,
+  pickOutcomePoints: 0,
+  exactScorePoints: 0,
   manualPoints: 0,
   championBonusPoints: 0,
   computedTotal: 0,
@@ -300,7 +306,11 @@ const sourceLabelByHistory = (source: PointHistorySource) => {
     return "Bonus campeon";
   }
 
-  return "Partido";
+  if (source === "exact_score") {
+    return "Marcador exacto";
+  }
+
+  return "Pick acertado";
 };
 
 const sourceBadgeClassByHistory = (source: PointHistorySource) => {
@@ -312,7 +322,11 @@ const sourceBadgeClassByHistory = (source: PointHistorySource) => {
     return "badge-secondary";
   }
 
-  return "badge-primary";
+  if (source === "exact_score") {
+    return "badge-success";
+  }
+
+  return "badge-info";
 };
 
 const flagIconClassFromCode = (code: string | null | undefined) => {
@@ -570,26 +584,6 @@ const kickoffText = (value: string) =>
     timeStyle: "short",
   });
 
-const predictionStatusText = (row: RankedUserPredictionRow) => {
-  if (!row.match) {
-    return "Sin partido";
-  }
-
-  if (row.home_score === null || row.away_score === null) {
-    return row.match.status === "finished" ? "Sin pick" : "Sin pick";
-  }
-
-  if (row.match.status === "in_progress") {
-    return "En juego";
-  }
-
-  if (row.match.status !== "finished") {
-    return "Pendiente";
-  }
-
-  return "Finalizado";
-};
-
 const winnerFromScore = (
   homeScore: number | null | undefined,
   awayScore: number | null | undefined,
@@ -649,6 +643,8 @@ const closePointsHistoryModal = () => {
   pointsHistoryEntries.value = [];
   pointsHistorySummary.value = {
     matchPoints: 0,
+    pickOutcomePoints: 0,
+    exactScorePoints: 0,
     manualPoints: 0,
     championBonusPoints: 0,
     computedTotal: 0,
@@ -666,10 +662,32 @@ const openPointsHistoryModal = async (row: PositionRow) => {
   pointsHistoryTargetRow.value = row;
   pointsHistoryEntries.value = [];
 
+  const rulesResult = await client
+    .from("quiniela_rules")
+    .select("correct_outcome_points, exact_score_points")
+    .eq("quiniela_id", activeQuinielaId.value)
+    .maybeSingle();
+
+  if (
+    rulesResult.error &&
+    !["42P01", "42703"].includes(String(rulesResult.error.code || ""))
+  ) {
+    pointsHistoryLoading.value = false;
+    pointsHistoryError.value =
+      rulesResult.error.message ||
+      "No se pudo cargar reglas de puntuacion para el desglose.";
+    return;
+  }
+
+  const configuredOutcomePoints = Math.max(
+    0,
+    Number(rulesResult.data?.correct_outcome_points ?? 1),
+  );
+
   const predictionsResult = await client
     .from("predictions")
     .select(
-      "id, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score)",
+      "id, home_score, away_score, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score)",
     )
     .eq("quiniela_id", activeQuinielaId.value)
     .eq("user_id", row.user_id)
@@ -718,6 +736,8 @@ const openPointsHistoryModal = async (row: PositionRow) => {
   const predictionEntries = (
     (predictionsResult.data as Array<{
       id: string;
+      home_score: number | null;
+      away_score: number | null;
       points_earned: number | null;
       created_at: string | null;
       match:
@@ -740,25 +760,105 @@ const openPointsHistoryModal = async (row: PositionRow) => {
         | null;
     }> | null) ?? []
   )
-    .map((item) => {
+    .flatMap((item) => {
       const match = Array.isArray(item.match)
         ? (item.match[0] ?? null)
         : item.match;
       const points = Number(item.points_earned ?? 0);
 
-      return {
-        id: item.id,
-        source: "match" as const,
-        points,
-        created_at:
-          match?.match_time || item.created_at || new Date().toISOString(),
-        title: match
-          ? `${match.home_team} vs ${match.away_team}`
-          : "Partido sin referencia",
-        detail: match
-          ? `${stageLabel(match.stage)} • Oficial ${match.home_score ?? "-"}:${match.away_score ?? "-"}`
-          : "Prediccion sin partido asociado",
-      };
+      const predictedHome =
+        item.home_score === null || item.home_score === undefined
+          ? null
+          : Number(item.home_score);
+      const predictedAway =
+        item.away_score === null || item.away_score === undefined
+          ? null
+          : Number(item.away_score);
+      const actualHome =
+        match?.home_score === null || match?.home_score === undefined
+          ? null
+          : Number(match.home_score);
+      const actualAway =
+        match?.away_score === null || match?.away_score === undefined
+          ? null
+          : Number(match.away_score);
+
+      const hasValidScores =
+        predictedHome !== null &&
+        predictedAway !== null &&
+        actualHome !== null &&
+        actualAway !== null;
+
+      const isExact =
+        hasValidScores &&
+        predictedHome === actualHome &&
+        predictedAway === actualAway;
+
+      const isOutcomeHit =
+        hasValidScores &&
+        Math.sign(predictedHome - predictedAway) ===
+          Math.sign(actualHome - actualAway);
+
+      const createdAt =
+        match?.match_time || item.created_at || new Date().toISOString();
+      const title = match
+        ? `${match.home_team} vs ${match.away_team}`
+        : "Partido sin referencia";
+      const baseDetail = match
+        ? `${stageLabel(match.stage)} • Pick ${predictedHome ?? "-"}:${predictedAway ?? "-"} • Oficial ${actualHome ?? "-"}:${actualAway ?? "-"}`
+        : "Prediccion sin partido asociado";
+
+      if (points === 0) {
+        return [];
+      }
+
+      const rows: PointHistoryEntry[] = [];
+
+      if (isOutcomeHit) {
+        const outcomePoints = isExact
+          ? Math.min(points, configuredOutcomePoints)
+          : points;
+
+        if (outcomePoints > 0) {
+          rows.push({
+            id: `${item.id}-pick`,
+            source: "pick_outcome",
+            points: outcomePoints,
+            created_at: createdAt,
+            title,
+            detail: `${baseDetail} • Punto por resultado`,
+          });
+        }
+      }
+
+      if (isExact) {
+        const outcomePortion = Math.min(points, configuredOutcomePoints);
+        const exactPoints = Math.max(0, points - outcomePortion);
+
+        if (exactPoints > 0) {
+          rows.push({
+            id: `${item.id}-exact`,
+            source: "exact_score",
+            points: exactPoints,
+            created_at: createdAt,
+            title,
+            detail: `${baseDetail} • Bonus por marcador exacto`,
+          });
+        }
+      }
+
+      if (rows.length === 0) {
+        rows.push({
+          id: `${item.id}-custom`,
+          source: "pick_outcome",
+          points,
+          created_at: createdAt,
+          title,
+          detail: `${baseDetail} • Puntaje aplicado por regla personalizada`,
+        });
+      }
+
+      return rows;
     })
     .filter((entry) => entry.points !== 0);
 
@@ -787,6 +887,12 @@ const openPointsHistoryModal = async (row: PositionRow) => {
     (acc, entry) => acc + entry.points,
     0,
   );
+  const pickOutcomePoints = predictionEntries
+    .filter((entry) => entry.source === "pick_outcome")
+    .reduce((acc, entry) => acc + entry.points, 0);
+  const exactScorePoints = predictionEntries
+    .filter((entry) => entry.source === "exact_score")
+    .reduce((acc, entry) => acc + entry.points, 0);
   const manualPoints = manualEntries.reduce(
     (acc, entry) => acc + entry.points,
     0,
@@ -824,6 +930,8 @@ const openPointsHistoryModal = async (row: PositionRow) => {
   pointsHistoryEntries.value = entries;
   pointsHistorySummary.value = {
     matchPoints,
+    pickOutcomePoints,
+    exactScorePoints,
     manualPoints,
     championBonusPoints,
     computedTotal: memberTotalPoints + manualPoints,
@@ -831,7 +939,7 @@ const openPointsHistoryModal = async (row: PositionRow) => {
 
   if (manualReadDenied) {
     pointsHistoryError.value =
-      "No tienes permisos para ver ajustes manuales; se muestran solo puntos por partido y bonus de campeon.";
+      "No tienes permisos para ver ajustes manuales; se muestran solo puntos por pick, exacto y bonus de campeon.";
   }
 
   pointsHistoryLoading.value = false;
@@ -2050,157 +2158,17 @@ onBeforeUnmount(() => {
             Este usuario aun no tiene predicciones guardadas.
           </p>
 
-          <div
-            v-else
-            class="mt-4 max-h-[60vh] overflow-auto rounded-xl border border-base-300"
-          >
-            <table class="table min-w-full text-sm">
-              <thead
-                class="bg-base-200 text-base-content/70 text-left text-xs uppercase tracking-[0.12em]"
-              >
-                <tr>
-                  <th class="px-3 py-2">Partido</th>
-                  <th class="px-3 py-2">Pick</th>
-                  <th class="px-3 py-2">Oficial</th>
-                  <th class="px-3 py-2">Ganador</th>
-                  <th class="px-3 py-2">Estado</th>
-                  <th class="px-3 py-2">Pts</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="item in selectedUserPredictions"
-                  :key="item.id"
-                  class="border-t border-base-300"
-                >
-                  <td class="px-3 py-2">
-                    <p class="text-xs text-base-content/70">
-                      {{ item.match ? stageLabel(item.match.stage) : "-" }}
-                    </p>
-                    <p class="font-medium">
-                      <span class="inline-flex items-center gap-1">
-                        <img
-                          v-if="
-                            item.match && matchTeamLogoUrl(item.match.home_team)
-                          "
-                          :src="
-                            matchTeamLogoUrl(item.match.home_team) || undefined
-                          "
-                          :alt="`Escudo de ${matchTeamDisplayName(item.match.home_team)}`"
-                          class="h-4 w-4 rounded-full border border-base-300 object-cover"
-                          loading="lazy"
-                        />
-                        <span
-                          v-else-if="
-                            item.match &&
-                            matchTeamFlagIconClass(item.match.home_team)
-                          "
-                          :class="
-                            item.match
-                              ? matchTeamFlagIconClass(item.match.home_team) ||
-                                undefined
-                              : undefined
-                          "
-                          class="inline-block h-3.5 w-5 rounded-[999px]"
-                          :title="
-                            item.match
-                              ? `Bandera de ${matchTeamDisplayName(item.match.home_team)}`
-                              : undefined
-                          "
-                          aria-hidden="true"
-                        />
-                        <span
-                          v-else-if="
-                            item.match && matchTeamFlag(item.match.home_team)
-                          "
-                          >{{ matchTeamFlag(item.match.home_team) }}</span
-                        >
-                        <span>{{
-                          matchTeamDisplayName(item.match?.home_team)
-                        }}</span>
-                      </span>
-                      <span class="mx-1 text-base-content/60">vs</span>
-                      <span class="inline-flex items-center gap-1">
-                        <img
-                          v-if="
-                            item.match && matchTeamLogoUrl(item.match.away_team)
-                          "
-                          :src="
-                            matchTeamLogoUrl(item.match.away_team) || undefined
-                          "
-                          :alt="`Escudo de ${matchTeamDisplayName(item.match.away_team)}`"
-                          class="h-4 w-4 rounded-full border border-base-300 object-cover"
-                          loading="lazy"
-                        />
-                        <span
-                          v-else-if="
-                            item.match &&
-                            matchTeamFlagIconClass(item.match.away_team)
-                          "
-                          :class="
-                            item.match
-                              ? matchTeamFlagIconClass(item.match.away_team) ||
-                                undefined
-                              : undefined
-                          "
-                          class="inline-block h-3.5 w-5 rounded-[999px]"
-                          :title="
-                            item.match
-                              ? `Bandera de ${matchTeamDisplayName(item.match.away_team)}`
-                              : undefined
-                          "
-                          aria-hidden="true"
-                        />
-                        <span
-                          v-else-if="
-                            item.match && matchTeamFlag(item.match.away_team)
-                          "
-                          >{{ matchTeamFlag(item.match.away_team) }}</span
-                        >
-                        <span>{{
-                          matchTeamDisplayName(item.match?.away_team)
-                        }}</span>
-                      </span>
-                    </p>
-                    <p class="text-xs text-base-content/70" v-if="item.match">
-                      {{ kickoffText(item.match.match_time) }}
-                    </p>
-                  </td>
-                  <td class="px-3 py-2 font-semibold">
-                    <span v-if="item.hasPrediction">
-                      {{ item.home_score }} : {{ item.away_score }}
-                    </span>
-                    <span v-else class="text-base-content/70">Sin pick</span>
-                  </td>
-                  <td class="px-3 py-2">
-                    <span
-                      v-if="
-                        item.match?.home_score !== null &&
-                        item.match?.away_score !== null
-                      "
-                    >
-                      {{ item.match?.home_score ?? "-" }} :
-                      {{ item.match?.away_score ?? "-" }}
-                    </span>
-                    <span v-else class="text-base-content/70">Pendiente</span>
-                  </td>
-                  <td class="px-3 py-2">
-                    <p class="text-xs text-base-content/70">
-                      Pick: {{ pickWinnerText(item) }}
-                    </p>
-                    <p class="text-xs text-base-content/70">
-                      Oficial: {{ officialWinnerText(item) }}
-                    </p>
-                  </td>
-                  <td class="px-3 py-2">
-                    {{ predictionStatusText(item) }}
-                  </td>
-                  <td class="px-3 py-2 font-semibold text-warning">
-                    {{ item.points_earned }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div v-else class="mt-4 max-h-[60vh] overflow-auto">
+            <DashboardQuinielaPredictionsTable
+              compact
+              show-winner-column
+              :rows="selectedUserPredictions"
+              pick-header="Pick"
+              :resolve-team-display-name="matchTeamDisplayName"
+              :resolve-team-logo-url="matchTeamLogoUrl"
+              :resolve-team-flag-icon-class="matchTeamFlagIconClass"
+              :resolve-team-flag-emoji="matchTeamFlag"
+            />
           </div>
         </div>
         <form
@@ -2250,7 +2218,7 @@ onBeforeUnmount(() => {
 
           <div
             v-if="!pointsHistoryLoading"
-            class="mt-4 grid gap-2 sm:grid-cols-4"
+            class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6"
           >
             <article
               class="card rounded-xl border border-base-300 bg-base-100/70 p-3"
@@ -2258,6 +2226,26 @@ onBeforeUnmount(() => {
               <p class="text-base-content/70 text-xs uppercase">Partidos</p>
               <p class="text-lg font-semibold">
                 {{ pointsHistorySummary.matchPoints }}
+              </p>
+            </article>
+            <article
+              class="card rounded-xl border border-base-300 bg-base-100/70 p-3"
+            >
+              <p class="text-base-content/70 text-xs uppercase">
+                Pick acertado
+              </p>
+              <p class="text-lg font-semibold">
+                {{ pointsHistorySummary.pickOutcomePoints }}
+              </p>
+            </article>
+            <article
+              class="card rounded-xl border border-base-300 bg-base-100/70 p-3"
+            >
+              <p class="text-base-content/70 text-xs uppercase">
+                Marcador exacto
+              </p>
+              <p class="text-lg font-semibold">
+                {{ pointsHistorySummary.exactScorePoints }}
               </p>
             </article>
             <article

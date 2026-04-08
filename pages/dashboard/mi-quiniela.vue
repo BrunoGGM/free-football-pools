@@ -87,6 +87,8 @@ const exactHitDelta = ref(0);
 let exactHitTimer: ReturnType<typeof setTimeout> | null = null;
 const exactHitsInitialized = ref(false);
 const exactHitsCount = ref(0);
+const correctOutcomePoints = ref(1);
+const exactScoreBonusPoints = ref(3);
 
 const username = computed(() => {
   const metadataName = user.value?.user_metadata?.username;
@@ -180,6 +182,71 @@ const exactPointsEarnedTotal = computed(() =>
     }
 
     return total + Number(row.points_earned ?? 0);
+  }, 0),
+);
+
+const pickOutcomePointsTotal = computed(() =>
+  predictions.value.reduce((total, row) => {
+    if (
+      !row.hasPrediction ||
+      row.home_score === null ||
+      row.away_score === null ||
+      row.match?.status !== "finished" ||
+      row.match.home_score === null ||
+      row.match.away_score === null
+    ) {
+      return total;
+    }
+
+    const points = Number(row.points_earned ?? 0);
+    const isExact =
+      row.home_score === row.match.home_score &&
+      row.away_score === row.match.away_score;
+    const isOutcomeHit =
+      resolveOutcome(row.home_score, row.away_score) ===
+      resolveOutcome(row.match.home_score, row.match.away_score);
+
+    if (!isOutcomeHit || points <= 0) {
+      return total;
+    }
+
+    if (isExact) {
+      return total + Math.min(points, Math.max(0, correctOutcomePoints.value));
+    }
+
+    return total + points;
+  }, 0),
+);
+
+const exactBonusPointsTotal = computed(() =>
+  predictions.value.reduce((total, row) => {
+    if (
+      !row.hasPrediction ||
+      row.home_score === null ||
+      row.away_score === null ||
+      row.match?.status !== "finished" ||
+      row.match.home_score === null ||
+      row.match.away_score === null
+    ) {
+      return total;
+    }
+
+    const isExact =
+      row.home_score === row.match.home_score &&
+      row.away_score === row.match.away_score;
+
+    if (!isExact) {
+      return total;
+    }
+
+    const points = Number(row.points_earned ?? 0);
+    const outcomePart = Math.min(
+      points,
+      Math.max(0, correctOutcomePoints.value),
+    );
+    const bonusPart = Math.max(0, points - outcomePart);
+
+    return total + bonusPart;
   }, 0),
 );
 
@@ -360,14 +427,6 @@ const predictedChampionLogoUrl = computed(() => {
   return null;
 });
 
-const stageLabel = (stage: string) => stage.replaceAll("_", " ").toUpperCase();
-
-const kickoffText = (value: string) =>
-  new Date(value).toLocaleString("es-MX", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-
 const flagIconClassFromCode = (code: string | null | undefined) => {
   const normalized = (code || "").trim().toLowerCase();
   return /^[a-z]{2}$/.test(normalized) ? `fi fi-${normalized}` : null;
@@ -413,6 +472,18 @@ const isMissingGamificationTableError = (error: any) => {
   );
 };
 
+const isMissingScoringRulesError = (error: any) => {
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    error?.code === "42P01" ||
+    error?.code === "42703" ||
+    message.includes("quiniela_rules") ||
+    message.includes("correct_outcome_points") ||
+    message.includes("exact_score_points")
+  );
+};
+
 const appendCompatibilityMessage = (message: string) => {
   if (!compatibilityMessage.value) {
     compatibilityMessage.value = message;
@@ -436,122 +507,6 @@ const resolveOutcome = (home: number, away: number): MatchOutcome => {
   }
 
   return "draw";
-};
-
-const predictionText = (row: PredictionRow) => {
-  if (!row.match) {
-    return "Prediccion guardada";
-  }
-
-  if (row.home_score === null || row.away_score === null) {
-    return "Sin pick guardado";
-  }
-
-  if (row.home_score > row.away_score) {
-    return `Gana ${row.match.home_team}`;
-  }
-
-  if (row.home_score < row.away_score) {
-    return `Gana ${row.match.away_team}`;
-  }
-
-  return "Empate";
-};
-
-const officialResultText = (match: MatchRow | null) => {
-  if (!match || match.home_score === null || match.away_score === null) {
-    return "Sin resultado oficial";
-  }
-
-  if (match.home_score > match.away_score) {
-    return `Gana ${match.home_team}`;
-  }
-
-  if (match.home_score < match.away_score) {
-    return `Gana ${match.away_team}`;
-  }
-
-  return "Empate";
-};
-
-const outcomeLabel = (row: PredictionRow) => {
-  if (!row.match) {
-    return "Sin partido";
-  }
-
-  if (row.home_score === null || row.away_score === null) {
-    return row.match.status === "finished" ? "Sin pick (0)" : "Sin pick";
-  }
-
-  if (row.match.status === "in_progress") {
-    return "En juego";
-  }
-
-  if (
-    row.match.status !== "finished" ||
-    row.match.home_score === null ||
-    row.match.away_score === null
-  ) {
-    return "Pendiente";
-  }
-
-  const exactMatch =
-    row.home_score === row.match.home_score &&
-    row.away_score === row.match.away_score;
-
-  if (exactMatch) {
-    return `Marcador exacto (+${Number(row.points_earned ?? 4)})`;
-  }
-
-  const predictedOutcome = resolveOutcome(row.home_score, row.away_score);
-  const officialOutcome = resolveOutcome(
-    row.match.home_score,
-    row.match.away_score,
-  );
-
-  if (predictedOutcome === officialOutcome) {
-    return "Resultado acertado (+1)";
-  }
-
-  return "Sin acierto (0)";
-};
-
-const outcomeClass = (row: PredictionRow) => {
-  if (!row.match || row.match.status === "pending") {
-    return "badge-ghost";
-  }
-
-  if (row.home_score === null || row.away_score === null) {
-    return "badge-ghost";
-  }
-
-  if (row.match.status === "in_progress") {
-    return "badge-warning";
-  }
-
-  if (row.match.home_score === null || row.match.away_score === null) {
-    return "badge-ghost";
-  }
-
-  const exactMatch =
-    row.home_score === row.match.home_score &&
-    row.away_score === row.match.away_score;
-
-  if (exactMatch) {
-    return "badge-success";
-  }
-
-  const predictedOutcome = resolveOutcome(row.home_score, row.away_score);
-  const officialOutcome = resolveOutcome(
-    row.match.home_score,
-    row.match.away_score,
-  );
-
-  if (predictedOutcome === officialOutcome) {
-    return "badge-info";
-  }
-
-  return "badge-error";
 };
 
 const triggerExactHitCelebration = (delta: number, totalExactHits: number) => {
@@ -694,6 +649,12 @@ const loadMyQuinielaView = async () => {
   errorMessage.value = null;
   compatibilityMessage.value = null;
 
+  const rulesPromise = client
+    .from("quiniela_rules")
+    .select("correct_outcome_points, exact_score_points")
+    .eq("quiniela_id", activeQuinielaId.value)
+    .maybeSingle();
+
   const memberPromise = client
     .from("quiniela_members")
     .select("total_points, predicted_champion")
@@ -766,6 +727,32 @@ const loadMyQuinielaView = async () => {
   if (predictionsResult.error) {
     errorMessage.value = predictionsResult.error.message;
     return;
+  }
+
+  const rulesResult = await rulesPromise;
+
+  if (rulesResult.error) {
+    correctOutcomePoints.value = 1;
+    exactScoreBonusPoints.value = 3;
+
+    if (isMissingScoringRulesError(rulesResult.error)) {
+      appendCompatibilityMessage(
+        "Reglas configurables no disponibles aun. Se asume +1 por pick acertado y +3 por exacto.",
+      );
+    } else {
+      appendCompatibilityMessage(
+        "No se pudieron cargar reglas de puntuacion; se usa +1 por pick y +3 por exacto.",
+      );
+    }
+  } else {
+    correctOutcomePoints.value = Math.max(
+      0,
+      Number(rulesResult.data?.correct_outcome_points ?? 1),
+    );
+    exactScoreBonusPoints.value = Math.max(
+      0,
+      Number(rulesResult.data?.exact_score_points ?? 3),
+    );
   }
 
   const allMatchesResult = await allMatchesPromise;
@@ -1099,7 +1086,8 @@ onBeforeUnmount(() => {
         Quiniela activa: {{ quiniela?.name || "Sin nombre" }}
       </p>
       <p class="text-base-content/70 mt-2 text-xs">
-        Regla: +1 por acertar resultado (local/empate/visita) y +3 por marcador
+        Regla: +{{ correctOutcomePoints }} por acertar pick
+        (local/empate/visita) y +{{ exactScoreBonusPoints }} por marcador
         exacto.
       </p>
 
@@ -1214,6 +1202,9 @@ onBeforeUnmount(() => {
           <p class="text-base-content/70 mt-1 text-xs">
             {{ accuracyRate }}% de acierto en partidos cerrados
           </p>
+          <p class="text-base-content/60 mt-1 text-xs">
+            {{ pickOutcomePointsTotal }} pts por pick acertado
+          </p>
         </div>
 
         <div class="card rounded-2xl border border-base-300 bg-base-100/70 p-4">
@@ -1236,12 +1227,20 @@ onBeforeUnmount(() => {
             {{ exactPredictionsCount }}
           </p>
           <p class="text-base-content/70 mt-1 text-xs">
-            {{ exactPointsEarnedTotal }} pts ganados por exactos
+            {{ exactBonusPointsTotal }} pts bonus de exacto
+          </p>
+          <p class="text-base-content/60 mt-1 text-xs">
+            {{ exactPointsEarnedTotal }} pts totales en exactos
           </p>
         </div>
       </div>
 
       <p class="text-base-content/70 mt-3 text-xs">
+        Desglose cerrado: {{ pickOutcomePointsTotal }} pts pick +
+        {{ exactBonusPointsTotal }} pts exacto.
+      </p>
+
+      <p class="text-base-content/70 mt-1 text-xs">
         En revision: {{ pendingResolutionCount }} pick(s) pendientes de cierre.
         Sin pick: {{ missingPredictionsCount }} partido(s).
       </p>
@@ -1328,156 +1327,16 @@ onBeforeUnmount(() => {
     <article v-else-if="!hasMatches" class="alert rounded-2xl text-sm">
       Todavia no hay partidos programados.
     </article>
-    <article
-      v-else
-      class="overflow-x-auto rounded-2xl border border-base-300 bg-base-100/70"
-    >
-      <table class="table min-w-full text-sm">
-        <thead
-          class="bg-base-200 text-base-content/70 text-left text-xs uppercase tracking-[0.12em]"
-        >
-          <tr>
-            <th class="px-4 py-3">Partido</th>
-            <th class="px-4 py-3">Tu prediccion</th>
-            <th class="px-4 py-3">Resultado</th>
-            <th class="px-4 py-3">Estado</th>
-            <th class="px-4 py-3">Puntos</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="row in predictions"
-            :key="row.id"
-            class="border-t border-base-300 align-top"
-          >
-            <td class="px-4 py-3">
-              <p class="text-base-content/70 text-xs">
-                {{ row.match ? stageLabel(row.match.stage) : "-" }}
-              </p>
-              <div class="mt-1 flex items-center gap-2">
-                <img
-                  v-if="row.match?.home_team_logo_url"
-                  :src="row.match.home_team_logo_url"
-                  :alt="`Escudo de ${row.match.home_team}`"
-                  class="h-5 w-5 rounded-full border border-base-300 object-cover"
-                  loading="lazy"
-                />
-                <span
-                  v-else-if="
-                    row.match &&
-                    teamFlagIconClass(
-                      row.match.home_team_code,
-                      row.match.home_team,
-                    )
-                  "
-                  :class="
-                    row.match
-                      ? teamFlagIconClass(
-                          row.match.home_team_code,
-                          row.match.home_team,
-                        ) || undefined
-                      : undefined
-                  "
-                  class="inline-block h-4 w-5 rounded-[999px]"
-                  :title="
-                    row.match ? `Bandera de ${row.match.home_team}` : undefined
-                  "
-                  aria-hidden="true"
-                />
-                <span v-else class="text-base">
-                  {{
-                    row.match
-                      ? teamFlag(row.match.home_team_code, row.match.home_team)
-                      : ""
-                  }}
-                </span>
-                <span>{{ row.match?.home_team }}</span>
-                <span class="text-base-content/70">vs</span>
-                <img
-                  v-if="row.match?.away_team_logo_url"
-                  :src="row.match.away_team_logo_url"
-                  :alt="`Escudo de ${row.match.away_team}`"
-                  class="h-5 w-5 rounded-full border border-base-300 object-cover"
-                  loading="lazy"
-                />
-                <span
-                  v-else-if="
-                    row.match &&
-                    teamFlagIconClass(
-                      row.match.away_team_code,
-                      row.match.away_team,
-                    )
-                  "
-                  :class="
-                    row.match
-                      ? teamFlagIconClass(
-                          row.match.away_team_code,
-                          row.match.away_team,
-                        ) || undefined
-                      : undefined
-                  "
-                  class="inline-block h-4 w-5 rounded-[999px]"
-                  :title="
-                    row.match ? `Bandera de ${row.match.away_team}` : undefined
-                  "
-                  aria-hidden="true"
-                />
-                <span v-else class="text-base">
-                  {{
-                    row.match
-                      ? teamFlag(row.match.away_team_code, row.match.away_team)
-                      : ""
-                  }}
-                </span>
-                <span>{{ row.match?.away_team }}</span>
-              </div>
-              <p class="text-base-content/70 mt-1 text-xs">
-                {{ row.match ? kickoffText(row.match.match_time) : "-" }}
-              </p>
-            </td>
-            <td class="px-4 py-3 font-semibold">
-              <p v-if="row.hasPrediction">
-                {{ row.home_score }} : {{ row.away_score }}
-              </p>
-              <p v-else class="text-base-content/70">Sin pick</p>
-              <p class="text-base-content/70 mt-1 text-xs font-normal">
-                {{ predictionText(row) }}
-              </p>
-            </td>
-            <td class="px-4 py-3">
-              <span
-                v-if="
-                  row.match?.home_score !== null &&
-                  row.match?.away_score !== null
-                "
-              >
-                {{ row.match?.home_score }} : {{ row.match?.away_score }}
-              </span>
-              <span v-else class="text-base-content/70">Pendiente</span>
-              <p
-                class="text-base-content/70 mt-1 text-xs"
-                v-if="
-                  row.match?.home_score !== null &&
-                  row.match?.away_score !== null
-                "
-              >
-                {{ officialResultText(row.match) }}
-              </p>
-            </td>
-            <td class="px-4 py-3">
-              <span
-                class="badge badge-sm px-3 py-1 text-xs font-semibold"
-                :class="outcomeClass(row)"
-              >
-                {{ outcomeLabel(row) }}
-              </span>
-            </td>
-            <td class="text-warning px-4 py-3 font-semibold">
-              {{ row.points_earned }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <article v-else>
+      <DashboardQuinielaPredictionsTable
+        :rows="predictions"
+        pick-header="Tu prediccion"
+        show-prediction-explanation
+        show-points-breakdown
+        :correct-outcome-points="correctOutcomePoints"
+        kickoff-date-style="medium"
+        :resolve-team-display-name="(team) => (team || '').trim() || '-'"
+      />
     </article>
   </section>
 </template>

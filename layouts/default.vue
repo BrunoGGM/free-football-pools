@@ -39,7 +39,17 @@ const navLinks = computed(() => {
 interface HeaderMetric {
   label: string;
   value: string;
-  highlight?: boolean;
+  tone:
+    | "live"
+    | "pending"
+    | "finished"
+    | "members"
+    | "leader"
+    | "pot"
+    | "score"
+    | "rank"
+    | "kickoff";
+  icon: string;
 }
 
 const headerMetrics = ref<HeaderMetric[]>([]);
@@ -192,46 +202,68 @@ const formatMoney = (amount: number) => {
   });
 };
 
+const isMissingRankingTableError = (error: any) => {
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    error?.code === "42P01" ||
+    (message.includes("quiniela_rankings") && message.includes("exist"))
+  );
+};
+
 const loadHeaderMetrics = async () => {
   if (!user.value || !activeQuinielaId.value) {
     headerMetrics.value = [];
     return;
   }
 
-  const [liveRes, pendingRes, finishedRes, membersRes, nextKickoffRes] =
-    await Promise.all([
-      client
-        .from("matches")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "in_progress"),
-      client
-        .from("matches")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending"),
-      client
-        .from("matches")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "finished"),
-      client
-        .from("quiniela_members")
-        .select("user_id, total_points", { count: "exact" })
-        .eq("quiniela_id", activeQuinielaId.value)
-        .order("total_points", { ascending: false }),
-      client
-        .from("matches")
-        .select("match_time")
-        .eq("status", "pending")
-        .order("match_time", { ascending: true })
-        .limit(1)
-        .maybeSingle(),
-    ]);
+  const [
+    liveRes,
+    pendingRes,
+    finishedRes,
+    membersRes,
+    nextKickoffRes,
+    rankingRes,
+  ] = await Promise.all([
+    client
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "in_progress"),
+    client
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
+    client
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "finished"),
+    client
+      .from("quiniela_members")
+      .select("user_id, total_points", { count: "exact" })
+      .eq("quiniela_id", activeQuinielaId.value)
+      .order("total_points", { ascending: false }),
+    client
+      .from("matches")
+      .select("match_time")
+      .eq("status", "pending")
+      .order("match_time", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    client
+      .from("quiniela_rankings")
+      .select("user_id, total_points, rank")
+      .eq("quiniela_id", activeQuinielaId.value)
+      .order("rank", { ascending: true })
+      .order("total_points", { ascending: false }),
+  ]);
 
   if (
     liveRes.error ||
     pendingRes.error ||
     finishedRes.error ||
     membersRes.error ||
-    nextKickoffRes.error
+    nextKickoffRes.error ||
+    (rankingRes.error && !isMissingRankingTableError(rankingRes.error))
   ) {
     return;
   }
@@ -242,42 +274,144 @@ const loadHeaderMetrics = async () => {
       total_points: number | null;
     }> | null) ?? [];
 
-  const ownIndex = members.findIndex(
+  let rankingRows: Array<{
+    user_id: string;
+    total_points: number;
+    rank: number;
+  }> = [];
+
+  if (rankingRes.error) {
+    let previousPoints: number | null = null;
+    let previousRank = 0;
+
+    rankingRows = members.map((member, index) => {
+      const currentPoints = Number(member.total_points ?? 0);
+      const rank =
+        previousPoints !== null && currentPoints === previousPoints
+          ? previousRank
+          : index + 1;
+
+      previousPoints = currentPoints;
+      previousRank = rank;
+
+      return {
+        user_id: member.user_id,
+        total_points: currentPoints,
+        rank,
+      };
+    });
+  } else {
+    rankingRows =
+      (
+        rankingRes.data as Array<{
+          user_id: string;
+          total_points: number | null;
+          rank: number | null;
+        }> | null
+      )?.map((row, index) => ({
+        user_id: row.user_id,
+        total_points: Number(row.total_points ?? 0),
+        rank: Number(row.rank ?? index + 1),
+      })) ?? [];
+  }
+
+  const ownIndex = rankingRows.findIndex(
     (member) => member.user_id === user.value?.id,
   );
-  const ownRow = ownIndex >= 0 ? members[ownIndex] : null;
+  const ownRow = ownIndex >= 0 ? rankingRows[ownIndex] : null;
+  const ownRank = ownRow?.rank ?? null;
   const memberCount = Number(membersRes.count ?? members.length ?? 0);
   const liveCount = Number(liveRes.count ?? 0);
   const pendingCount = Number(pendingRes.count ?? 0);
   const finishedCount = Number(finishedRes.count ?? 0);
   const ticketPrice = Number(quiniela.value?.ticket_price ?? 0);
   const totalPot = ticketPrice * memberCount;
+  const leader = rankingRows[0] ?? null;
+  const leaderPoints = Number(leader?.total_points ?? 0);
+  let leaderName = "-";
+
+  if (leader?.user_id) {
+    if (leader.user_id === user.value?.id) {
+      leaderName = sessionUserName.value;
+    } else {
+      const { data: leaderProfile, error: leaderProfileError } = await client
+        .from("profiles")
+        .select("username")
+        .eq("id", leader.user_id)
+        .maybeSingle();
+
+      if (!leaderProfileError && typeof leaderProfile?.username === "string") {
+        leaderName = leaderProfile.username || "Jugador";
+      } else {
+        leaderName = "Jugador";
+      }
+    }
+  }
 
   headerMetrics.value = [
-    { label: "En vivo", value: String(liveCount) },
-    { label: "Pendientes", value: String(pendingCount) },
-    { label: "Finalizados", value: String(finishedCount) },
-    { label: "Jugadores", value: String(memberCount) },
+    { label: "En vivo", value: String(liveCount), tone: "live", icon: "●" },
+    {
+      label: "Pendientes",
+      value: String(pendingCount),
+      tone: "pending",
+      icon: "⏳",
+    },
+    {
+      label: "Finalizados",
+      value: String(finishedCount),
+      tone: "finished",
+      icon: "✓",
+    },
+    {
+      label: "Jugadores",
+      value: String(memberCount),
+      tone: "members",
+      icon: "👥",
+    },
+    {
+      label: "Lider actual",
+      value: memberCount > 0 ? `${leaderName} (${leaderPoints} pts)` : "-",
+      tone: "leader",
+      icon: "👑",
+    },
     {
       label: "Premio 1er lugar",
       value: formatMoney(totalPot),
-      highlight: true,
+      tone: "pot",
+      icon: "💰",
     },
-    { label: "Mis puntos", value: String(Number(ownRow?.total_points ?? 0)) },
+    {
+      label: "Mis puntos",
+      value: String(Number(ownRow?.total_points ?? 0)),
+      tone: "score",
+      icon: "🎯",
+    },
     {
       label: "Mi puesto",
       value:
-        ownIndex >= 0 && memberCount > 0
-          ? `#${ownIndex + 1}/${memberCount}`
+        ownRank !== null && memberCount > 0
+          ? `#${ownRank}/${memberCount}`
           : "-",
+      tone: "rank",
+      icon: "🏅",
     },
     {
       label: "Prox. kickoff",
       value: formatKickoff(
         (nextKickoffRes.data?.match_time as string | null) ?? null,
       ),
+      tone: "kickoff",
+      icon: "🕒",
     },
   ];
+};
+
+const metricChipClass = (item: HeaderMetric) => {
+  return `odds-chip-${item.tone}`;
+};
+
+const metricPriceClass = (item: HeaderMetric) => {
+  return `odds-price-${item.tone}`;
 };
 
 const loadAdminAccess = async () => {
@@ -674,14 +808,17 @@ onBeforeUnmount(() => {
               v-for="(item, index) in tickerMetrics"
               :key="`${segment}-${item.label}-${index}`"
               class="odds-chip"
-              :class="item.highlight && 'odds-chip-pot'"
+              :class="metricChipClass(item)"
             >
-              <span class="odds-market">{{ item.label }}</span>
-              <strong
-                class="odds-price"
-                :class="item.highlight && 'odds-price-pot'"
-                >{{ item.value }}</strong
-              >
+              <span class="odds-market">
+                <span class="odds-icon" aria-hidden="true">{{
+                  item.icon
+                }}</span>
+                {{ item.label }}
+              </span>
+              <strong class="odds-price" :class="metricPriceClass(item)">{{
+                item.value
+              }}</strong>
             </span>
           </div>
         </div>
