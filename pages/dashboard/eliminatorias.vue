@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import KnockoutBracketViewer from "~/components/dashboard/KnockoutBracketViewer.client.vue";
+import { normalizeTeamKey } from "~/utils/teamMeta";
 
 definePageMeta({
   middleware: ["auth"],
@@ -24,6 +25,15 @@ type EliminatoriasViewMode = "cards" | "bracket";
 const viewMode = ref<EliminatoriasViewMode>("cards");
 const activeStage = ref<string>(knockoutStages[0] ?? "round_32");
 const autoStageSelected = ref(false);
+const teamSearch = ref("");
+const teamSearchError = ref<string | null>(null);
+
+interface TeamStageOption {
+  team: string;
+  normalized: string;
+  stage: string;
+  stageIndex: number;
+}
 
 const grouped = computed(() => {
   const buckets: Record<string, typeof matches.value> = {
@@ -86,6 +96,79 @@ const activeStageMatches = computed(
 );
 
 const stageMatchCount = (stage: string) => grouped.value[stage]?.length ?? 0;
+
+const teamStageOptions = computed<TeamStageOption[]>(() => {
+  const map = new Map<string, TeamStageOption>();
+
+  for (const match of matches.value) {
+    const stageIndex = knockoutStages.indexOf(match.stage);
+
+    const registerTeam = (teamName: string) => {
+      const normalized = normalizeTeamKey(teamName);
+
+      if (!normalized) {
+        return;
+      }
+
+      const existing = map.get(normalized);
+
+      if (!existing) {
+        map.set(normalized, {
+          team: teamName,
+          normalized,
+          stage: match.stage,
+          stageIndex,
+        });
+        return;
+      }
+
+      if (stageIndex > existing.stageIndex) {
+        existing.stage = match.stage;
+        existing.stageIndex = stageIndex;
+      }
+    };
+
+    registerTeam(match.home_team);
+    registerTeam(match.away_team);
+  }
+
+  return Array.from(map.values()).sort((a, b) => a.team.localeCompare(b.team));
+});
+
+const goToTeamStage = () => {
+  const query = teamSearch.value.trim();
+
+  if (!query) {
+    teamSearchError.value = "Escribe una seleccion para buscar.";
+    return;
+  }
+
+  const normalizedQuery = normalizeTeamKey(query);
+  const exactMatch = teamStageOptions.value.find(
+    (item) => item.normalized === normalizedQuery,
+  );
+  const partialMatch =
+    exactMatch ||
+    teamStageOptions.value.find((item) =>
+      item.normalized.includes(normalizedQuery),
+    );
+
+  if (!partialMatch) {
+    teamSearchError.value = "No encontramos esa seleccion en eliminatorias.";
+    return;
+  }
+
+  activeStage.value = partialMatch.stage;
+  viewMode.value = "cards";
+  teamSearch.value = partialMatch.team;
+  teamSearchError.value = null;
+};
+
+watch(teamSearch, () => {
+  if (teamSearchError.value) {
+    teamSearchError.value = null;
+  }
+});
 
 const goPrevStage = () => {
   if (!hasPrevStage.value) {
@@ -185,6 +268,45 @@ watch(
         </p>
       </article>
 
+      <article
+        class="pitch-panel card rounded-2xl border border-base-300 bg-base-200/70 p-4 md:p-5"
+      >
+        <div class="flex flex-wrap items-center gap-3">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
+            Buscar seleccion
+          </p>
+          <form
+            class="flex flex-wrap items-center gap-2"
+            @submit.prevent="goToTeamStage"
+          >
+            <input
+              v-model="teamSearch"
+              list="knockout-teams-list"
+              type="text"
+              class="input input-bordered input-sm w-60"
+              placeholder="Ej: Mexico, Brasil, Espana"
+            />
+            <button type="submit" class="btn btn-primary btn-sm">
+              Ir a fase
+            </button>
+          </form>
+        </div>
+
+        <datalist id="knockout-teams-list">
+          <option
+            v-for="option in teamStageOptions"
+            :key="option.normalized"
+            :value="option.team"
+          >
+            {{ stageName(option.stage) }}
+          </option>
+        </datalist>
+
+        <p v-if="teamSearchError" class="text-error mt-2 text-xs">
+          {{ teamSearchError }}
+        </p>
+      </article>
+
       <template v-if="viewMode === 'cards'">
         <article
           class="pitch-panel card rounded-2xl border border-base-300 bg-base-200/70 p-4 md:p-5"
@@ -256,7 +378,18 @@ watch(
         </section>
       </template>
 
-      <KnockoutBracketViewer v-else :matches="matches" />
+      <section v-else class="bracket-fullwidth-wrap">
+        <KnockoutBracketViewer :matches="matches" />
+      </section>
     </div>
   </section>
 </template>
+
+<style scoped>
+@media (min-width: 1280px) {
+  .bracket-fullwidth-wrap {
+    width: calc(100vw - 1.25rem);
+    margin-inline: calc(50% - 50vw + 0.625rem);
+  }
+}
+</style>

@@ -1,15 +1,200 @@
 import { createError, getRouterParam, readBody } from 'h3'
 import { serverSupabaseServiceRole } from '#supabase/server'
 import { requireGlobalAdminAccess } from '../../../../utils/adminAccess'
+import {
+  BRACKET_MATCH_NUMBERS_BY_STAGE,
+  getDefaultSeedPairByMatchNumber,
+  KNOCKOUT_STAGE_FLOW,
+  type KnockoutStage,
+} from '../../../../utils/bracketEngine'
 import { getStagesBySegment, isSimulationSegment, type SimulationSegment } from '../../../../utils/simulationSegments'
+
+type ResetScope = 'all' | 'segment'
 
 type SimulateDeleteBody = {
   segment?: string
   reset_scores?: boolean
+  reset_scope?: string
+  clear_all_predictions?: boolean
+  clear_all_members?: boolean
+  clear_manual_points?: boolean
 }
 
 type SnapshotRestoreResult = {
   restored: number
+}
+
+const toNullableInteger = (value: unknown): number | null => {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  if (typeof value === 'string' && value.trim() === '') {
+    return null
+  }
+
+  const parsed = typeof value === 'number' ? value : Number(value)
+
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+    return null
+  }
+
+  return parsed
+}
+
+const toNullableBracketMatchNo = (value: unknown): number | null => {
+  const parsed = toNullableInteger(value)
+
+  if (parsed === null) {
+    return null
+  }
+
+  return parsed >= 73 && parsed <= 104 ? parsed : null
+}
+
+const isResetScope = (value: string): value is ResetScope => {
+  return value === 'all' || value === 'segment'
+}
+
+const isKnockoutStage = (value: string): value is KnockoutStage => {
+  return KNOCKOUT_STAGE_FLOW.includes(value as KnockoutStage)
+}
+
+const getExpectedBracketMatchNo = (stage: KnockoutStage, index: number): number | null => {
+  const numbers = BRACKET_MATCH_NUMBERS_BY_STAGE[stage]
+  const expected = numbers?.[index]
+
+  return Number.isInteger(expected) ? Number(expected) : null
+}
+
+const sortMatchesByStageTime = (items: any[]) => {
+  return [...items].sort((a, b) => {
+    const timeDiff =
+      new Date(String(a.match_time || '')).getTime()
+      - new Date(String(b.match_time || '')).getTime()
+
+    if (!Number.isNaN(timeDiff) && timeDiff !== 0) {
+      return timeDiff
+    }
+
+    const fixtureDiff = Number(a.api_fixture_id || 0) - Number(b.api_fixture_id || 0)
+
+    if (fixtureDiff !== 0) {
+      return fixtureDiff
+    }
+
+    return String(a.id || '').localeCompare(String(b.id || ''))
+  })
+}
+
+const resetKnockoutStagesToSeedState = async (
+  supabase: any,
+  stages: KnockoutStage[],
+) => {
+  let resetRows = 0
+
+  for (const stage of stages) {
+    const { data: rows, error: rowsError } = await supabase
+      .from('matches')
+      .select('*')
+      .eq('stage', stage)
+
+    if (rowsError) {
+      throw createError({ statusCode: 500, statusMessage: rowsError.message })
+    }
+
+    const sortedRows = sortMatchesByStageTime(rows || [])
+
+    for (let index = 0; index < sortedRows.length; index += 1) {
+      const row = sortedRows[index]
+      const expectedMatchNo = getExpectedBracketMatchNo(stage, index)
+      const expectedSeeds = expectedMatchNo
+        ? getDefaultSeedPairByMatchNumber(expectedMatchNo)
+        : null
+
+      if (!expectedMatchNo || !expectedSeeds) {
+        continue
+      }
+
+      const patch: Record<string, unknown> = {
+        home_team: expectedSeeds.home,
+        away_team: expectedSeeds.away,
+        home_team_code: null,
+        away_team_code: null,
+        home_team_logo_url: null,
+        away_team_logo_url: null,
+        home_score: null,
+        away_score: null,
+        home_penalty_score: null,
+        away_penalty_score: null,
+        status: 'pending',
+      }
+
+      if (Object.prototype.hasOwnProperty.call(row, 'bracket_match_no')) {
+        patch.bracket_match_no = expectedMatchNo
+      }
+
+      if (
+        Object.prototype.hasOwnProperty.call(row, 'home_seed_token')
+        && Object.prototype.hasOwnProperty.call(row, 'away_seed_token')
+      ) {
+        patch.home_seed_token = expectedSeeds.home
+        patch.away_seed_token = expectedSeeds.away
+      }
+
+      const { error: patchError } = await supabase
+        .from('matches')
+        .update(patch)
+        .eq('id', row.id)
+
+      if (patchError) {
+        throw createError({ statusCode: 500, statusMessage: patchError.message })
+      }
+
+      resetRows += 1
+    }
+  }
+
+  return {
+    resetRows,
+  }
+}
+
+const sanitizeInvalidBracketMatchNumbers = async (supabase: any) => {
+  const { data: invalidRows, error: invalidRowsError } = await supabase
+    .from('matches')
+    .select('id')
+    .not('bracket_match_no', 'is', null)
+    .or('bracket_match_no.lt.73,bracket_match_no.gt.104')
+
+  if (invalidRowsError?.code === '42703') {
+    return 0
+  }
+
+  if (invalidRowsError) {
+    throw createError({ statusCode: 500, statusMessage: invalidRowsError.message })
+  }
+
+  const invalidIds = (invalidRows || []).map((row: any) => String(row.id)).filter(Boolean)
+
+  if (invalidIds.length === 0) {
+    return 0
+  }
+
+  const { error: sanitizeError } = await supabase
+    .from('matches')
+    .update({ bracket_match_no: null })
+    .in('id', invalidIds)
+
+  if (sanitizeError?.code === '42703') {
+    return 0
+  }
+
+  if (sanitizeError) {
+    throw createError({ statusCode: 500, statusMessage: sanitizeError.message })
+  }
+
+  return invalidIds.length
 }
 
 const restoreMatchesFromSnapshot = async (
@@ -40,17 +225,15 @@ const restoreMatchesFromSnapshot = async (
       away_team_code: item.away_team_code ? String(item.away_team_code) : null,
       home_team_logo_url: item.home_team_logo_url ? String(item.home_team_logo_url) : null,
       away_team_logo_url: item.away_team_logo_url ? String(item.away_team_logo_url) : null,
-      home_score: Number.isInteger(Number(item.home_score)) ? Number(item.home_score) : null,
-      away_score: Number.isInteger(Number(item.away_score)) ? Number(item.away_score) : null,
-      home_penalty_score: Number.isInteger(Number(item.home_penalty_score)) ? Number(item.home_penalty_score) : null,
-      away_penalty_score: Number.isInteger(Number(item.away_penalty_score)) ? Number(item.away_penalty_score) : null,
+      home_score: toNullableInteger(item.home_score),
+      away_score: toNullableInteger(item.away_score),
+      home_penalty_score: toNullableInteger(item.home_penalty_score),
+      away_penalty_score: toNullableInteger(item.away_penalty_score),
       status: String(item.status || 'pending'),
     }
 
     if (Object.prototype.hasOwnProperty.call(item, 'bracket_match_no')) {
-      row.bracket_match_no = Number.isInteger(Number(item.bracket_match_no))
-        ? Number(item.bracket_match_no)
-        : null
+      row.bracket_match_no = toNullableBracketMatchNo(item.bracket_match_no)
     }
 
     if (Object.prototype.hasOwnProperty.call(item, 'home_seed_token')) {
@@ -124,6 +307,7 @@ export default defineEventHandler(async (event) => {
 
   const body = (await readBody(event).catch(() => ({}))) as SimulateDeleteBody
   const requestedSegment = String(body.segment || 'all').trim()
+  const requestedScope = String(body.reset_scope || '').trim().toLowerCase()
 
   if (!isSimulationSegment(requestedSegment)) {
     throw createError({ statusCode: 400, statusMessage: 'segment invalido' })
@@ -131,6 +315,11 @@ export default defineEventHandler(async (event) => {
 
   const segment: SimulationSegment = requestedSegment
   const resetScores = body.reset_scores !== false
+  const resetScope: ResetScope = isResetScope(requestedScope) ? requestedScope : 'all'
+  const clearAllPredictions = Boolean(body.clear_all_predictions)
+  const clearAllMembers = Boolean(body.clear_all_members)
+  const clearManualPoints = Boolean(body.clear_manual_points)
+  const forceHardReset = resetScope === 'all' && clearAllPredictions
 
   const quinielaId = getRouterParam(event, 'id')?.trim()
 
@@ -154,13 +343,16 @@ export default defineEventHandler(async (event) => {
 
   let matchesReset = 0
   let matchesRestoredFromSnapshot = 0
+  let knockoutSeedsReset = 0
+  const invalidBracketMatchNumbersFixed = await sanitizeInvalidBracketMatchNumbers(supabase)
 
   if (resetScores) {
     const snapshotRestore = await restoreMatchesFromSnapshot(supabase, quinielaId)
     matchesRestoredFromSnapshot = snapshotRestore.restored
 
-    if (matchesRestoredFromSnapshot === 0) {
-      const resetStages = getStagesBySegment(segment)
+    if (matchesRestoredFromSnapshot === 0 || forceHardReset) {
+      const effectiveSegment: SimulationSegment = resetScope === 'all' || forceHardReset ? 'all' : segment
+      const resetStages = getStagesBySegment(effectiveSegment)
 
       const { data: toReset, error: toResetError } = await supabase
         .from('matches')
@@ -191,27 +383,75 @@ export default defineEventHandler(async (event) => {
 
         matchesReset = resetIds.length
       }
+
+      const knockoutStagesToReset: KnockoutStage[] = []
+
+      if (resetScope === 'all') {
+        knockoutStagesToReset.push(...KNOCKOUT_STAGE_FLOW)
+      } else if (isKnockoutStage(segment)) {
+        const startIndex = KNOCKOUT_STAGE_FLOW.indexOf(segment)
+
+        if (startIndex >= 0) {
+          knockoutStagesToReset.push(...KNOCKOUT_STAGE_FLOW.slice(startIndex))
+        }
+      }
+
+      if (knockoutStagesToReset.length > 0) {
+        const knockoutReset = await resetKnockoutStagesToSeedState(
+          supabase,
+          knockoutStagesToReset,
+        )
+        knockoutSeedsReset = knockoutReset.resetRows
+      }
     }
   }
 
-  const { error: predictionsDeleteError } = await supabase
+  let predictionsDeleted = 0
+  const predictionsDeleteQuery = supabase
     .from('predictions')
     .delete()
     .eq('quiniela_id', quinielaId)
-    .eq('is_test_record', true)
+
+  const { data: deletedPredictions, error: predictionsDeleteError } = clearAllPredictions
+    ? await predictionsDeleteQuery.select('id')
+    : await predictionsDeleteQuery.eq('is_test_record', true).select('id')
 
   if (predictionsDeleteError) {
     throw createError({ statusCode: 500, statusMessage: predictionsDeleteError.message })
   }
 
-  const { error: membersDeleteError } = await supabase
+  predictionsDeleted = (deletedPredictions || []).length
+
+  let membersDeleted = 0
+  const membersDeleteQuery = supabase
     .from('quiniela_members')
     .delete()
     .eq('quiniela_id', quinielaId)
-    .eq('is_test_record', true)
+
+  const { data: deletedMembers, error: membersDeleteError } = clearAllMembers
+    ? await membersDeleteQuery.select('user_id')
+    : await membersDeleteQuery.eq('is_test_record', true).select('user_id')
 
   if (membersDeleteError) {
     throw createError({ statusCode: 500, statusMessage: membersDeleteError.message })
+  }
+
+  membersDeleted = (deletedMembers || []).length
+
+  let manualPointsDeleted = 0
+
+  if (clearManualPoints) {
+    const { data: deletedManualPoints, error: manualPointsDeleteError } = await supabase
+      .from('quiniela_member_manual_points')
+      .delete()
+      .eq('quiniela_id', quinielaId)
+      .select('id')
+
+    if (manualPointsDeleteError && manualPointsDeleteError.code !== '42P01') {
+      throw createError({ statusCode: 500, statusMessage: manualPointsDeleteError.message })
+    }
+
+    manualPointsDeleted = (deletedManualPoints || []).length
   }
 
   const { error: recalcError } = await supabase.rpc('recalculate_quiniela_scoring', {
@@ -241,9 +481,19 @@ export default defineEventHandler(async (event) => {
     },
     summary: {
       segment,
+      reset_scope: resetScope,
+      hard_reset_applied: forceHardReset,
       reset_scores: resetScores,
       matches_restored_from_snapshot: matchesRestoredFromSnapshot,
       matches_reset: matchesReset,
+      knockout_seeds_reset: knockoutSeedsReset,
+      invalid_bracket_match_no_fixed: invalidBracketMatchNumbersFixed,
+      clear_all_predictions: clearAllPredictions,
+      clear_all_members: clearAllMembers,
+      clear_manual_points: clearManualPoints,
+      predictions_deleted: predictionsDeleted,
+      members_deleted: membersDeleted,
+      manual_points_deleted: manualPointsDeleted,
     },
   }
 })

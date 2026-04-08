@@ -74,6 +74,7 @@ defineProps<{
   };
   runningSimulation: boolean;
   clearingSimulationData: boolean;
+  resettingWholeQuiniela: boolean;
   simulationMessage: string | null;
   simulationError: string | null;
 }>();
@@ -87,6 +88,7 @@ const emit = defineEmits<{
   applyManualPoints: [];
   runSimulation: [];
   clearSimulationData: [];
+  resetWholeQuiniela: [];
 }>();
 </script>
 
@@ -637,6 +639,17 @@ const emit = defineEmits<{
               clearingSimulationData
                 ? "Limpiando..."
                 : "Limpiar registros de prueba"
+            }}
+          </button>
+          <button
+            class="btn btn-error btn-outline btn-sm"
+            :disabled="resettingWholeQuiniela"
+            @click="emit('resetWholeQuiniela')"
+          >
+            {{
+              resettingWholeQuiniela
+                ? "Restableciendo..."
+                : "Restablecer quiniela completa"
             }}
           </button>
         </div>

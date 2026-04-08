@@ -50,6 +50,8 @@ const groupedMatches = computed(() => {
 
 const hasMatches = computed(() => matches.value.length > 0);
 const activeStage = ref<string>("group_a");
+const teamSearch = ref("");
+const teamSearchError = ref<string | null>(null);
 
 const activeMatches = computed(
   () => groupedMatches.value?.[activeStage.value] ?? [],
@@ -62,6 +64,48 @@ const stageTabs = computed(() =>
     count: groupedMatches.value[stage]?.length ?? 0,
   })),
 );
+
+interface TeamStageOption {
+  team: string;
+  normalized: string;
+  stage: string;
+}
+
+const teamStageOptions = computed<TeamStageOption[]>(() => {
+  const map = new Map<string, TeamStageOption>();
+
+  for (const match of matches.value) {
+    const registerTeam = (teamName: string) => {
+      const normalized = normalizeTeamKey(teamName);
+
+      if (!normalized) {
+        return;
+      }
+
+      const existing = map.get(normalized);
+
+      if (!existing) {
+        map.set(normalized, {
+          team: teamName,
+          normalized,
+          stage: match.stage,
+        });
+        return;
+      }
+
+      if (
+        groupStages.indexOf(match.stage) < groupStages.indexOf(existing.stage)
+      ) {
+        existing.stage = match.stage;
+      }
+    };
+
+    registerTeam(match.home_team);
+    registerTeam(match.away_team);
+  }
+
+  return Array.from(map.values()).sort((a, b) => a.team.localeCompare(b.team));
+});
 
 interface TeamPerformanceRow {
   team: string;
@@ -198,6 +242,40 @@ const teamFlagIconClass = (code: string | null) => flagIconClassFromCode(code);
 
 const teamFlag = (code: string | null) => teamFlagEmojiFromCode(code);
 
+const goToTeamGroup = () => {
+  const query = teamSearch.value.trim();
+
+  if (!query) {
+    teamSearchError.value = "Escribe una seleccion para buscar.";
+    return;
+  }
+
+  const normalizedQuery = normalizeTeamKey(query);
+  const exactMatch = teamStageOptions.value.find(
+    (item) => item.normalized === normalizedQuery,
+  );
+  const partialMatch =
+    exactMatch ||
+    teamStageOptions.value.find((item) =>
+      item.normalized.includes(normalizedQuery),
+    );
+
+  if (!partialMatch) {
+    teamSearchError.value = "No encontramos esa seleccion en fase de grupos.";
+    return;
+  }
+
+  activeStage.value = partialMatch.stage;
+  teamSearch.value = partialMatch.team;
+  teamSearchError.value = null;
+};
+
+watch(teamSearch, () => {
+  if (teamSearchError.value) {
+    teamSearchError.value = null;
+  }
+});
+
 watch(
   hasMatches,
   (value) => {
@@ -278,6 +356,45 @@ watch(
             </span>
           </button>
         </div>
+      </article>
+
+      <article
+        class="pitch-panel card rounded-2xl border border-base-300 bg-base-200/70 p-4"
+      >
+        <div class="flex flex-wrap items-center gap-3">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
+            Buscar seleccion
+          </p>
+          <form
+            class="flex flex-wrap items-center gap-2"
+            @submit.prevent="goToTeamGroup"
+          >
+            <input
+              v-model="teamSearch"
+              list="group-teams-list"
+              type="text"
+              class="input input-bordered input-sm w-60"
+              placeholder="Ej: Mexico, Brasil, Espana"
+            />
+            <button type="submit" class="btn btn-primary btn-sm">
+              Ir al grupo
+            </button>
+          </form>
+        </div>
+
+        <datalist id="group-teams-list">
+          <option
+            v-for="option in teamStageOptions"
+            :key="option.normalized"
+            :value="option.team"
+          >
+            {{ stageTitle(option.stage) }}
+          </option>
+        </datalist>
+
+        <p v-if="teamSearchError" class="text-error mt-2 text-xs">
+          {{ teamSearchError }}
+        </p>
       </article>
 
       <section class="space-y-3">

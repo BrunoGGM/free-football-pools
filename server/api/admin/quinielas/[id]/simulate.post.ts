@@ -3,9 +3,11 @@ import { serverSupabaseServiceRole } from '#supabase/server'
 import { requireGlobalAdminAccess } from '../../../../utils/adminAccess'
 import { normalizeTeamKey, resolveTeamCode } from '../../../../../utils/teamMeta'
 import {
+  BRACKET_MATCH_NUMBERS_BY_STAGE,
   computeGroupRankings,
   getDefaultSeedPairByMatchNumber,
   isRound32SeedToken,
+  type KnockoutStage,
   resolveRound32SeedToken,
   KNOCKOUT_STAGE_FLOW,
   type GroupOverrideRow,
@@ -31,6 +33,71 @@ const clamp = (value: number, min: number, max: number) => {
 
 const randomInt = (min: number, max: number) => {
   return Math.floor(Math.random() * (max - min + 1)) + min
+}
+
+const toNullableInteger = (value: unknown): number | null => {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  if (typeof value === 'string' && value.trim() === '') {
+    return null
+  }
+
+  const parsed = typeof value === 'number' ? value : Number(value)
+
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+    return null
+  }
+
+  return parsed
+}
+
+const toNullableBracketMatchNo = (value: unknown): number | null => {
+  const parsed = toNullableInteger(value)
+
+  if (parsed === null) {
+    return null
+  }
+
+  return parsed >= 73 && parsed <= 104 ? parsed : null
+}
+
+const sanitizeInvalidBracketMatchNumbers = async (supabase: any) => {
+  const { data: invalidRows, error: invalidRowsError } = await supabase
+    .from('matches')
+    .select('id')
+    .not('bracket_match_no', 'is', null)
+    .or('bracket_match_no.lt.73,bracket_match_no.gt.104')
+
+  if (invalidRowsError?.code === '42703') {
+    return 0
+  }
+
+  if (invalidRowsError) {
+    throw createError({ statusCode: 500, statusMessage: invalidRowsError.message })
+  }
+
+  const invalidIds = (invalidRows || []).map((row: any) => String(row.id)).filter(Boolean)
+
+  if (invalidIds.length === 0) {
+    return 0
+  }
+
+  const { error: sanitizeError } = await supabase
+    .from('matches')
+    .update({ bracket_match_no: null })
+    .in('id', invalidIds)
+
+  if (sanitizeError?.code === '42703') {
+    return 0
+  }
+
+  if (sanitizeError) {
+    throw createError({ statusCode: 500, statusMessage: sanitizeError.message })
+  }
+
+  return invalidIds.length
 }
 
 const chunkArray = <T,>(items: T[], chunkSize: number): T[][] => {
@@ -101,6 +168,21 @@ const KNOCKOUT_STAGES_NO_DRAW = new Set([
   'third_place',
   'final',
 ])
+
+const isKnockoutStage = (value: string): value is KnockoutStage => {
+  return KNOCKOUT_STAGE_FLOW.includes(value as KnockoutStage)
+}
+
+const getExpectedBracketMatchNo = (stage: string, index: number): number | null => {
+  if (!isKnockoutStage(stage)) {
+    return null
+  }
+
+  const numbers = BRACKET_MATCH_NUMBERS_BY_STAGE[stage]
+  const expected = numbers?.[index]
+
+  return Number.isInteger(expected) ? Number(expected) : null
+}
 
 const loadGroupOverrides = async (supabase: any, quinielaId: string): Promise<GroupOverrideRow[]> => {
   const { data, error } = await supabase
@@ -389,6 +471,75 @@ const sortMatchesByStageTime = (items: any[]) => {
   })
 }
 
+const repairKnockoutBracketMetadata = async (supabase: any) => {
+  let repairedRows = 0
+
+  for (const stage of KNOCKOUT_STAGE_FLOW) {
+    const { data: rows, error: rowsError } = await supabase
+      .from('matches')
+      .select('*')
+      .eq('stage', stage)
+
+    if (rowsError) {
+      throw createError({ statusCode: 500, statusMessage: rowsError.message })
+    }
+
+    const sortedRows = sortMatchesByStageTime(rows || [])
+
+    for (let index = 0; index < sortedRows.length; index += 1) {
+      const row = sortedRows[index]
+      const expectedMatchNo = getExpectedBracketMatchNo(stage, index)
+      const expectedSeeds = expectedMatchNo
+        ? getDefaultSeedPairByMatchNumber(expectedMatchNo)
+        : null
+
+      if (!expectedMatchNo || !expectedSeeds) {
+        continue
+      }
+
+      const patch: Record<string, unknown> = {}
+      const currentMatchNo = toNullableBracketMatchNo(row.bracket_match_no)
+      const supportsMatchNoColumn = Object.prototype.hasOwnProperty.call(row, 'bracket_match_no')
+      const supportsSeedColumns =
+        Object.prototype.hasOwnProperty.call(row, 'home_seed_token')
+        && Object.prototype.hasOwnProperty.call(row, 'away_seed_token')
+
+      if (supportsMatchNoColumn && currentMatchNo !== expectedMatchNo) {
+        patch.bracket_match_no = expectedMatchNo
+      }
+
+      if (supportsSeedColumns) {
+        if (String(row.home_seed_token || '').trim() !== expectedSeeds.home) {
+          patch.home_seed_token = expectedSeeds.home
+        }
+
+        if (String(row.away_seed_token || '').trim() !== expectedSeeds.away) {
+          patch.away_seed_token = expectedSeeds.away
+        }
+      }
+
+      if (Object.keys(patch).length === 0) {
+        continue
+      }
+
+      const { error: patchError } = await supabase
+        .from('matches')
+        .update(patch)
+        .eq('id', row.id)
+
+      if (patchError) {
+        throw createError({ statusCode: 500, statusMessage: patchError.message })
+      }
+
+      repairedRows += 1
+    }
+  }
+
+  return {
+    repairedRows,
+  }
+}
+
 const getKnockoutStartStageFromStages = (stages: string[]) => {
   for (const stage of KNOCKOUT_STAGE_FLOW) {
     if (stages.includes(stage)) {
@@ -439,14 +590,17 @@ const resetDownstreamKnockoutSeeds = async (
 
     const sortedRows = sortMatchesByStageTime(rows || [])
     const patchRows = sortedRows
-      .map((row: any) => {
+      .map((row: any, index: number) => {
         const supportsSeedColumns =
           Object.prototype.hasOwnProperty.call(row, 'home_seed_token')
           && Object.prototype.hasOwnProperty.call(row, 'away_seed_token')
 
-        const bracketMatchNo = Number(row.bracket_match_no || 0)
+        const supportsMatchNoColumn = Object.prototype.hasOwnProperty.call(row, 'bracket_match_no')
+        const expectedMatchNo = getExpectedBracketMatchNo(stage, index)
+        const bracketMatchNo = toNullableBracketMatchNo(row.bracket_match_no) ?? expectedMatchNo
+
         const mapped = Number.isInteger(bracketMatchNo)
-          ? getDefaultSeedPairByMatchNumber(bracketMatchNo)
+          ? getDefaultSeedPairByMatchNumber(Number(bracketMatchNo))
           : null
 
         const homeSeed = String(row.home_seed_token || mapped?.home || '').trim()
@@ -474,6 +628,10 @@ const resetDownstreamKnockoutSeeds = async (
         if (supportsSeedColumns) {
           patchRow.home_seed_token = homeSeed
           patchRow.away_seed_token = awaySeed
+        }
+
+        if (supportsMatchNoColumn) {
+          patchRow.bracket_match_no = bracketMatchNo ?? null
         }
 
         return patchRow
@@ -586,17 +744,15 @@ const captureGlobalMatchesSnapshotIfMissing = async (
       away_team_code: match.away_team_code ? String(match.away_team_code) : null,
       home_team_logo_url: match.home_team_logo_url ? String(match.home_team_logo_url) : null,
       away_team_logo_url: match.away_team_logo_url ? String(match.away_team_logo_url) : null,
-      home_score: Number.isInteger(Number(match.home_score)) ? Number(match.home_score) : null,
-      away_score: Number.isInteger(Number(match.away_score)) ? Number(match.away_score) : null,
-      home_penalty_score: Number.isInteger(Number(match.home_penalty_score)) ? Number(match.home_penalty_score) : null,
-      away_penalty_score: Number.isInteger(Number(match.away_penalty_score)) ? Number(match.away_penalty_score) : null,
+      home_score: toNullableInteger(match.home_score),
+      away_score: toNullableInteger(match.away_score),
+      home_penalty_score: toNullableInteger(match.home_penalty_score),
+      away_penalty_score: toNullableInteger(match.away_penalty_score),
       status: String(match.status || 'pending'),
     }
 
     if (Object.prototype.hasOwnProperty.call(match, 'bracket_match_no')) {
-      row.bracket_match_no = Number.isInteger(Number(match.bracket_match_no))
-        ? Number(match.bracket_match_no)
-        : null
+      row.bracket_match_no = toNullableBracketMatchNo(match.bracket_match_no)
     }
 
     if (Object.prototype.hasOwnProperty.call(match, 'home_seed_token')) {
@@ -686,6 +842,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Quiniela no encontrada' })
   }
 
+  const invalidBracketMatchNumbersFixed = await sanitizeInvalidBracketMatchNumbers(supabase)
+
   if (resetTestData) {
     await clearTestData(supabase, quinielaId)
   }
@@ -696,12 +854,16 @@ export default defineEventHandler(async (event) => {
   let snapshotCaptured = false
   let snapshotMatches = 0
   let downstreamKnockoutReset = 0
+  let knockoutMetadataRepaired = 0
 
   if (simulateScores) {
     await ensureNoActiveScoreSimulationFromAnotherQuiniela(supabase, quinielaId)
     const snapshotResult = await captureGlobalMatchesSnapshotIfMissing(supabase, quinielaId)
     snapshotCaptured = snapshotResult.captured
     snapshotMatches = snapshotResult.matches
+
+    const metadataRepair = await repairKnockoutBracketMetadata(supabase)
+    knockoutMetadataRepaired = metadataRepair.repairedRows
 
     const resetResult = await resetDownstreamKnockoutSeeds(supabase, stages)
     downstreamKnockoutReset = resetResult.downstreamMatchesReset
@@ -993,8 +1155,10 @@ export default defineEventHandler(async (event) => {
       snapshot_captured: snapshotCaptured,
       snapshot_matches: snapshotMatches,
       knockout_downstream_reset: downstreamKnockoutReset,
+      knockout_metadata_repaired: knockoutMetadataRepaired,
       round32_slots_resolved: round32SlotsResolved,
       round32_slots_unresolved: round32SlotsUnresolved,
+      invalid_bracket_match_no_fixed: invalidBracketMatchNumbersFixed,
       users_created: createdUsers,
       users_reused: reusedUsers,
       members_created: createdMembers,

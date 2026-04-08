@@ -262,6 +262,7 @@ const simulationForm = reactive({
 });
 const runningSimulation = ref(false);
 const clearingSimulationData = ref(false);
+const resettingWholeQuiniela = ref(false);
 const simulationMessage = ref<string | null>(null);
 const simulationError = ref<string | null>(null);
 
@@ -637,6 +638,7 @@ const runSimulation = async () => {
         snapshot_captured: boolean;
         snapshot_matches: number;
         knockout_downstream_reset: number;
+        knockout_metadata_repaired: number;
         users_created: number;
         users_reused: number;
         predictions_upserted: number;
@@ -660,7 +662,7 @@ const runSimulation = async () => {
       },
     });
 
-    simulationMessage.value = `Simulacion ejecutada (${simulationSegmentLabel(result.segment.key)}). Marcadores actualizados: ${result.summary.scores_updated}, empates KO resueltos: ${result.summary.knockout_ties_resolved}, llaves KO reiniciadas: ${result.summary.knockout_downstream_reset}, snapshot global ${result.summary.snapshot_captured ? `capturado (${result.summary.snapshot_matches})` : "reusado"}, usuarios reusados: ${result.summary.users_reused}, usuarios creados: ${result.summary.users_created}, predicciones generadas: ${result.summary.predictions_upserted}, predicciones admin: ${result.summary.admin_predictions_generated}. Lock pruebas: ${result.quiniela.has_test_data ? "ACTIVO" : "INACTIVO"}.`;
+    simulationMessage.value = `Simulacion ejecutada (${simulationSegmentLabel(result.segment.key)}). Marcadores actualizados: ${result.summary.scores_updated}, empates KO resueltos: ${result.summary.knockout_ties_resolved}, metadatos KO reparados: ${result.summary.knockout_metadata_repaired}, llaves KO reiniciadas: ${result.summary.knockout_downstream_reset}, snapshot global ${result.summary.snapshot_captured ? `capturado (${result.summary.snapshot_matches})` : "reusado"}, usuarios reusados: ${result.summary.users_reused}, usuarios creados: ${result.summary.users_created}, predicciones generadas: ${result.summary.predictions_upserted}, predicciones admin: ${result.summary.admin_predictions_generated}. Lock pruebas: ${result.quiniela.has_test_data ? "ACTIVO" : "INACTIVO"}.`;
 
     await Promise.all([loadGlobalStats(false), loadIngestionLogs()]);
   } catch (error: any) {
@@ -692,7 +694,7 @@ const clearSimulationData = async () => {
 
   if (process.client) {
     const confirmed = window.confirm(
-      "Se eliminaran usuarios/predicciones de prueba. Si existe snapshot, se restauraran los partidos globales a su estado original; si no, se reseteara el segmento seleccionado. Continuar?",
+      "Se eliminaran usuarios/predicciones de prueba. Si existe snapshot, se restauraran los partidos globales a su estado original; si no, se reseteara TODO el torneo (grupos + eliminatorias). Continuar?",
     );
 
     if (!confirmed) {
@@ -708,18 +710,23 @@ const clearSimulationData = async () => {
         has_test_data: boolean;
       };
       summary: {
+        reset_scope: "all" | "segment";
         matches_restored_from_snapshot: number;
         matches_reset: number;
+        knockout_seeds_reset: number;
+        predictions_deleted: number;
+        members_deleted: number;
       };
     }>(`/api/admin/quinielas/${quinielaId}/simulate`, {
       method: "DELETE",
       body: {
         segment: simulationForm.segment,
         reset_scores: true,
+        reset_scope: "all",
       },
     });
 
-    simulationMessage.value = `Registros de prueba limpiados. Partidos restaurados (snapshot): ${result.summary.matches_restored_from_snapshot}, reseteados (fallback): ${result.summary.matches_reset}. Lock pruebas: ${result.quiniela.has_test_data ? "ACTIVO" : "INACTIVO"}.`;
+    simulationMessage.value = `Registros de prueba limpiados. Alcance: ${result.summary.reset_scope === "all" ? "torneo completo" : "segmento"}. Partidos restaurados (snapshot): ${result.summary.matches_restored_from_snapshot}, reseteados (fallback): ${result.summary.matches_reset}, llaves KO reiniciadas: ${result.summary.knockout_seeds_reset}. Predicciones eliminadas: ${result.summary.predictions_deleted}, miembros test eliminados: ${result.summary.members_deleted}. Lock pruebas: ${result.quiniela.has_test_data ? "ACTIVO" : "INACTIVO"}.`;
     await Promise.all([loadGlobalStats(false), loadIngestionLogs()]);
   } catch (error: any) {
     simulationError.value =
@@ -728,6 +735,71 @@ const clearSimulationData = async () => {
       "No se pudieron limpiar los registros de prueba";
   } finally {
     clearingSimulationData.value = false;
+  }
+};
+
+const resetWholeQuiniela = async () => {
+  simulationMessage.value = null;
+  simulationError.value = null;
+
+  if (!canUseGlobalFeatures.value) {
+    simulationError.value =
+      "Solo admin global puede restablecer una quiniela completa.";
+    return;
+  }
+
+  const quinielaId = simulationForm.quiniela_id.trim();
+
+  if (!quinielaId) {
+    simulationError.value = "Selecciona una quiniela para restablecer.";
+    return;
+  }
+
+  if (process.client) {
+    const confirmed = window.confirm(
+      "Esto reiniciara TODO el torneo (grupos + eliminatorias) y eliminara TODOS los picks de usuarios y ajustes manuales de puntos en la quiniela. Esta accion no se puede deshacer. Continuar?",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+  }
+
+  resettingWholeQuiniela.value = true;
+
+  try {
+    const result = await adminFetch<{
+      quiniela: {
+        has_test_data: boolean;
+      };
+      summary: {
+        matches_restored_from_snapshot: number;
+        matches_reset: number;
+        knockout_seeds_reset: number;
+        predictions_deleted: number;
+        members_deleted: number;
+        manual_points_deleted: number;
+      };
+    }>(`/api/admin/quinielas/${quinielaId}/simulate`, {
+      method: "DELETE",
+      body: {
+        segment: "all",
+        reset_scores: true,
+        reset_scope: "all",
+        clear_all_predictions: true,
+        clear_manual_points: true,
+      },
+    });
+
+    simulationMessage.value = `Quiniela restablecida desde cero. Partidos restaurados (snapshot): ${result.summary.matches_restored_from_snapshot}, reseteados (fallback): ${result.summary.matches_reset}, llaves KO reiniciadas: ${result.summary.knockout_seeds_reset}. Picks eliminados: ${result.summary.predictions_deleted}, miembros test eliminados: ${result.summary.members_deleted}, ajustes manuales eliminados: ${result.summary.manual_points_deleted}. Lock pruebas: ${result.quiniela.has_test_data ? "ACTIVO" : "INACTIVO"}.`;
+    await Promise.all([loadGlobalStats(false), loadIngestionLogs()]);
+  } catch (error: any) {
+    simulationError.value =
+      error?.data?.message ||
+      error?.message ||
+      "No se pudo restablecer la quiniela";
+  } finally {
+    resettingWholeQuiniela.value = false;
   }
 };
 
@@ -1655,6 +1727,7 @@ watch(
       :simulation-form="simulationForm"
       :running-simulation="runningSimulation"
       :clearing-simulation-data="clearingSimulationData"
+      :resetting-whole-quiniela="resettingWholeQuiniela"
       :simulation-message="simulationMessage"
       :simulation-error="simulationError"
       @random-access-code="randomAccessCode"
@@ -1665,6 +1738,7 @@ watch(
       @apply-manual-points="applyManualPoints"
       @run-simulation="runSimulation"
       @clear-simulation-data="clearSimulationData"
+      @reset-whole-quiniela="resetWholeQuiniela"
     />
 
     <AdminTeamsSection

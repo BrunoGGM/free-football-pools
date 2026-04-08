@@ -60,6 +60,18 @@ const containerId = "eliminatorias-bracket-viewer";
 const mounted = ref(false);
 const viewerScriptId = "brackets-viewer-runtime-script";
 let viewerScriptPromise: Promise<void> | null = null;
+const viewportRef = ref<HTMLDivElement | null>(null);
+const teamQuery = ref("");
+const compactMode = ref(false);
+type BracketStage =
+  | "round_32"
+  | "round_16"
+  | "quarter_final"
+  | "semi_final"
+  | "final"
+  | "third_place";
+type StageFilter = "all" | BracketStage;
+const stageFilter = ref<StageFilter>("all");
 
 const ensureViewerScriptLoaded = async () => {
   if (process.server) {
@@ -112,7 +124,7 @@ const ensureViewerScriptLoaded = async () => {
   await viewerScriptPromise;
 };
 
-const stageToRoundId: Record<string, number> = {
+const stageToRoundId: Record<BracketStage, number> = {
   round_32: 0,
   round_16: 1,
   quarter_final: 2,
@@ -121,16 +133,17 @@ const stageToRoundId: Record<string, number> = {
   third_place: 5,
 };
 
-const stageToGroupId: Record<string, number> = {
+const stageToGroupId: Record<BracketStage, number> = {
   round_32: 0,
   round_16: 0,
   quarter_final: 0,
   semi_final: 0,
   final: 0,
+  // En single elimination, el group 1 se renderiza como final-group (consolation final).
   third_place: 1,
 };
 
-const stageOrder = [
+const stageOrder: BracketStage[] = [
   "round_32",
   "round_16",
   "quarter_final",
@@ -138,6 +151,15 @@ const stageOrder = [
   "final",
   "third_place",
 ];
+
+const stageLabelByKey: Record<BracketStage, string> = {
+  round_32: "16vos",
+  round_16: "8vos",
+  quarter_final: "4tos",
+  semi_final: "Semi",
+  final: "Final",
+  third_place: "3er puesto",
+};
 
 const bracketMatchOrderByStage: Record<string, number[]> = {
   // Este orden alinea el viewer con los seeds W/L definidos en M73-M104.
@@ -148,6 +170,22 @@ const bracketMatchOrderByStage: Record<string, number[]> = {
   final: [104],
   third_place: [103],
 };
+
+const scrollBracketTo = (side: "start" | "end") => {
+  const viewport = viewportRef.value;
+
+  if (!viewport) {
+    return;
+  }
+
+  viewport.scrollTo({
+    left: side === "start" ? 0 : viewport.scrollWidth,
+    behavior: "smooth",
+  });
+};
+
+const goToBracketStart = () => scrollBracketTo("start");
+const goToBracketEnd = () => scrollBracketTo("end");
 
 interface TeamVisualInfo {
   code: string | null;
@@ -201,7 +239,9 @@ const sortedMatches = computed(() => {
   const items = [...props.matches];
 
   items.sort((a, b) => {
-    const stageDiff = stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage);
+    const stageDiff =
+      stageOrder.indexOf(a.stage as BracketStage) -
+      stageOrder.indexOf(b.stage as BracketStage);
 
     if (stageDiff !== 0) {
       return stageDiff;
@@ -234,10 +274,113 @@ const sortedMatches = computed(() => {
   return items;
 });
 
+const filteredMatches = computed(() => {
+  if (stageFilter.value === "all") {
+    return sortedMatches.value;
+  }
+
+  return sortedMatches.value.filter(
+    (match) => match.stage === stageFilter.value,
+  );
+});
+
+const totalMatches = computed(() => sortedMatches.value.length);
+const finishedMatches = computed(
+  () =>
+    sortedMatches.value.filter((match) => match.status === "finished").length,
+);
+const inProgressMatches = computed(
+  () =>
+    sortedMatches.value.filter((match) => match.status === "in_progress")
+      .length,
+);
+const pendingMatches = computed(
+  () =>
+    sortedMatches.value.filter((match) => match.status === "pending").length,
+);
+const completionPercent = computed(() => {
+  if (totalMatches.value === 0) {
+    return 0;
+  }
+
+  return Math.round((finishedMatches.value / totalMatches.value) * 100);
+});
+const visibleMatches = computed(() => filteredMatches.value.length);
+const selectedStageLabel = computed(() => {
+  if (stageFilter.value === "all") {
+    return "Todas";
+  }
+
+  return stageLabelByKey[stageFilter.value] || stageFilter.value;
+});
+
+const resolveWinnerTeam = (match: MatchItem): string | null => {
+  if (match.status !== "finished") {
+    return null;
+  }
+
+  const homeScore = Number(match.home_score);
+  const awayScore = Number(match.away_score);
+
+  if (!Number.isInteger(homeScore) || !Number.isInteger(awayScore)) {
+    return null;
+  }
+
+  if (homeScore > awayScore) {
+    return match.home_team;
+  }
+
+  if (awayScore > homeScore) {
+    return match.away_team;
+  }
+
+  const homePenalty = Number(match.home_penalty_score);
+  const awayPenalty = Number(match.away_penalty_score);
+
+  if (!Number.isInteger(homePenalty) || !Number.isInteger(awayPenalty)) {
+    return null;
+  }
+
+  if (homePenalty > awayPenalty) {
+    return match.home_team;
+  }
+
+  if (awayPenalty > homePenalty) {
+    return match.away_team;
+  }
+
+  return null;
+};
+
+const finalMatchInfo = computed(() => {
+  const finalMatch = sortedMatches.value.find(
+    (match) => match.stage === "final",
+  );
+
+  if (!finalMatch) {
+    return null;
+  }
+
+  const winner = resolveWinnerTeam(finalMatch);
+
+  const homeKey = normalizeTeamKey(finalMatch.home_team || "");
+  const awayKey = normalizeTeamKey(finalMatch.away_team || "");
+
+  if (!homeKey || !awayKey) {
+    return null;
+  }
+
+  return {
+    homeKey,
+    awayKey,
+    winnerKey: winner ? normalizeTeamKey(winner) : null,
+  };
+});
+
 const teamVisualByNameKey = computed(() => {
   const visuals = new Map<string, TeamVisualInfo>();
 
-  for (const match of sortedMatches.value) {
+  for (const match of filteredMatches.value) {
     const sides = [
       {
         name: match.home_team,
@@ -336,10 +479,40 @@ const enhanceBracketPresentation = () => {
       continue;
     }
 
+    const teamKey = normalizeTeamKey(teamName);
+    const participant = node.closest(".participant");
+    const isWinner = participant?.classList.contains("win") || false;
+    const finalInfo = finalMatchInfo.value;
+
+    let isFinalMatchCard = false;
+    const opponentsNode = node.closest(".opponents");
+
+    if (opponentsNode && finalInfo) {
+      const participantNames =
+        opponentsNode.querySelectorAll<HTMLElement>(".participant .name");
+      const keysInCard = [...participantNames]
+        .map((nameNode) => normalizeTeamKey(nameNode.textContent || ""))
+        .filter((key): key is string => Boolean(key));
+
+      isFinalMatchCard =
+        keysInCard.includes(finalInfo.homeKey) &&
+        keysInCard.includes(finalInfo.awayKey);
+    }
+
+    const isFinalWinner = Boolean(
+      isWinner &&
+      isFinalMatchCard &&
+      teamKey &&
+      finalInfo?.winnerKey &&
+      teamKey === finalInfo.winnerKey,
+    );
+
+    const iconSymbol = isFinalWinner ? "🏆" : isWinner ? "⚽" : null;
+
     const visual = getTeamVisual(teamName);
     const cacheKey = `${teamName}-${visual.code || "none"}-${
       visual.flagIconClass || "no-icon"
-    }-${visual.logoUrl || "no-logo"}`;
+    }-${visual.logoUrl || "no-logo"}-${iconSymbol || "no-icon"}`;
 
     if (node.dataset.enhanced === cacheKey) {
       continue;
@@ -375,22 +548,84 @@ const enhanceBracketPresentation = () => {
     name.className = "team-name-label";
     name.textContent = teamName;
 
-    const icon = document.createElement("span");
-    icon.className = "team-icon-chip";
-    icon.textContent = "⚽";
-    icon.setAttribute("aria-hidden", "true");
-
     node.appendChild(identity);
     node.appendChild(name);
-    node.appendChild(icon);
+
+    if (iconSymbol) {
+      const icon = document.createElement("span");
+      icon.className = isFinalWinner
+        ? "team-icon-chip team-icon-chip--champion"
+        : "team-icon-chip";
+      icon.textContent = iconSymbol;
+      icon.setAttribute("aria-hidden", "true");
+      node.appendChild(icon);
+    }
   }
+};
+
+const normalizeSearchTerm = (value: string) =>
+  value.trim().toLocaleLowerCase("es");
+
+const applyTeamFilterHighlight = () => {
+  if (process.server) {
+    return;
+  }
+
+  const root = document.getElementById(containerId);
+
+  if (!root) {
+    return;
+  }
+
+  const query = normalizeSearchTerm(teamQuery.value);
+  const participants = root.querySelectorAll<HTMLElement>(".participant");
+
+  for (const participant of participants) {
+    const nameNode = participant.querySelector<HTMLElement>(".name");
+    const candidate = normalizeSearchTerm(nameNode?.textContent || "");
+    const isMatch = query.length > 0 && candidate.includes(query);
+
+    participant.classList.toggle("participant-query-match", isMatch);
+    participant.classList.toggle(
+      "participant-query-dimmed",
+      query.length > 0 && !isMatch,
+    );
+  }
+};
+
+const focusFirstSearchResult = () => {
+  if (process.server) {
+    return;
+  }
+
+  const root = document.getElementById(containerId);
+
+  if (!root) {
+    return;
+  }
+
+  const firstMatch = root.querySelector<HTMLElement>(
+    ".participant.participant-query-match",
+  );
+
+  firstMatch?.scrollIntoView({
+    behavior: "smooth",
+    block: "center",
+    inline: "center",
+  });
+};
+
+const clearViewFilters = () => {
+  teamQuery.value = "";
+  stageFilter.value = "all";
+  goToBracketStart();
 };
 
 const viewerData = computed(() => {
   const participantsByName = new Map<string, ViewerParticipant>();
   let participantId = 1;
 
-  for (const match of sortedMatches.value) {
+  for (const match of filteredMatches.value) {
     const names = [match.home_team.trim(), match.away_team.trim()];
 
     for (const name of names) {
@@ -416,7 +651,7 @@ const viewerData = computed(() => {
     matchesByStage.set(stage, []);
   }
 
-  for (const match of sortedMatches.value) {
+  for (const match of filteredMatches.value) {
     if (!matchesByStage.has(match.stage)) {
       continue;
     }
@@ -499,6 +734,10 @@ const renderBracket = async () => {
     return;
   }
 
+  if (filteredMatches.value.length === 0) {
+    return;
+  }
+
   await ensureViewerScriptLoaded();
 
   const runtimeWindow = window as Window & {
@@ -521,24 +760,52 @@ const renderBracket = async () => {
       roundNumber: number;
       finalType?: string;
     }) => {
-      if (info.groupType === "single_bracket") {
+      const normalizedGroupType = String(info.groupType || "")
+        .toLowerCase()
+        .replace(/-/g, "_");
+
+      if (normalizedGroupType === "single_bracket") {
+        if (stageFilter.value !== "all") {
+          return stageLabelByKey[stageFilter.value] || "";
+        }
+
         const names: Record<number, string> = {
-          1: "🧩 Dieciseisavos",
-          2: "⚔️ Octavos",
-          3: "🔥 Cuartos",
-          4: "🚀 Semifinal",
-          5: "🏆 Final",
+          1: stageLabelByKey.round_32,
+          2: stageLabelByKey.round_16,
+          3: stageLabelByKey.quarter_final,
+          4: stageLabelByKey.semi_final,
+          5: stageLabelByKey.final,
+          6: stageLabelByKey.third_place,
         };
 
         return names[info.roundNumber] ?? `Ronda ${info.roundNumber}`;
       }
 
-      if (info.groupType === "final-group") {
-        if (info.finalType === "consolation_final") {
-          return "🥉 Tercer lugar";
+      if (normalizedGroupType === "final_group") {
+        if (stageFilter.value === "third_place") {
+          return stageLabelByKey.third_place;
         }
 
-        return "🏆 Final";
+        if (stageFilter.value === "final") {
+          return stageLabelByKey.final;
+        }
+
+        const normalizedFinalType = String(info.finalType || "").toLowerCase();
+
+        if (normalizedFinalType.includes("consolation")) {
+          return stageLabelByKey.third_place;
+        }
+
+        if (normalizedFinalType.includes("grand")) {
+          return stageLabelByKey.final;
+        }
+
+        // Fallback defensivo por si finalType llega vacio en single elimination.
+        if (info.roundNumber === 1) {
+          return stageLabelByKey.third_place;
+        }
+
+        return stageLabelByKey.final;
       }
 
       return "";
@@ -547,6 +814,7 @@ const renderBracket = async () => {
 
   requestAnimationFrame(() => {
     enhanceBracketPresentation();
+    applyTeamFilterHighlight();
   });
 };
 
@@ -562,12 +830,83 @@ watch(
   },
   { deep: true },
 );
+
+watch(teamQuery, () => {
+  requestAnimationFrame(() => {
+    applyTeamFilterHighlight();
+  });
+});
 </script>
 
 <template>
   <article
     class="bracket-shell rounded-2xl border border-base-300 bg-base-200/70 p-3 md:p-5"
+    :class="{ 'is-compact': compactMode }"
   >
+    <header
+      class="bracket-toolbar mb-4 flex flex-wrap items-center justify-between gap-3"
+    >
+      <div class="bracket-kpis flex flex-wrap items-center gap-2">
+        <span class="bracket-kpi">Partidos: {{ totalMatches }}</span>
+        <span class="bracket-kpi">Mostrando: {{ visibleMatches }}</span>
+        <span class="bracket-kpi">Seccion: {{ selectedStageLabel }}</span>
+        <span class="bracket-kpi">Finalizados: {{ finishedMatches }}</span>
+        <span class="bracket-kpi" v-if="inProgressMatches > 0">
+          En vivo: {{ inProgressMatches }}
+        </span>
+        <span class="bracket-kpi">Pendientes: {{ pendingMatches }}</span>
+        <span class="bracket-kpi">Avance: {{ completionPercent }}%</span>
+      </div>
+
+      <div class="bracket-actions flex flex-wrap items-center gap-2">
+        <label class="input input-sm input-bordered min-w-56 bg-base-100/80">
+          <span class="text-base-content/70 text-xs">Equipo</span>
+          <input
+            v-model="teamQuery"
+            class="grow"
+            type="text"
+            placeholder="Buscar en llaves"
+          />
+        </label>
+
+        <select
+          v-model="stageFilter"
+          class="select select-sm select-bordered min-w-36 bg-base-100/80"
+        >
+          <option value="all">Todas las secciones</option>
+          <option value="round_32">16vos</option>
+          <option value="round_16">8vos</option>
+          <option value="quarter_final">4tos</option>
+          <option value="semi_final">Semi</option>
+          <option value="final">Final</option>
+          <option value="third_place">3er puesto</option>
+        </select>
+
+        <button
+          class="btn btn-sm btn-outline"
+          @click="compactMode = !compactMode"
+        >
+          {{ compactMode ? "Vista amplia" : "Vista compacta" }}
+        </button>
+        <button
+          class="btn btn-sm btn-outline"
+          :disabled="!teamQuery.trim()"
+          @click="focusFirstSearchResult"
+        >
+          Enfocar
+        </button>
+        <button class="btn btn-sm btn-ghost" @click="clearViewFilters">
+          Limpiar
+        </button>
+        <button class="btn btn-sm btn-outline" @click="goToBracketStart">
+          Inicio
+        </button>
+        <button class="btn btn-sm btn-primary" @click="goToBracketEnd">
+          Final
+        </button>
+      </div>
+    </header>
+
     <header class="bracket-legend mb-4 flex flex-wrap items-center gap-2">
       <span class="bracket-chip">🏆 Final</span>
       <span class="bracket-chip">🥉 Tercer lugar</span>
@@ -575,7 +914,21 @@ watch(
       <span class="bracket-chip">🔥 Cruce decisivo</span>
     </header>
 
-    <div :id="containerId" class="brackets-viewer" />
+    <div ref="viewportRef" class="bracket-viewport">
+      <article
+        v-if="visibleMatches === 0"
+        class="bracket-empty-state rounded-xl border border-dashed border-base-300 bg-base-100/65 px-4 py-8 text-center"
+      >
+        <h3 class="text-base-content text-sm font-semibold">
+          No hay partidos para el filtro seleccionado
+        </h3>
+        <p class="text-base-content/70 mt-1 text-xs">
+          Cambia la seccion o limpia filtros para volver a ver el bracket
+          completo.
+        </p>
+      </article>
+      <div v-else :id="containerId" class="brackets-viewer" />
+    </div>
   </article>
 </template>
 
@@ -601,6 +954,49 @@ watch(
   box-shadow:
     inset 0 1px 0 color-mix(in oklab, #fff 30%, transparent),
     0 24px 50px color-mix(in oklab, #000 26%, transparent);
+}
+
+.bracket-kpi {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid
+    color-mix(in oklab, var(--color-base-content) 16%, transparent);
+  background: color-mix(in oklab, var(--color-base-100) 84%, transparent);
+  padding: 0.22rem 0.62rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: color-mix(in oklab, var(--color-base-content) 88%, #fff);
+}
+
+.bracket-viewport {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.35rem;
+  scrollbar-width: thin;
+}
+
+.bracket-viewport::-webkit-scrollbar {
+  height: 10px;
+}
+
+.bracket-viewport::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-base-300) 64%, transparent);
+}
+
+.bracket-viewport::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-primary) 45%, transparent);
+}
+
+.bracket-empty-state {
+  min-height: 220px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
 }
 
 .bracket-legend {
@@ -674,6 +1070,12 @@ watch(
   font-family: "Chakra Petch", sans-serif;
 }
 
+.bracket-shell.is-compact :deep(.brackets-viewer) {
+  --match-width: clamp(164px, 20vw, 214px);
+  --round-margin: clamp(0.75rem, 1.5vw, 1.25rem);
+  --text-size: 12px;
+}
+
 .bracket-shell :deep(.brackets-viewer h1) {
   margin-top: 0.4rem;
   margin-bottom: 1.1rem;
@@ -692,7 +1094,7 @@ watch(
     color-mix(in oklab, var(--color-base-100) 95%, transparent),
     color-mix(in oklab, var(--color-base-300) 46%, transparent)
   );
-  font-weight: 700;
+  font-size: 18px;
   letter-spacing: 0.045em;
 }
 
@@ -765,6 +1167,18 @@ watch(
   );
 }
 
+.bracket-shell :deep(.brackets-viewer .participant.participant-query-match) {
+  outline: 1px solid color-mix(in oklab, var(--color-warning) 64%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--color-warning) 34%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--color-warning) 35%, transparent);
+}
+
+.bracket-shell :deep(.brackets-viewer .participant.participant-query-dimmed) {
+  opacity: 0.42;
+  filter: saturate(0.55);
+}
+
 .bracket-shell :deep(.brackets-viewer .participant .name) {
   display: flex;
   align-items: center;
@@ -828,6 +1242,12 @@ watch(
   box-shadow: 0 0 8px color-mix(in oklab, var(--color-warning) 24%, transparent);
 }
 
+.bracket-shell :deep(.team-icon-chip--champion) {
+  background: color-mix(in oklab, var(--color-accent) 34%, transparent);
+  border-color: color-mix(in oklab, var(--color-accent) 56%, transparent);
+  box-shadow: 0 0 10px color-mix(in oklab, var(--color-accent) 38%, transparent);
+}
+
 @keyframes bracket-rise {
   from {
     opacity: 0;
@@ -850,6 +1270,25 @@ watch(
 }
 
 @media (max-width: 1024px) {
+  .bracket-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .bracket-actions {
+    width: 100%;
+  }
+
+  .bracket-actions :deep(.input) {
+    width: 100%;
+    min-width: 100%;
+  }
+
+  .bracket-actions :deep(.select) {
+    width: 100%;
+    min-width: 100%;
+  }
+
   .bracket-shell :deep(.brackets-viewer) {
     --match-width: 176px;
     --round-margin: 0.95rem;
