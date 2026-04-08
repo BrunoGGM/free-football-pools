@@ -139,6 +139,16 @@ const stageOrder = [
   "third_place",
 ];
 
+const bracketMatchOrderByStage: Record<string, number[]> = {
+  // Este orden alinea el viewer con los seeds W/L definidos en M73-M104.
+  round_32: [74, 77, 73, 75, 83, 84, 81, 82, 76, 78, 79, 80, 86, 88, 85, 87],
+  round_16: [89, 90, 93, 94, 91, 92, 95, 96],
+  quarter_final: [97, 98, 99, 100],
+  semi_final: [101, 102],
+  final: [104],
+  third_place: [103],
+};
+
 interface TeamVisualInfo {
   code: string | null;
   flagIconClass: string | null;
@@ -195,6 +205,20 @@ const sortedMatches = computed(() => {
 
     if (stageDiff !== 0) {
       return stageDiff;
+    }
+
+    const stageBracketOrder = bracketMatchOrderByStage[a.stage] || [];
+    const aBracketNo = Number(a.bracket_match_no || 0);
+    const bBracketNo = Number(b.bracket_match_no || 0);
+    const aBracketIdx = stageBracketOrder.indexOf(aBracketNo);
+    const bBracketIdx = stageBracketOrder.indexOf(bBracketNo);
+
+    if (aBracketIdx >= 0 && bBracketIdx >= 0 && aBracketIdx !== bBracketIdx) {
+      return aBracketIdx - bBracketIdx;
+    }
+
+    if (aBracketNo > 0 && bBracketNo > 0 && aBracketNo !== bBracketNo) {
+      return aBracketNo - bBracketNo;
     }
 
     const timeDiff =

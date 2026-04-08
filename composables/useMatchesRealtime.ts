@@ -1,6 +1,7 @@
 export interface MatchItem {
   id: string
   api_fixture_id: number
+  bracket_match_no?: number | null
   home_team: string
   away_team: string
   home_team_code: string | null
@@ -38,6 +39,13 @@ export function useMatchesRealtime(stageFilter: string[] = []) {
 
   const sortMatches = (items: MatchItem[]) => {
     return [...items].sort((a, b) => {
+      const bracketA = Number(a.bracket_match_no || 0)
+      const bracketB = Number(b.bracket_match_no || 0)
+
+      if (bracketA > 0 && bracketB > 0 && bracketA !== bracketB) {
+        return bracketA - bracketB
+      }
+
       return new Date(a.match_time).getTime() - new Date(b.match_time).getTime()
     })
   }
