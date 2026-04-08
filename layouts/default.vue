@@ -20,6 +20,7 @@ const links = [
   { to: "/dashboard/grupos", label: "Grupos" },
   { to: "/dashboard/eliminatorias", label: "Eliminatorias" },
   { to: "/dashboard/posiciones", label: "Posiciones" },
+  { to: "/dashboard/estadisticas", label: "Estadisticas" },
   { to: "/admin", label: "Admin", requiresAdmin: true },
 ];
 

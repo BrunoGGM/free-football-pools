@@ -55,6 +55,11 @@ const quickLinks = [
     to: "/dashboard/posiciones",
     text: "Revisa el ranking actualizado de tu quiniela.",
   },
+  {
+    title: "Estadisticas",
+    to: "/dashboard/estadisticas",
+    text: "Explora graficas de rendimiento, aciertos y evolucion de puntos.",
+  },
 ];
 </script>
 
