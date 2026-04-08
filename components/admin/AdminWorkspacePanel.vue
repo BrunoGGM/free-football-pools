@@ -610,6 +610,9 @@ const runSimulation = async () => {
       summary: {
         scores_updated: number;
         knockout_ties_resolved: number;
+        snapshot_captured: boolean;
+        snapshot_matches: number;
+        knockout_downstream_reset: number;
         users_created: number;
         users_reused: number;
         predictions_upserted: number;
@@ -633,7 +636,7 @@ const runSimulation = async () => {
       },
     });
 
-    simulationMessage.value = `Simulacion ejecutada (${simulationSegmentLabel(result.segment.key)}). Marcadores actualizados: ${result.summary.scores_updated}, empates KO resueltos: ${result.summary.knockout_ties_resolved}, usuarios reusados: ${result.summary.users_reused}, usuarios creados: ${result.summary.users_created}, predicciones generadas: ${result.summary.predictions_upserted}, predicciones admin: ${result.summary.admin_predictions_generated}. Lock pruebas: ${result.quiniela.has_test_data ? "ACTIVO" : "INACTIVO"}.`;
+    simulationMessage.value = `Simulacion ejecutada (${simulationSegmentLabel(result.segment.key)}). Marcadores actualizados: ${result.summary.scores_updated}, empates KO resueltos: ${result.summary.knockout_ties_resolved}, llaves KO reiniciadas: ${result.summary.knockout_downstream_reset}, snapshot global ${result.summary.snapshot_captured ? `capturado (${result.summary.snapshot_matches})` : "reusado"}, usuarios reusados: ${result.summary.users_reused}, usuarios creados: ${result.summary.users_created}, predicciones generadas: ${result.summary.predictions_upserted}, predicciones admin: ${result.summary.admin_predictions_generated}. Lock pruebas: ${result.quiniela.has_test_data ? "ACTIVO" : "INACTIVO"}.`;
 
     await Promise.all([loadGlobalStats(false), loadIngestionLogs()]);
   } catch (error: any) {
@@ -665,7 +668,7 @@ const clearSimulationData = async () => {
 
   if (process.client) {
     const confirmed = window.confirm(
-      "Se eliminaran usuarios/predicciones de prueba de esta quiniela. Continuar?",
+      "Se eliminaran usuarios/predicciones de prueba. Si existe snapshot, se restauraran los partidos globales a su estado original; si no, se reseteara el segmento seleccionado. Continuar?",
     );
 
     if (!confirmed) {
@@ -680,11 +683,19 @@ const clearSimulationData = async () => {
       quiniela: {
         has_test_data: boolean;
       };
+      summary: {
+        matches_restored_from_snapshot: number;
+        matches_reset: number;
+      };
     }>(`/api/admin/quinielas/${quinielaId}/simulate`, {
       method: "DELETE",
+      body: {
+        segment: simulationForm.segment,
+        reset_scores: true,
+      },
     });
 
-    simulationMessage.value = `Registros de prueba limpiados. Lock pruebas: ${result.quiniela.has_test_data ? "ACTIVO" : "INACTIVO"}.`;
+    simulationMessage.value = `Registros de prueba limpiados. Partidos restaurados (snapshot): ${result.summary.matches_restored_from_snapshot}, reseteados (fallback): ${result.summary.matches_reset}. Lock pruebas: ${result.quiniela.has_test_data ? "ACTIVO" : "INACTIVO"}.`;
     await Promise.all([loadGlobalStats(false), loadIngestionLogs()]);
   } catch (error: any) {
     simulationError.value =
