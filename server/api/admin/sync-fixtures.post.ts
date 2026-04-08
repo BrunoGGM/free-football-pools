@@ -6,7 +6,7 @@ import {
   normalizeApiFootballStage,
   normalizeApiFootballStatus,
 } from '../../utils/apiFootball'
-import { requireAdminAccess } from '../../utils/adminAccess'
+import { requireGlobalAdminAccess } from '../../utils/adminAccess'
 import { normalizeTeamKey, resolveTeamCode } from '../../../utils/teamMeta'
 
 type ApiFootballFixture = {
@@ -58,7 +58,7 @@ export default defineEventHandler(async (event) => {
 
   const body = (await readBody(event).catch(() => ({}))) as SyncBody
   const supabase = serverSupabaseServiceRole<any>(event)
-  await requireAdminAccess(event, supabase)
+  await requireGlobalAdminAccess(event, supabase)
 
   const defaultLeague = Number(config.apiFootballLeagueId || 1)
   const defaultSeason = Number(config.apiFootballSeason || new Date().getUTCFullYear())

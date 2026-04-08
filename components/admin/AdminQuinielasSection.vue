@@ -5,7 +5,7 @@ defineProps<{
   globalError: string | null;
   globalMessage: string | null;
   globalStats: {
-    totals: {
+    totals?: {
       users: number;
       globalAdmins: number;
       quinielas: number;
@@ -77,17 +77,21 @@ const emit = defineEmits<{
 
 <template>
   <article
-    v-if="isGlobalAdmin"
     class="pitch-panel card rounded-2xl border border-base-300 bg-base-200/70 p-5"
   >
-    <h2 class="text-base-content text-xl">Dashboard global</h2>
+    <h2 class="text-base-content text-xl">
+      {{ isGlobalAdmin ? "Dashboard global" : "Gestion de tu quiniela" }}
+    </h2>
     <p class="text-base-content/70 mt-2 text-sm">
-      Como global admin puedes ver metricas totales y gestionar quinielas de
-      toda la plataforma.
+      {{
+        isGlobalAdmin
+          ? "Como global admin puedes ver metricas totales y gestionar quinielas de toda la plataforma."
+          : "Como admin local puedes configurar solo tus quinielas y aplicar ajustes a tus jugadores."
+      }}
     </p>
 
     <p v-if="globalLoading" class="text-base-content/70 mt-4 text-sm">
-      Cargando dashboard global...
+      Cargando panel de administracion...
     </p>
 
     <p v-else-if="globalError" class="alert alert-error mt-4 text-sm">
@@ -95,13 +99,16 @@ const emit = defineEmits<{
     </p>
 
     <template v-else-if="globalStats">
-      <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div
+        v-if="isGlobalAdmin"
+        class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+      >
         <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
           <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
             Usuarios
           </p>
           <p class="text-base-content mt-1 text-2xl font-semibold">
-            {{ globalStats.totals.users }}
+            {{ globalStats.totals?.users ?? 0 }}
           </p>
         </div>
         <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
@@ -109,7 +116,7 @@ const emit = defineEmits<{
             Global admins
           </p>
           <p class="text-base-content mt-1 text-2xl font-semibold">
-            {{ globalStats.totals.globalAdmins }}
+            {{ globalStats.totals?.globalAdmins ?? 0 }}
           </p>
         </div>
         <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
@@ -117,7 +124,7 @@ const emit = defineEmits<{
             Quinielas
           </p>
           <p class="text-base-content mt-1 text-2xl font-semibold">
-            {{ globalStats.totals.quinielas }}
+            {{ globalStats.totals?.quinielas ?? 0 }}
           </p>
         </div>
         <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
@@ -125,7 +132,7 @@ const emit = defineEmits<{
             Miembros
           </p>
           <p class="text-base-content mt-1 text-2xl font-semibold">
-            {{ globalStats.totals.members }}
+            {{ globalStats.totals?.members ?? 0 }}
           </p>
         </div>
         <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
@@ -133,7 +140,7 @@ const emit = defineEmits<{
             Partidos
           </p>
           <p class="text-base-content mt-1 text-2xl font-semibold">
-            {{ globalStats.totals.matches }}
+            {{ globalStats.totals?.matches ?? 0 }}
           </p>
         </div>
         <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
@@ -141,16 +148,27 @@ const emit = defineEmits<{
             Predicciones
           </p>
           <p class="text-base-content mt-1 text-2xl font-semibold">
-            {{ globalStats.totals.predictions }}
+            {{ globalStats.totals?.predictions ?? 0 }}
           </p>
         </div>
+      </div>
+
+      <div v-else class="alert alert-info mt-4 rounded-xl text-sm">
+        Alcance local: puedes editar configuracion de tus quinielas y aplicar
+        ajustes manuales de puntos a tus jugadores.
       </div>
 
       <div
         class="card mt-6 rounded-xl border border-base-300 bg-base-100/70 p-4"
       >
         <h3 class="text-primary text-lg">
-          {{ quinielaForm.id ? "Editar quiniela" : "Crear quiniela" }}
+          {{
+            quinielaForm.id
+              ? "Editar quiniela"
+              : isGlobalAdmin
+                ? "Crear quiniela"
+                : "Selecciona una quiniela para editar"
+          }}
         </h3>
 
         <div class="mt-4 grid gap-3 md:grid-cols-2">
@@ -189,7 +207,7 @@ const emit = defineEmits<{
             </div>
           </div>
 
-          <div class="space-y-1">
+          <div v-if="isGlobalAdmin" class="space-y-1">
             <label
               class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
             >
@@ -400,16 +418,19 @@ const emit = defineEmits<{
 
         <div class="mt-4 flex flex-wrap gap-2">
           <button
+            v-if="isGlobalAdmin || quinielaForm.id"
             class="btn btn-primary btn-sm"
-            :disabled="savingQuiniela"
+            :disabled="savingQuiniela || (!isGlobalAdmin && !quinielaForm.id)"
             @click="emit('saveQuiniela')"
           >
             {{
               savingQuiniela
                 ? "Guardando..."
-                : quinielaForm.id
-                  ? "Guardar cambios"
-                  : "Crear quiniela"
+                : isGlobalAdmin
+                  ? quinielaForm.id
+                    ? "Guardar cambios"
+                    : "Crear quiniela"
+                  : "Guardar configuracion"
             }}
           </button>
           <button
@@ -417,9 +438,17 @@ const emit = defineEmits<{
             class="btn btn-outline btn-sm"
             @click="emit('resetQuinielaForm')"
           >
-            Cancelar edicion
+            {{ isGlobalAdmin ? "Cancelar edicion" : "Limpiar seleccion" }}
           </button>
         </div>
+
+        <p
+          v-if="!isGlobalAdmin && !quinielaForm.id"
+          class="text-base-content/70 mt-3 text-xs"
+        >
+          Selecciona primero una quiniela en la tabla para cargar su
+          configuracion.
+        </p>
 
         <p v-if="globalMessage" class="alert alert-success mt-3 text-xs">
           {{ globalMessage }}
@@ -529,7 +558,7 @@ const emit = defineEmits<{
           >
             <tr>
               <th class="px-4 py-3">Quiniela</th>
-              <th class="px-4 py-3">Admin</th>
+              <th v-if="isGlobalAdmin" class="px-4 py-3">Admin</th>
               <th class="px-4 py-3">Boleto</th>
               <th class="px-4 py-3">Codigo</th>
               <th class="px-4 py-3">Reglas</th>
@@ -549,7 +578,7 @@ const emit = defineEmits<{
                   {{ item.description || "Sin descripcion" }}
                 </p>
               </td>
-              <td class="px-4 py-3">
+              <td v-if="isGlobalAdmin" class="px-4 py-3">
                 <p class="text-base-content">{{ item.admin_username }}</p>
                 <p class="text-base-content/70 text-xs">{{ item.admin_id }}</p>
               </td>
@@ -584,6 +613,7 @@ const emit = defineEmits<{
                     Editar
                   </button>
                   <button
+                    v-if="isGlobalAdmin"
                     class="btn btn-error btn-outline btn-xs"
                     :disabled="deletingQuinielaId === item.id"
                     @click="emit('deleteQuiniela', item.id)"
@@ -597,17 +627,20 @@ const emit = defineEmits<{
                 </div>
               </td>
             </tr>
+            <tr
+              v-if="managedQuinielas.length === 0"
+              class="border-t border-base-300"
+            >
+              <td
+                class="text-base-content/70 px-4 py-4"
+                :colspan="isGlobalAdmin ? 7 : 6"
+              >
+                No hay quinielas disponibles para tu alcance de administracion.
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
     </template>
-  </article>
-
-  <article v-else class="alert alert-warning rounded-2xl p-5">
-    <h2 class="text-xl">Acceso admin local</h2>
-    <p class="mt-2 text-sm">
-      Tu acceso actual permite administrar la quiniela activa. El dashboard
-      global solo aparece para usuarios con flag is_global_admin.
-    </p>
   </article>
 </template>

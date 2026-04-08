@@ -1,6 +1,6 @@
 import { createError, readBody } from 'h3'
 import { serverSupabaseServiceRole } from '#supabase/server'
-import { requireAdminAccess } from '../../../utils/adminAccess'
+import { requireGlobalAdminAccess } from '../../../utils/adminAccess'
 import { normalizeTeamKey } from '../../../../utils/teamMeta'
 
 type UpdateTeamProfileBody = {
@@ -49,7 +49,7 @@ function parseLogoUrl(value: unknown): string | null | undefined {
 
 export default defineEventHandler(async (event) => {
   const supabase = serverSupabaseServiceRole<any>(event)
-  await requireAdminAccess(event, supabase)
+  await requireGlobalAdminAccess(event, supabase)
 
   const profileId = getRouterParam(event, 'id')
   if (!profileId) {

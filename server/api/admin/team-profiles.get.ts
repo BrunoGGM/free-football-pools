@@ -1,6 +1,6 @@
 import { createError, getQuery } from 'h3'
 import { serverSupabaseServiceRole } from '#supabase/server'
-import { requireAdminAccess } from '../../utils/adminAccess'
+import { requireGlobalAdminAccess } from '../../utils/adminAccess'
 
 type TeamProfilesQuery = {
   q?: string
@@ -10,7 +10,7 @@ type TeamProfilesQuery = {
 
 export default defineEventHandler(async (event) => {
   const supabase = serverSupabaseServiceRole<any>(event)
-  await requireAdminAccess(event, supabase)
+  await requireGlobalAdminAccess(event, supabase)
 
   const query = getQuery(event) as TeamProfilesQuery
   const search = (query.q || '').trim()

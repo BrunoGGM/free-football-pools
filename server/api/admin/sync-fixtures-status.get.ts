@@ -1,7 +1,7 @@
 import { createError } from 'h3'
 import { serverSupabaseServiceRole } from '#supabase/server'
 import { formatUtcDate } from '../../utils/apiFootball'
-import { requireAdminAccess } from '../../utils/adminAccess'
+import { requireGlobalAdminAccess } from '../../utils/adminAccess'
 
 const PROVIDER = 'api-football'
 
@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
   const dailyBudget = Math.max(1, Number(config.apiFootballDailyBudget || 100))
   const supabase = serverSupabaseServiceRole<any>(event)
-  await requireAdminAccess(event, supabase)
+  await requireGlobalAdminAccess(event, supabase)
 
   const today = formatUtcDate(new Date())
 

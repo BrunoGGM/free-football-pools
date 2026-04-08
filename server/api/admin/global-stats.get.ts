@@ -1,33 +1,26 @@
 import { createError } from 'h3'
 import { serverSupabaseServiceRole } from '#supabase/server'
-import { requireGlobalAdminAccess } from '../../utils/adminAccess'
+import { requireAdminAccess } from '../../utils/adminAccess'
 import { DEFAULT_QUINIELA_RULES } from '../../utils/quinielaRules'
 
-export default defineEventHandler(async (event) => {
-  const supabase = serverSupabaseServiceRole<any>(event)
-  await requireGlobalAdminAccess(event, supabase)
-
-  const [usersRes, globalAdminsRes, quinielasRes, membersRes, matchesRes, predictionsRes] = await Promise.all([
-    supabase.from('profiles').select('id', { count: 'exact', head: true }),
-    supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('is_global_admin', true),
-    supabase.from('quinielas').select('id', { count: 'exact', head: true }),
-    supabase.from('quiniela_members').select('user_id', { count: 'exact', head: true }),
-    supabase.from('matches').select('id', { count: 'exact', head: true }),
-    supabase.from('predictions').select('id', { count: 'exact', head: true }),
-  ])
-
-  const results = [usersRes, globalAdminsRes, quinielasRes, membersRes, matchesRes, predictionsRes]
-  const firstError = results.find((r) => r.error)?.error
-
-  if (firstError) {
-    throw createError({ statusCode: 500, statusMessage: firstError.message })
-  }
-
-  const { data: quinielas, error: quinielasError } = await supabase
+async function loadManagedQuinielas(
+  supabase: any,
+  options: {
+    adminId?: string
+    limit: number
+  },
+) {
+  let quinielaQuery = supabase
     .from('quinielas')
     .select('id, name, description, access_code, start_date, end_date, champion_team, admin_id, ticket_price, created_at')
     .order('created_at', { ascending: false })
-    .limit(200)
+    .limit(options.limit)
+
+  if (options.adminId) {
+    quinielaQuery = quinielaQuery.eq('admin_id', options.adminId)
+  }
+
+  const { data: quinielas, error: quinielasError } = await quinielaQuery
 
   if (quinielasError) {
     throw createError({ statusCode: 500, statusMessage: quinielasError.message })
@@ -82,6 +75,60 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  return (quinielas || []).map((q: any) => ({
+    id: q.id,
+    name: q.name,
+    description: q.description,
+    access_code: q.access_code,
+    start_date: q.start_date,
+    end_date: q.end_date,
+    champion_team: q.champion_team,
+    admin_id: q.admin_id,
+    ticket_price: Number(q.ticket_price || 0),
+    admin_username: adminMap.get(q.admin_id as string) || 'N/A',
+    created_at: q.created_at,
+    rules: ruleMap.get(q.id as string) || DEFAULT_QUINIELA_RULES,
+  }))
+}
+
+export default defineEventHandler(async (event) => {
+  const supabase = serverSupabaseServiceRole<any>(event)
+  const { user, isGlobalAdmin } = await requireAdminAccess(event, supabase)
+
+  if (!isGlobalAdmin) {
+    const quinielas = await loadManagedQuinielas(supabase, {
+      adminId: user.id,
+      limit: 50,
+    })
+
+    return {
+      ok: true,
+      isGlobalAdmin: false,
+      totals: null,
+      quinielas,
+    }
+  }
+
+  const [usersRes, globalAdminsRes, quinielasRes, membersRes, matchesRes, predictionsRes] = await Promise.all([
+    supabase.from('profiles').select('id', { count: 'exact', head: true }),
+    supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('is_global_admin', true),
+    supabase.from('quinielas').select('id', { count: 'exact', head: true }),
+    supabase.from('quiniela_members').select('user_id', { count: 'exact', head: true }),
+    supabase.from('matches').select('id', { count: 'exact', head: true }),
+    supabase.from('predictions').select('id', { count: 'exact', head: true }),
+  ])
+
+  const results = [usersRes, globalAdminsRes, quinielasRes, membersRes, matchesRes, predictionsRes]
+  const firstError = results.find((r) => r.error)?.error
+
+  if (firstError) {
+    throw createError({ statusCode: 500, statusMessage: firstError.message })
+  }
+
+  const quinielas = await loadManagedQuinielas(supabase, {
+    limit: 200,
+  })
+
   return {
     ok: true,
     isGlobalAdmin: true,
@@ -93,19 +140,6 @@ export default defineEventHandler(async (event) => {
       matches: Number(matchesRes.count || 0),
       predictions: Number(predictionsRes.count || 0),
     },
-    quinielas: (quinielas || []).map((q: any) => ({
-      id: q.id,
-      name: q.name,
-      description: q.description,
-      access_code: q.access_code,
-      start_date: q.start_date,
-      end_date: q.end_date,
-      champion_team: q.champion_team,
-      admin_id: q.admin_id,
-      ticket_price: Number(q.ticket_price || 0),
-      admin_username: adminMap.get(q.admin_id as string) || 'N/A',
-      created_at: q.created_at,
-      rules: ruleMap.get(q.id as string) || DEFAULT_QUINIELA_RULES,
-    })),
+    quinielas,
   }
 })

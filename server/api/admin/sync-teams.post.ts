@@ -1,6 +1,6 @@
 import { createError, readBody } from 'h3'
 import { serverSupabaseServiceRole } from '#supabase/server'
-import { requireAdminAccess } from '../../utils/adminAccess'
+import { requireGlobalAdminAccess } from '../../utils/adminAccess'
 import { normalizeTeamKey, resolveTeamCode } from '../../../utils/teamMeta'
 
 type SyncTeamsBody = {
@@ -175,7 +175,7 @@ export default defineEventHandler(async (event) => {
   const force = Boolean(body.force)
 
   const supabase = serverSupabaseServiceRole<any>(event)
-  await requireAdminAccess(event, supabase)
+  await requireGlobalAdminAccess(event, supabase)
 
   const { data: matchesRows, error: matchesError } = await supabase
     .from('matches')

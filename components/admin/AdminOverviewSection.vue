@@ -5,11 +5,16 @@ defineProps<{
     access_code: string;
     start_date: string;
   } | null;
+  isGlobalAdmin: boolean;
   globalStats: {
     totals?: {
       quinielas?: number;
+      users?: number;
+      members?: number;
+      predictions?: number;
     };
   } | null;
+  managedQuinielasCount: number;
   teamsTotal: number;
   syncStatus: {
     requestsUsedToday: number;
@@ -28,8 +33,11 @@ const emit = defineEmits<{
   >
     <h2 class="text-base-content text-xl">Resumen del panel</h2>
     <p class="text-base-content/70 mt-2 text-sm">
-      Navega por secciones para administrar quinielas, equipos e ingesta sin
-      tener una pagina extensa.
+      {{
+        isGlobalAdmin
+          ? "Vista global: administra quinielas, catalogo de selecciones y sincronizacion API."
+          : "Vista local: administra tu propia quiniela y realiza ajustes a jugadores."
+      }}
     </p>
 
     <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -44,29 +52,35 @@ const emit = defineEmits<{
 
       <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
         <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
-          Quinielas totales
+          {{ isGlobalAdmin ? "Quinielas totales" : "Quinielas administradas" }}
         </p>
         <p class="text-base-content mt-1 text-sm font-semibold">
-          {{ globalStats?.totals?.quinielas ?? "--" }}
+          {{
+            isGlobalAdmin
+              ? (globalStats?.totals?.quinielas ?? "--")
+              : managedQuinielasCount
+          }}
         </p>
       </div>
 
       <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
         <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
-          Equipos en catalogo
+          {{ isGlobalAdmin ? "Equipos en catalogo" : "Alcance de gestion" }}
         </p>
         <p class="text-base-content mt-1 text-sm font-semibold">
-          {{ teamsTotal }}
+          {{ isGlobalAdmin ? teamsTotal : "Solo tu quiniela" }}
         </p>
       </div>
 
       <div class="card rounded-xl border border-base-300 bg-base-100/70 p-4">
         <p class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
-          Cuota API hoy
+          {{ isGlobalAdmin ? "Cuota API hoy" : "Operacion permitida" }}
         </p>
         <p class="text-base-content mt-1 text-sm font-semibold">
-          {{ syncStatus?.requestsUsedToday ?? 0 }}/{{
-            syncStatus?.dailyBudget ?? 0
+          {{
+            isGlobalAdmin
+              ? `${syncStatus?.requestsUsedToday ?? 0}/${syncStatus?.dailyBudget ?? 0}`
+              : "Configuracion y ajustes"
           }}
         </p>
       </div>
@@ -77,12 +91,17 @@ const emit = defineEmits<{
         class="btn btn-outline btn-sm"
         @click="emit('navigate', 'quinielas')"
       >
-        Ir a Quinielas
+        Ir a tu gestion
       </button>
-      <button class="btn btn-outline btn-sm" @click="emit('navigate', 'teams')">
+      <button
+        v-if="isGlobalAdmin"
+        class="btn btn-outline btn-sm"
+        @click="emit('navigate', 'teams')"
+      >
         Ir a Equipos
       </button>
       <button
+        v-if="isGlobalAdmin"
         class="btn btn-outline btn-sm"
         @click="emit('navigate', 'ingestion')"
       >

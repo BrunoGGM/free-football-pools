@@ -1,6 +1,6 @@
 import { createError, readBody } from 'h3'
 import { serverSupabaseServiceRole } from '#supabase/server'
-import { requireGlobalAdminAccess } from '../../../utils/adminAccess'
+import { requireAdminAccess } from '../../../utils/adminAccess'
 import {
   DEFAULT_QUINIELA_RULES,
   hasRulePayloadChanges,
@@ -39,11 +39,29 @@ const parseTicketPrice = (value: unknown) => {
 
 export default defineEventHandler(async (event) => {
   const supabase = serverSupabaseServiceRole<any>(event)
-  await requireGlobalAdminAccess(event, supabase)
+  const { user, isGlobalAdmin } = await requireAdminAccess(event, supabase)
 
   const quinielaId = getRouterParam(event, 'id')
   if (!quinielaId) {
     throw createError({ statusCode: 400, statusMessage: 'id de quiniela requerido' })
+  }
+
+  const { data: targetQuiniela, error: targetQuinielaError } = await supabase
+    .from('quinielas')
+    .select('id, admin_id')
+    .eq('id', quinielaId)
+    .maybeSingle()
+
+  if (targetQuinielaError) {
+    throw createError({ statusCode: 500, statusMessage: targetQuinielaError.message })
+  }
+
+  if (!targetQuiniela) {
+    throw createError({ statusCode: 404, statusMessage: 'Quiniela no encontrada' })
+  }
+
+  if (!isGlobalAdmin && targetQuiniela.admin_id !== user.id) {
+    throw createError({ statusCode: 403, statusMessage: 'No tienes permisos sobre esta quiniela' })
   }
 
   const body = (await readBody(event).catch(() => ({}))) as UpdateQuinielaBody
@@ -97,6 +115,10 @@ export default defineEventHandler(async (event) => {
   }
 
   if (typeof body.admin_id === 'string') {
+    if (!isGlobalAdmin) {
+      throw createError({ statusCode: 403, statusMessage: 'Solo global admin puede reasignar admin_id' })
+    }
+
     const adminId = body.admin_id.trim()
     const { data: adminProfile, error: adminProfileError } = await supabase
       .from('profiles')
