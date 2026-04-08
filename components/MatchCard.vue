@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { MatchItem } from "~/composables/useMatchesRealtime";
 import { resolveTeamCode, teamFlagEmojiFromCode } from "~/utils/teamMeta";
+import "flag-icons/css/flag-icons.min.css";
 
 const props = withDefaults(
   defineProps<{
@@ -80,8 +81,23 @@ const awayTeamCode = computed(
   () => props.match.away_team_code || resolveTeamCode(props.match.away_team),
 );
 
-const homeTeamFlag = computed(() => teamFlagEmojiFromCode(homeTeamCode.value));
-const awayTeamFlag = computed(() => teamFlagEmojiFromCode(awayTeamCode.value));
+const flagIconClassFromCode = (code: string | null) => {
+  const normalized = (code || "").trim().toLowerCase();
+  return /^[a-z]{2}$/.test(normalized) ? `fi fi-${normalized}` : null;
+};
+
+const homeTeamFlagIconClass = computed(() =>
+  flagIconClassFromCode(homeTeamCode.value),
+);
+const awayTeamFlagIconClass = computed(() =>
+  flagIconClassFromCode(awayTeamCode.value),
+);
+const homeTeamFlagEmoji = computed(() =>
+  teamFlagEmojiFromCode(homeTeamCode.value),
+);
+const awayTeamFlagEmoji = computed(() =>
+  teamFlagEmojiFromCode(awayTeamCode.value),
+);
 
 const sourceTimeLabel = computed(() => {
   if (!props.match.source_time) {
@@ -416,7 +432,15 @@ onBeforeUnmount(() => {
           class="bg-base-200 mx-auto mb-1 h-10 w-10 rounded-full object-contain"
           loading="lazy"
         />
-        <p v-else class="text-2xl leading-none">{{ homeTeamFlag }}</p>
+        <span
+          v-else-if="homeTeamFlagIconClass"
+          :class="homeTeamFlagIconClass"
+          class="mx-auto mb-1 block rounded-[999px]"
+          style="width: 2rem; height: 2rem"
+          :title="`Bandera de ${props.match.home_team}`"
+          aria-hidden="true"
+        />
+        <p v-else class="text-2xl leading-none">{{ homeTeamFlagEmoji }}</p>
         <p class="text-base-content text-base font-semibold">
           {{ props.match.home_team }}
         </p>
@@ -446,7 +470,15 @@ onBeforeUnmount(() => {
           class="bg-base-200 mx-auto mb-1 h-10 w-10 rounded-full object-contain"
           loading="lazy"
         />
-        <p v-else class="text-2xl leading-none">{{ awayTeamFlag }}</p>
+        <span
+          v-else-if="awayTeamFlagIconClass"
+          :class="awayTeamFlagIconClass"
+          class="mx-auto mb-1 block rounded-[999px]"
+          style="width: 2rem; height: 2rem"
+          :title="`Bandera de ${props.match.away_team}`"
+          aria-hidden="true"
+        />
+        <p v-else class="text-2xl leading-none">{{ awayTeamFlagEmoji }}</p>
         <p class="text-base-content text-base font-semibold">
           {{ props.match.away_team }}
         </p>

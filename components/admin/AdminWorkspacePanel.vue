@@ -30,7 +30,8 @@ const canUseGlobalFeatures = computed(
 const canCreateQuinielas = computed(() => canUseGlobalFeatures.value);
 const canDeleteQuinielas = computed(() => canUseGlobalFeatures.value);
 const canManageTeams = computed(() => canUseGlobalFeatures.value);
-const canUseIngestion = computed(() => canUseGlobalFeatures.value);
+const canUseIngestion = computed(() => true);
+const canRunIngestionSync = computed(() => canUseGlobalFeatures.value);
 
 const modeSkin = computed(() => {
   if (isGlobalView.value) {
@@ -127,6 +128,7 @@ interface TeamProfileItem {
 }
 
 type AdminSectionKey = "overview" | "quinielas" | "teams" | "ingestion";
+type MatchStatus = "pending" | "in_progress" | "finished";
 
 const client = useSupabaseClient<any>();
 const { quiniela, loadActiveQuiniela } = useActiveQuiniela();
@@ -161,12 +163,33 @@ const logsError = ref<string | null>(null);
 const latestMatches = ref<
   {
     id: string;
+    stage: string;
+    match_time: string;
+    match_time_iso: string;
     home_team: string;
     away_team: string;
+    home_score: number | null;
+    away_score: number | null;
     status: string;
     updated_at: string;
   }[]
 >([]);
+const matchesSearch = ref("");
+const matchesPage = ref(1);
+const MATCHES_PAGE_SIZE = 12;
+const savingMatchScoreId = ref<string | null>(null);
+const matchScoreMessage = ref<string | null>(null);
+const matchScoreError = ref<string | null>(null);
+const matchScoreDraftById = ref<
+  Record<
+    string,
+    {
+      home_score: string;
+      away_score: string;
+      status: MatchStatus;
+    }
+  >
+>({});
 const syncingFixtures = ref(false);
 const syncMessage = ref<string | null>(null);
 const syncError = ref<string | null>(null);
@@ -252,6 +275,67 @@ const adminRoleLabel = computed(() => {
   return "Admin de quiniela";
 });
 const adminSection = ref<AdminSectionKey>("overview");
+const filteredMatches = computed(() => {
+  const query = matchesSearch.value.trim().toLowerCase();
+
+  const sorted = [...latestMatches.value].sort((a, b) => {
+    return (
+      new Date(a.match_time_iso).getTime() -
+      new Date(b.match_time_iso).getTime()
+    );
+  });
+
+  if (!query) {
+    return sorted;
+  }
+
+  return sorted.filter((item) => {
+    const stageLabel = item.stage.replaceAll("_", " ");
+    const haystack = [
+      item.home_team,
+      item.away_team,
+      stageLabel,
+      item.status,
+      item.match_time,
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return haystack.includes(query);
+  });
+});
+const matchesTotalPages = computed(() => {
+  return Math.max(
+    1,
+    Math.ceil(filteredMatches.value.length / MATCHES_PAGE_SIZE),
+  );
+});
+const paginatedMatches = computed(() => {
+  const start = (matchesPage.value - 1) * MATCHES_PAGE_SIZE;
+  return filteredMatches.value.slice(start, start + MATCHES_PAGE_SIZE);
+});
+const matchesShowingStart = computed(() => {
+  if (filteredMatches.value.length === 0) {
+    return 0;
+  }
+
+  return (matchesPage.value - 1) * MATCHES_PAGE_SIZE + 1;
+});
+const matchesShowingEnd = computed(() => {
+  if (filteredMatches.value.length === 0) {
+    return 0;
+  }
+
+  return Math.min(
+    matchesPage.value * MATCHES_PAGE_SIZE,
+    filteredMatches.value.length,
+  );
+});
+
+const goToMatchesPage = (page: number) => {
+  const clamped = Math.min(Math.max(page, 1), matchesTotalPages.value);
+  matchesPage.value = clamped;
+};
 const adminSections = computed(() => {
   const sections = [
     {
@@ -267,19 +351,20 @@ const adminSections = computed(() => {
   ];
 
   if (canUseGlobalFeatures.value) {
-    sections.push(
-      {
-        key: "teams" as AdminSectionKey,
-        label: "Selecciones",
-        description: "Catalogo y logos",
-      },
-      {
-        key: "ingestion" as AdminSectionKey,
-        label: "Ingesta API",
-        description: "Sync y monitoreo",
-      },
-    );
+    sections.push({
+      key: "teams" as AdminSectionKey,
+      label: "Selecciones",
+      description: "Catalogo y logos",
+    });
   }
+
+  sections.push({
+    key: "ingestion" as AdminSectionKey,
+    label: "Partidos",
+    description: canUseGlobalFeatures.value
+      ? "Sync API y marcadores manuales"
+      : "Marcadores manuales",
+  });
 
   return sections;
 });
@@ -621,9 +706,10 @@ const loadIngestionLogs = async () => {
 
   const { data, error } = await client
     .from("matches")
-    .select("id, home_team, away_team, status, updated_at")
-    .order("updated_at", { ascending: false })
-    .limit(12);
+    .select(
+      "id, stage, match_time, home_team, away_team, home_score, away_score, status, updated_at",
+    )
+    .order("match_time", { ascending: true });
 
   loadingLogs.value = false;
 
@@ -635,14 +721,165 @@ const loadIngestionLogs = async () => {
   latestMatches.value =
     data?.map((item) => ({
       id: item.id as string,
+      stage: item.stage as string,
+      match_time_iso: item.match_time as string,
+      match_time: new Date(item.match_time as string).toLocaleString("es-MX", {
+        dateStyle: "short",
+        timeStyle: "short",
+      }),
       home_team: item.home_team as string,
       away_team: item.away_team as string,
+      home_score:
+        item.home_score === null || item.home_score === undefined
+          ? null
+          : Number(item.home_score),
+      away_score:
+        item.away_score === null || item.away_score === undefined
+          ? null
+          : Number(item.away_score),
       status: item.status as string,
       updated_at: new Date(item.updated_at as string).toLocaleString("es-MX", {
         dateStyle: "short",
         timeStyle: "short",
       }),
     })) ?? [];
+
+  goToMatchesPage(matchesPage.value);
+
+  const nextDrafts: typeof matchScoreDraftById.value = {};
+
+  for (const item of latestMatches.value) {
+    const previous = matchScoreDraftById.value[item.id];
+
+    nextDrafts[item.id] = {
+      home_score:
+        previous?.home_score ??
+        (item.home_score === null ? "" : String(item.home_score)),
+      away_score:
+        previous?.away_score ??
+        (item.away_score === null ? "" : String(item.away_score)),
+      status: previous?.status ?? ((item.status as MatchStatus) || "pending"),
+    };
+  }
+
+  matchScoreDraftById.value = nextDrafts;
+};
+
+watch(matchesSearch, () => {
+  matchesPage.value = 1;
+});
+
+watch(matchesTotalPages, (value) => {
+  if (matchesPage.value > value) {
+    matchesPage.value = value;
+  }
+});
+
+const updateMatchScoreDraft = (payload: {
+  id: string;
+  field: "home_score" | "away_score" | "status";
+  value: string;
+}) => {
+  const current =
+    matchScoreDraftById.value[payload.id] ||
+    ({ home_score: "", away_score: "", status: "pending" } as {
+      home_score: string;
+      away_score: string;
+      status: MatchStatus;
+    });
+
+  if (payload.field === "status") {
+    const value = payload.value as MatchStatus;
+
+    matchScoreDraftById.value[payload.id] = {
+      ...current,
+      status: value,
+    };
+
+    return;
+  }
+
+  matchScoreDraftById.value[payload.id] = {
+    ...current,
+    [payload.field]: payload.value,
+  };
+};
+
+const saveMatchScore = async (matchId: string) => {
+  const draft = matchScoreDraftById.value[matchId];
+
+  matchScoreMessage.value = null;
+  matchScoreError.value = null;
+
+  if (!draft) {
+    matchScoreError.value = "No se encontro borrador para el partido.";
+    return;
+  }
+
+  const parseDraftScore = (raw: string): number | null => {
+    const value = raw.trim();
+
+    if (!value) {
+      return null;
+    }
+
+    const parsed = Number(value);
+
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      throw new Error("Marcador invalido. Usa enteros >= 0.");
+    }
+
+    return parsed;
+  };
+
+  let homeScore: number | null;
+  let awayScore: number | null;
+
+  try {
+    homeScore = parseDraftScore(draft.home_score);
+    awayScore = parseDraftScore(draft.away_score);
+  } catch (error: any) {
+    matchScoreError.value = error?.message || "Marcador invalido";
+    return;
+  }
+
+  if ((homeScore === null) !== (awayScore === null)) {
+    matchScoreError.value =
+      "Debes capturar ambos marcadores o dejar ambos vacios.";
+    return;
+  }
+
+  if (
+    draft.status === "finished" &&
+    (homeScore === null || awayScore === null)
+  ) {
+    matchScoreError.value =
+      "Para finalizar un partido debes enviar ambos marcadores.";
+    return;
+  }
+
+  savingMatchScoreId.value = matchId;
+
+  try {
+    await adminFetch(`/api/admin/matches/${matchId}/score`, {
+      method: "PATCH",
+      body: {
+        home_score: homeScore,
+        away_score: awayScore,
+        status: draft.status,
+      },
+    });
+
+    matchScoreMessage.value = "Marcador actualizado correctamente.";
+    await loadIngestionLogs();
+  } catch (error: any) {
+    matchScoreError.value =
+      error?.data?.message ||
+      error?.message ||
+      "No se pudo actualizar el marcador";
+  } finally {
+    savingMatchScoreId.value = null;
+  }
 };
 
 const loadSyncStatus = async (silentIfForbidden = false) => {
@@ -678,7 +915,7 @@ const loadSyncStatus = async (silentIfForbidden = false) => {
 };
 
 const runFixturesSync = async () => {
-  if (!canUseIngestion.value) {
+  if (!canRunIngestionSync.value) {
     syncError.value = "Solo admin global puede ejecutar sincronizaciones API.";
     return;
   }
@@ -720,7 +957,7 @@ const runFixturesSync = async () => {
 };
 
 const runTeamsSync = async () => {
-  if (!canUseIngestion.value) {
+  if (!canRunIngestionSync.value) {
     teamsSyncError.value =
       "Solo admin global puede sincronizar selecciones y logos.";
     return;
@@ -958,7 +1195,13 @@ const refreshCurrentSection = async () => {
     return;
   }
 
-  await Promise.all([loadSyncStatus(), loadIngestionLogs()]);
+  if (canRunIngestionSync.value) {
+    await Promise.all([loadSyncStatus(), loadIngestionLogs()]);
+    return;
+  }
+
+  syncStatus.value = null;
+  await loadIngestionLogs();
 };
 
 onMounted(async () => {
@@ -969,7 +1212,10 @@ onMounted(async () => {
     await loadSyncStatus(true);
     await loadIngestionLogs();
     await loadTeamProfiles(true);
+    return;
   }
+
+  await loadIngestionLogs();
 });
 
 watch(
@@ -1151,6 +1397,7 @@ watch(
 
     <AdminIngestionSection
       v-if="!isViewForbidden && adminSection === 'ingestion'"
+      :can-run-sync="canRunIngestionSync"
       :sync-status="syncStatus"
       :force-sync="forceSync"
       :syncing-fixtures="syncingFixtures"
@@ -1161,9 +1408,23 @@ watch(
       :teams-sync-error="teamsSyncError"
       :loading-logs="loadingLogs"
       :logs-error="logsError"
-      :latest-matches="latestMatches"
+      :latest-matches="paginatedMatches"
+      :match-search="matchesSearch"
+      :current-page="matchesPage"
+      :total-pages="matchesTotalPages"
+      :total-matches="filteredMatches.length"
+      :showing-start="matchesShowingStart"
+      :showing-end="matchesShowingEnd"
+      :match-score-draft-by-id="matchScoreDraftById"
+      :saving-match-score-id="savingMatchScoreId"
+      :match-score-message="matchScoreMessage"
+      :match-score-error="matchScoreError"
       @run-fixtures-sync="runFixturesSync"
       @run-teams-sync="runTeamsSync"
+      @update:match-search="matchesSearch = $event"
+      @go-to-page="goToMatchesPage"
+      @update-match-score-draft="updateMatchScoreDraft"
+      @save-match-score="saveMatchScore"
       @update:force-sync="forceSync = $event"
     />
   </section>

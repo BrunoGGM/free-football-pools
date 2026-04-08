@@ -4,6 +4,7 @@ import {
   resolveTeamCode,
   teamFlagEmojiFromCode,
 } from "~/utils/teamMeta";
+import "flag-icons/css/flag-icons.min.css";
 
 definePageMeta({
   middleware: ["auth"],
@@ -188,6 +189,13 @@ const hasPerformanceData = computed(() => performanceRows.value.length > 0);
 const stageTitle = (stage: string) =>
   stage.replace("group_", "Grupo ").toUpperCase();
 
+const flagIconClassFromCode = (code: string | null | undefined) => {
+  const normalized = (code || "").trim().toLowerCase();
+  return /^[a-z]{2}$/.test(normalized) ? `fi fi-${normalized}` : null;
+};
+
+const teamFlagIconClass = (code: string | null) => flagIconClassFromCode(code);
+
 const teamFlag = (code: string | null) => teamFlagEmojiFromCode(code);
 
 watch(
@@ -319,6 +327,13 @@ watch(
                       :alt="`Bandera de ${row.team}`"
                       class="h-5 w-5 rounded-full border border-base-300 bg-base-200 object-cover"
                       loading="lazy"
+                    />
+                    <span
+                      v-else-if="teamFlagIconClass(row.code)"
+                      :class="teamFlagIconClass(row.code) || undefined"
+                      class="inline-block h-4 w-5 rounded-[999px]"
+                      :title="`Bandera de ${row.team}`"
+                      aria-hidden="true"
                     />
                     <span v-else class="text-base">{{
                       teamFlag(row.code)

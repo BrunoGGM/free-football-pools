@@ -12,6 +12,7 @@
     "@nuxtjs/supabase": "^1.5.0",
     "brackets-viewer": "^1.9.0",
     "chart.js": "^4.5.1",
+    "flag-icons": "^7.5.0",
     "nuxt": "^4.0.0",
     "vue-chartjs": "^5.3.3"
   },

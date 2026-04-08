@@ -8,6 +8,7 @@ import {
   resolveTeamCode,
   teamFlagEmojiFromCode,
 } from "~/utils/teamMeta";
+import "flag-icons/css/flag-icons.min.css";
 
 interface MatchRow {
   id: string;
@@ -26,19 +27,22 @@ interface MatchRow {
 
 interface PredictionRow {
   id: string;
-  home_score: number;
-  away_score: number;
+  match_id: string;
+  home_score: number | null;
+  away_score: number | null;
   points_earned: number;
-  created_at: string;
+  created_at: string | null;
+  hasPrediction: boolean;
   match: MatchRow | null;
 }
 
 interface RawPredictionRow {
   id: string;
-  home_score: number;
-  away_score: number;
-  points_earned: number;
-  created_at: string;
+  match_id: string;
+  home_score: number | null;
+  away_score: number | null;
+  points_earned: number | null;
+  created_at: string | null;
   match: MatchRow | MatchRow[] | null;
 }
 
@@ -118,7 +122,7 @@ const username = computed(() => {
   return email ? email.split("@")[0] : "Jugador";
 });
 
-const hasPredictions = computed(() => predictions.value.length > 0);
+const hasMatches = computed(() => predictions.value.length > 0);
 const isLeader = computed(() => myRank.value === 1 && totalMembers.value > 0);
 
 const rankEmoji = computed(() => {
@@ -275,6 +279,16 @@ const getCurrentWeekStartDate = () => {
   return today.toISOString().slice(0, 10);
 };
 
+const flagIconClassFromCode = (code: string | null | undefined) => {
+  const normalized = (code || "").trim().toLowerCase();
+  return /^[a-z]{2}$/.test(normalized) ? `fi fi-${normalized}` : null;
+};
+
+const teamFlagIconClass = (code: string | null, team: string) => {
+  const resolvedCode = code || resolveTeamCode(team);
+  return flagIconClassFromCode(resolvedCode);
+};
+
 const teamFlag = (code: string | null, team: string) => {
   const resolvedCode = code || resolveTeamCode(team);
   return teamFlagEmojiFromCode(resolvedCode);
@@ -354,6 +368,10 @@ const predictionText = (row: PredictionRow) => {
     return "Prediccion guardada";
   }
 
+  if (row.home_score === null || row.away_score === null) {
+    return "Sin pick guardado";
+  }
+
   if (row.home_score > row.away_score) {
     return `Gana ${row.match.home_team}`;
   }
@@ -384,6 +402,10 @@ const officialResultText = (match: MatchRow | null) => {
 const outcomeLabel = (row: PredictionRow) => {
   if (!row.match) {
     return "Sin partido";
+  }
+
+  if (row.home_score === null || row.away_score === null) {
+    return row.match.status === "finished" ? "Sin pick (0)" : "Sin pick";
   }
 
   if (row.match.status === "in_progress") {
@@ -421,6 +443,10 @@ const outcomeLabel = (row: PredictionRow) => {
 
 const outcomeClass = (row: PredictionRow) => {
   if (!row.match || row.match.status === "pending") {
+    return "badge-ghost";
+  }
+
+  if (row.home_score === null || row.away_score === null) {
     return "badge-ghost";
   }
 
@@ -734,22 +760,29 @@ const loadMyQuinielaView = async () => {
     .order("rank", { ascending: true })
     .order("total_points", { ascending: false });
 
+  const allMatchesPromise = client
+    .from("matches")
+    .select(
+      "id, stage, status, match_time, home_team, away_team, home_score, away_score, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url",
+    )
+    .order("match_time", { ascending: false });
+
   const scopedPredictionsPromise = client
     .from("predictions")
     .select(
-      "id, home_score, away_score, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url)",
+      "id, match_id, home_score, away_score, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url)",
     )
     .eq("user_id", user.value.id)
     .eq("quiniela_id", activeQuinielaId.value)
-    .order("match_time", { ascending: true, referencedTable: "matches" });
+    .order("match_time", { ascending: false, referencedTable: "matches" });
 
   const legacyPredictionsPromise = client
     .from("predictions")
     .select(
-      "id, home_score, away_score, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url)",
+      "id, match_id, home_score, away_score, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url)",
     )
     .eq("user_id", user.value.id)
-    .order("match_time", { ascending: true, referencedTable: "matches" });
+    .order("match_time", { ascending: false, referencedTable: "matches" });
 
   const memberResult = await memberPromise;
   let predictionsResult: any;
@@ -784,6 +817,13 @@ const loadMyQuinielaView = async () => {
 
   if (predictionsResult.error) {
     errorMessage.value = predictionsResult.error.message;
+    return;
+  }
+
+  const allMatchesResult = await allMatchesPromise;
+
+  if (allMatchesResult.error) {
+    errorMessage.value = allMatchesResult.error.message;
     return;
   }
 
@@ -948,21 +988,64 @@ const loadMyQuinielaView = async () => {
     tiePeersPreview.value = [];
   }
 
-  const normalized = (
+  const normalizedPredictions = (
     (predictionsResult.data as RawPredictionRow[] | null) ?? []
-  )
-    .map((row) => ({
-      ...row,
-      match: Array.isArray(row.match) ? (row.match[0] ?? null) : row.match,
-    }))
-    .filter((row) => Boolean(row.match))
-    .sort((a, b) => {
-      const aTime = a.match ? new Date(a.match.match_time).getTime() : 0;
-      const bTime = b.match ? new Date(b.match.match_time).getTime() : 0;
-      return bTime - aTime;
-    });
+  ).map((row) => ({
+    ...row,
+    match: Array.isArray(row.match) ? (row.match[0] ?? null) : row.match,
+  }));
 
-  predictions.value = normalized;
+  const predictionByMatchId = new Map<
+    string,
+    RawPredictionRow & { match: MatchRow | null }
+  >();
+
+  for (const row of normalizedPredictions) {
+    const matchId = row.match_id || row.match?.id;
+
+    if (!matchId) {
+      continue;
+    }
+
+    predictionByMatchId.set(matchId, row);
+  }
+
+  const orderedMatches = (
+    (allMatchesResult.data as MatchRow[] | null) ?? []
+  ).slice();
+
+  predictions.value = orderedMatches.map((match) => {
+    const prediction = predictionByMatchId.get(match.id);
+
+    if (!prediction) {
+      return {
+        id: `missing-${match.id}`,
+        match_id: match.id,
+        home_score: null,
+        away_score: null,
+        points_earned: 0,
+        created_at: null,
+        hasPrediction: false,
+        match,
+      };
+    }
+
+    const homeScore =
+      prediction.home_score === null ? null : Number(prediction.home_score);
+    const awayScore =
+      prediction.away_score === null ? null : Number(prediction.away_score);
+
+    return {
+      id: prediction.id,
+      match_id: match.id,
+      home_score: homeScore,
+      away_score: awayScore,
+      points_earned: Number(prediction.points_earned ?? 0),
+      created_at: prediction.created_at,
+      hasPrediction: homeScore !== null && awayScore !== null,
+      match,
+    };
+  });
 
   try {
     await loadGamificationSnapshot();
@@ -972,7 +1055,7 @@ const loadMyQuinielaView = async () => {
 
   await loadMissionsSnapshot();
 
-  const nextExactHits = normalized.filter((row) => {
+  const nextExactHits = predictions.value.filter((row) => {
     return row.match?.status === "finished" && Number(row.points_earned) >= 3;
   }).length;
 
@@ -1087,6 +1170,13 @@ onBeforeUnmount(() => {
                 :alt="`Escudo de ${predictedChampion}`"
                 class="h-5 w-5 rounded-full border border-base-300 object-cover"
                 loading="lazy"
+              />
+              <span
+                v-else-if="teamFlagIconClass(null, predictedChampion)"
+                :class="teamFlagIconClass(null, predictedChampion) || undefined"
+                class="inline-block h-4 w-5 rounded-[999px]"
+                :title="`Bandera de ${predictedChampion}`"
+                aria-hidden="true"
               />
               <span v-else>{{ teamFlag(null, predictedChampion) }}</span>
               <span>{{ predictedChampion }}</span>
@@ -1319,8 +1409,8 @@ onBeforeUnmount(() => {
     >
       {{ errorMessage }}
     </article>
-    <article v-else-if="!hasPredictions" class="alert rounded-2xl text-sm">
-      Todavia no has guardado predicciones.
+    <article v-else-if="!hasMatches" class="alert rounded-2xl text-sm">
+      Todavia no hay partidos programados.
     </article>
     <article
       v-else
@@ -1356,6 +1446,28 @@ onBeforeUnmount(() => {
                   class="h-5 w-5 rounded-full border border-base-300 object-cover"
                   loading="lazy"
                 />
+                <span
+                  v-else-if="
+                    row.match &&
+                    teamFlagIconClass(
+                      row.match.home_team_code,
+                      row.match.home_team,
+                    )
+                  "
+                  :class="
+                    row.match
+                      ? teamFlagIconClass(
+                          row.match.home_team_code,
+                          row.match.home_team,
+                        ) || undefined
+                      : undefined
+                  "
+                  class="inline-block h-4 w-5 rounded-[999px]"
+                  :title="
+                    row.match ? `Bandera de ${row.match.home_team}` : undefined
+                  "
+                  aria-hidden="true"
+                />
                 <span v-else class="text-base">
                   {{
                     row.match
@@ -1372,6 +1484,28 @@ onBeforeUnmount(() => {
                   class="h-5 w-5 rounded-full border border-base-300 object-cover"
                   loading="lazy"
                 />
+                <span
+                  v-else-if="
+                    row.match &&
+                    teamFlagIconClass(
+                      row.match.away_team_code,
+                      row.match.away_team,
+                    )
+                  "
+                  :class="
+                    row.match
+                      ? teamFlagIconClass(
+                          row.match.away_team_code,
+                          row.match.away_team,
+                        ) || undefined
+                      : undefined
+                  "
+                  class="inline-block h-4 w-5 rounded-[999px]"
+                  :title="
+                    row.match ? `Bandera de ${row.match.away_team}` : undefined
+                  "
+                  aria-hidden="true"
+                />
                 <span v-else class="text-base">
                   {{
                     row.match
@@ -1386,7 +1520,10 @@ onBeforeUnmount(() => {
               </p>
             </td>
             <td class="px-4 py-3 font-semibold">
-              <p>{{ row.home_score }} : {{ row.away_score }}</p>
+              <p v-if="row.hasPrediction">
+                {{ row.home_score }} : {{ row.away_score }}
+              </p>
+              <p v-else class="text-base-content/70">Sin pick</p>
               <p class="text-base-content/70 mt-1 text-xs font-normal">
                 {{ predictionText(row) }}
               </p>

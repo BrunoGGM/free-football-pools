@@ -4,6 +4,7 @@ import {
   resolveTeamCode,
   teamFlagEmojiFromCode,
 } from "~/utils/teamMeta";
+import "flag-icons/css/flag-icons.min.css";
 
 definePageMeta({
   middleware: ["auth"],
@@ -34,12 +35,25 @@ interface WeeklyLeaderRow {
   exact_hits: number;
 }
 
+type PointHistorySource = "match" | "manual" | "champion_bonus";
+
+interface PointHistoryEntry {
+  id: string;
+  source: PointHistorySource;
+  points: number;
+  created_at: string;
+  title: string;
+  detail: string;
+}
+
 interface RankedUserPredictionRow {
   id: string;
-  home_score: number;
-  away_score: number;
+  match_id: string;
+  home_score: number | null;
+  away_score: number | null;
   points_earned: number;
-  created_at: string;
+  created_at: string | null;
+  hasPrediction: boolean;
   match: {
     id: string;
     stage: string;
@@ -54,10 +68,11 @@ interface RankedUserPredictionRow {
 
 interface RankedUserRawPredictionRow {
   id: string;
-  home_score: number;
-  away_score: number;
-  points_earned: number;
-  created_at: string;
+  match_id: string;
+  home_score: number | null;
+  away_score: number | null;
+  points_earned: number | null;
+  created_at: string | null;
   match:
     | {
         id: string;
@@ -120,6 +135,17 @@ const selectedUserForQuinielaModal = ref<PositionRow | null>(null);
 const selectedUserPredictions = ref<RankedUserPredictionRow[]>([]);
 const loadingSelectedUserPredictions = ref(false);
 const selectedUserPredictionsError = ref<string | null>(null);
+const pointsHistoryModalOpen = ref(false);
+const pointsHistoryLoading = ref(false);
+const pointsHistoryError = ref<string | null>(null);
+const pointsHistoryTargetRow = ref<PositionRow | null>(null);
+const pointsHistoryEntries = ref<PointHistoryEntry[]>([]);
+const pointsHistorySummary = ref({
+  matchPoints: 0,
+  manualPoints: 0,
+  championBonusPoints: 0,
+  computedTotal: 0,
+});
 
 const rankUpSubtitle = computed(() => {
   if (!rankUpFrom.value || !rankUpTo.value) {
@@ -256,6 +282,44 @@ const selectedUserPredictionCountText = computed(() => {
   return `${total} prediccion${total === 1 ? "" : "es"}`;
 });
 
+const pointsHistoryCountText = computed(() => {
+  const total = pointsHistoryEntries.value.length;
+  return `${total} movimiento${total === 1 ? "" : "s"}`;
+});
+
+const canInspectUserHistory = (targetUserId: string) => {
+  return user.value?.id === targetUserId || canViewOtherQuinielas.value;
+};
+
+const sourceLabelByHistory = (source: PointHistorySource) => {
+  if (source === "manual") {
+    return "Manual";
+  }
+
+  if (source === "champion_bonus") {
+    return "Bonus campeon";
+  }
+
+  return "Partido";
+};
+
+const sourceBadgeClassByHistory = (source: PointHistorySource) => {
+  if (source === "manual") {
+    return "badge-warning";
+  }
+
+  if (source === "champion_bonus") {
+    return "badge-secondary";
+  }
+
+  return "badge-primary";
+};
+
+const flagIconClassFromCode = (code: string | null | undefined) => {
+  const normalized = (code || "").trim().toLowerCase();
+  return /^[a-z]{2}$/.test(normalized) ? `fi fi-${normalized}` : null;
+};
+
 const resolveChampionFromRegisteredTeams = (input: string) => {
   const raw = input.trim();
 
@@ -322,6 +386,11 @@ const championFlag = (value: string | null) => {
   return info ? teamFlagEmojiFromCode(info.code) : "";
 };
 
+const championFlagIconClass = (value: string | null) => {
+  const info = getChampionInfo(value);
+  return flagIconClassFromCode(info?.code);
+};
+
 const championDisplayName = (value: string | null) => {
   const info = getChampionInfo(value);
   return info?.name ?? "-";
@@ -365,6 +434,11 @@ const matchTeamFlag = (teamName: string | null | undefined) => {
   return info.code ? teamFlagEmojiFromCode(info.code) : "";
 };
 
+const matchTeamFlagIconClass = (teamName: string | null | undefined) => {
+  const info = getMatchTeamInfo(teamName);
+  return flagIconClassFromCode(info.code);
+};
+
 const matchTeamLogoUrl = (teamName: string | null | undefined) => {
   const info = getMatchTeamInfo(teamName);
   return info.logoUrl;
@@ -377,6 +451,9 @@ const matchTeamDisplayName = (teamName: string | null | undefined) => {
 
 const teamOptionFlag = (team: TeamProfileOption) =>
   teamFlagEmojiFromCode(team.code || resolveTeamCode(team.name));
+
+const teamOptionFlagIconClass = (team: TeamProfileOption) =>
+  flagIconClassFromCode(team.code || resolveTeamCode(team.name));
 
 const selectChampionFromList = (team: TeamProfileOption) => {
   championInput.value = team.name;
@@ -498,6 +575,10 @@ const predictionStatusText = (row: RankedUserPredictionRow) => {
     return "Sin partido";
   }
 
+  if (row.home_score === null || row.away_score === null) {
+    return row.match.status === "finished" ? "Sin pick" : "Sin pick";
+  }
+
   if (row.match.status === "in_progress") {
     return "En juego";
   }
@@ -533,6 +614,10 @@ const winnerFromScore = (
 };
 
 const pickWinnerText = (row: RankedUserPredictionRow) => {
+  if (row.home_score === null || row.away_score === null) {
+    return "Sin pick";
+  }
+
   return winnerFromScore(
     row.home_score,
     row.away_score,
@@ -557,6 +642,201 @@ const closeUserQuinielaModal = () => {
   selectedUserPredictionsError.value = null;
 };
 
+const closePointsHistoryModal = () => {
+  pointsHistoryModalOpen.value = false;
+  pointsHistoryTargetRow.value = null;
+  pointsHistoryError.value = null;
+  pointsHistoryEntries.value = [];
+  pointsHistorySummary.value = {
+    matchPoints: 0,
+    manualPoints: 0,
+    championBonusPoints: 0,
+    computedTotal: 0,
+  };
+};
+
+const openPointsHistoryModal = async (row: PositionRow) => {
+  if (!activeQuinielaId.value || !canInspectUserHistory(row.user_id)) {
+    return;
+  }
+
+  pointsHistoryModalOpen.value = true;
+  pointsHistoryLoading.value = true;
+  pointsHistoryError.value = null;
+  pointsHistoryTargetRow.value = row;
+  pointsHistoryEntries.value = [];
+
+  const predictionsResult = await client
+    .from("predictions")
+    .select(
+      "id, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score)",
+    )
+    .eq("quiniela_id", activeQuinielaId.value)
+    .eq("user_id", row.user_id)
+    .order("created_at", { ascending: false });
+
+  if (predictionsResult.error) {
+    pointsHistoryLoading.value = false;
+    pointsHistoryError.value =
+      predictionsResult.error.message ||
+      "No se pudo cargar historial de puntos por partido.";
+    return;
+  }
+
+  const memberStateResult = await client
+    .from("quiniela_members")
+    .select("total_points, predicted_champion")
+    .eq("quiniela_id", activeQuinielaId.value)
+    .eq("user_id", row.user_id)
+    .maybeSingle();
+
+  if (memberStateResult.error) {
+    pointsHistoryLoading.value = false;
+    pointsHistoryError.value =
+      memberStateResult.error.message ||
+      "No se pudo cargar estado actual de puntos del miembro.";
+    return;
+  }
+
+  const manualResult = await client
+    .from("quiniela_member_manual_points")
+    .select("id, points_delta, reason, created_at")
+    .eq("quiniela_id", activeQuinielaId.value)
+    .eq("user_id", row.user_id)
+    .order("created_at", { ascending: false });
+
+  const manualReadDenied = isPredictionsAccessDeniedError(manualResult.error);
+
+  if (manualResult.error && !manualReadDenied) {
+    pointsHistoryLoading.value = false;
+    pointsHistoryError.value =
+      manualResult.error.message ||
+      "No se pudo cargar historial de ajustes manuales.";
+    return;
+  }
+
+  const predictionEntries = (
+    (predictionsResult.data as Array<{
+      id: string;
+      points_earned: number | null;
+      created_at: string | null;
+      match:
+        | {
+            stage: string;
+            match_time: string;
+            home_team: string;
+            away_team: string;
+            home_score: number | null;
+            away_score: number | null;
+          }
+        | Array<{
+            stage: string;
+            match_time: string;
+            home_team: string;
+            away_team: string;
+            home_score: number | null;
+            away_score: number | null;
+          }>
+        | null;
+    }> | null) ?? []
+  )
+    .map((item) => {
+      const match = Array.isArray(item.match)
+        ? (item.match[0] ?? null)
+        : item.match;
+      const points = Number(item.points_earned ?? 0);
+
+      return {
+        id: item.id,
+        source: "match" as const,
+        points,
+        created_at:
+          match?.match_time || item.created_at || new Date().toISOString(),
+        title: match
+          ? `${match.home_team} vs ${match.away_team}`
+          : "Partido sin referencia",
+        detail: match
+          ? `${stageLabel(match.stage)} • Oficial ${match.home_score ?? "-"}:${match.away_score ?? "-"}`
+          : "Prediccion sin partido asociado",
+      };
+    })
+    .filter((entry) => entry.points !== 0);
+
+  const manualEntries =
+    manualReadDenied || !manualResult.data
+      ? []
+      : (
+          (manualResult.data as Array<{
+            id: string;
+            points_delta: number | null;
+            reason: string | null;
+            created_at: string | null;
+          }> | null) ?? []
+        )
+          .map((item) => ({
+            id: `manual-${item.id}`,
+            source: "manual" as const,
+            points: Number(item.points_delta ?? 0),
+            created_at: item.created_at || new Date().toISOString(),
+            title: item.reason?.trim() || "Ajuste manual",
+            detail: "Aplicado desde panel de administracion",
+          }))
+          .filter((entry) => entry.points !== 0);
+
+  const matchPoints = predictionEntries.reduce(
+    (acc, entry) => acc + entry.points,
+    0,
+  );
+  const manualPoints = manualEntries.reduce(
+    (acc, entry) => acc + entry.points,
+    0,
+  );
+  const memberTotalPoints = Number(memberStateResult.data?.total_points ?? 0);
+  const championBonusPoints = memberTotalPoints - matchPoints;
+
+  const championBonusEntry: PointHistoryEntry[] =
+    championBonusPoints === 0
+      ? []
+      : [
+          {
+            id: `champion-${row.user_id}`,
+            source: "champion_bonus",
+            points: championBonusPoints,
+            created_at: quiniela.value?.start_date || new Date().toISOString(),
+            title: "Bonus de campeon",
+            detail: memberStateResult.data?.predicted_champion
+              ? `Pick registrado: ${memberStateResult.data.predicted_champion}`
+              : "Sin pick de campeon",
+          },
+        ];
+
+  const entries = [
+    ...predictionEntries,
+    ...manualEntries,
+    ...championBonusEntry,
+  ]
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+
+  pointsHistoryEntries.value = entries;
+  pointsHistorySummary.value = {
+    matchPoints,
+    manualPoints,
+    championBonusPoints,
+    computedTotal: memberTotalPoints + manualPoints,
+  };
+
+  if (manualReadDenied) {
+    pointsHistoryError.value =
+      "No tienes permisos para ver ajustes manuales; se muestran solo puntos por partido y bonus de campeon.";
+  }
+
+  pointsHistoryLoading.value = false;
+};
+
 const openUserQuinielaModal = async (row: PositionRow) => {
   if (!activeQuinielaId.value || !canViewOtherQuinielas.value) {
     return;
@@ -568,41 +848,106 @@ const openUserQuinielaModal = async (row: PositionRow) => {
   selectedUserPredictionsError.value = null;
   loadingSelectedUserPredictions.value = true;
 
-  const result = await client
+  const predictionsResult = await client
     .from("predictions")
     .select(
-      "id, home_score, away_score, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score)",
+      "id, match_id, home_score, away_score, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score)",
     )
     .eq("quiniela_id", activeQuinielaId.value)
     .eq("user_id", row.user_id)
-    .order("match_time", { ascending: true, referencedTable: "matches" });
+    .order("match_time", { ascending: false, referencedTable: "matches" });
+
+  const matchesResult = await client
+    .from("matches")
+    .select(
+      "id, stage, status, match_time, home_team, away_team, home_score, away_score",
+    )
+    .order("match_time", { ascending: false });
 
   loadingSelectedUserPredictions.value = false;
 
-  if (result.error) {
-    if (isPredictionsAccessDeniedError(result.error)) {
+  if (predictionsResult.error) {
+    if (isPredictionsAccessDeniedError(predictionsResult.error)) {
       selectedUserPredictionsError.value =
         "No tienes permiso para ver esta quiniela. Activa la opcion en reglas de la quiniela.";
       return;
     }
 
     selectedUserPredictionsError.value =
-      result.error.message || "No se pudo cargar el listado de predicciones.";
+      predictionsResult.error.message ||
+      "No se pudo cargar el listado de predicciones.";
     return;
   }
 
-  selectedUserPredictions.value = (
-    (result.data as RankedUserRawPredictionRow[] | null) ?? []
-  )
-    .map((item) => ({
-      ...item,
-      match: Array.isArray(item.match) ? (item.match[0] ?? null) : item.match,
-    }))
-    .sort((a, b) => {
-      const aTime = a.match ? new Date(a.match.match_time).getTime() : 0;
-      const bTime = b.match ? new Date(b.match.match_time).getTime() : 0;
-      return aTime - bTime;
-    });
+  if (matchesResult.error) {
+    selectedUserPredictionsError.value =
+      matchesResult.error.message ||
+      "No se pudo cargar el listado de partidos.";
+    return;
+  }
+
+  const normalizedPredictions = (
+    (predictionsResult.data as RankedUserRawPredictionRow[] | null) ?? []
+  ).map((item) => ({
+    ...item,
+    match: Array.isArray(item.match) ? (item.match[0] ?? null) : item.match,
+  }));
+
+  const predictionByMatchId = new Map<
+    string,
+    RankedUserRawPredictionRow & {
+      match: RankedUserPredictionRow["match"];
+    }
+  >();
+
+  for (const item of normalizedPredictions) {
+    const matchId = item.match_id || item.match?.id;
+
+    if (!matchId) {
+      continue;
+    }
+
+    predictionByMatchId.set(matchId, item);
+  }
+
+  const orderedMatches = (
+    (matchesResult.data as Array<
+      NonNullable<RankedUserPredictionRow["match"]>
+    > | null) ?? []
+  ).slice();
+
+  selectedUserPredictions.value = orderedMatches.map((match, index) => {
+    const prediction = predictionByMatchId.get(match?.id || "");
+
+    if (!prediction || !match) {
+      return {
+        id: `missing-${match?.id || index}`,
+        match_id: match?.id || "",
+        home_score: null,
+        away_score: null,
+        points_earned: 0,
+        created_at: null,
+        hasPrediction: false,
+        match,
+      };
+    }
+
+    const homeScore =
+      prediction.home_score === null ? null : Number(prediction.home_score);
+    const awayScore =
+      prediction.away_score === null ? null : Number(prediction.away_score);
+
+    return {
+      id: prediction.id,
+      match_id: match.id,
+      home_score: homeScore,
+      away_score: awayScore,
+      points_earned: Number(prediction.points_earned ?? 0),
+      created_at: prediction.created_at,
+      hasPrediction: homeScore !== null && awayScore !== null,
+      match,
+    };
+  });
 };
 
 const appendGamificationMessage = (message: string) => {
@@ -633,9 +978,20 @@ const loadRanking = async () => {
 
   const visibilityResult = await client
     .from("quiniela_rules")
-    .select("allow_member_predictions_view")
+    .select("allow_member_predictions_view, champion_bonus_points")
     .eq("quiniela_id", activeQuinielaId.value)
     .maybeSingle();
+
+  const championBonusPoints = Math.max(
+    0,
+    Number(
+      (
+        visibilityResult.data as {
+          champion_bonus_points?: number | null;
+        } | null
+      )?.champion_bonus_points ?? 10,
+    ),
+  );
 
   if (
     visibilityResult.error &&
@@ -661,9 +1017,53 @@ const loadRanking = async () => {
     closeUserQuinielaModal();
   }
 
+  const championTeamNormalized = normalizeTeamKey(
+    quiniela.value?.champion_team ?? "",
+  );
+
+  const quinielaStartAtMs = quiniela.value?.start_date
+    ? new Date(quiniela.value.start_date).getTime()
+    : Number.NaN;
+
+  let finalWinnerNormalized: string | null = null;
+
+  const finalMatchResult = await client
+    .from("matches")
+    .select(
+      "home_team, away_team, home_score, away_score, status, match_time, updated_at",
+    )
+    .eq("stage", "final")
+    .eq("status", "finished")
+    .not("home_score", "is", null)
+    .not("away_score", "is", null)
+    .order("match_time", { ascending: false })
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!finalMatchResult.error && finalMatchResult.data) {
+    const finalMatch = finalMatchResult.data as {
+      home_team: string;
+      away_team: string;
+      home_score: number;
+      away_score: number;
+    };
+
+    if (finalMatch.home_score > finalMatch.away_score) {
+      finalWinnerNormalized = normalizeTeamKey(finalMatch.home_team);
+    } else if (finalMatch.home_score < finalMatch.away_score) {
+      finalWinnerNormalized = normalizeTeamKey(finalMatch.away_team);
+    }
+  }
+
+  const championBonusShouldApply =
+    Boolean(championTeamNormalized) &&
+    Boolean(finalWinnerNormalized) &&
+    championTeamNormalized === finalWinnerNormalized;
+
   const rankingResult = await client
     .from("quiniela_rankings")
-    .select("user_id, total_points, rank")
+    .select("user_id, total_points, rank, manual_points")
     .eq("quiniela_id", activeQuinielaId.value)
     .order("rank", { ascending: true })
     .order("total_points", { ascending: false });
@@ -672,6 +1072,7 @@ const loadRanking = async () => {
     user_id: string;
     total_points: number;
     rank: number;
+    manual_points: number;
   }> = [];
 
   if (rankingResult.error) {
@@ -715,6 +1116,7 @@ const loadRanking = async () => {
         user_id: item.user_id,
         total_points: currentPoints,
         rank,
+        manual_points: 0,
       };
     });
   } else {
@@ -723,20 +1125,55 @@ const loadRanking = async () => {
         user_id: string;
         total_points: number | null;
         rank: number;
+        manual_points: number | null;
       }> | null) ?? []
     ).map((item) => ({
       user_id: item.user_id,
       total_points: Number(item.total_points ?? 0),
       rank: Number(item.rank || 0),
+      manual_points: Number(item.manual_points ?? 0),
     }));
   }
 
   const userIds = [...new Set(rankingRows.map((item) => item.user_id))];
+  const memberTotalsByUserId = new Map<string, number>();
+
+  if (userIds.length > 0) {
+    const { data: memberTotals, error: memberTotalsError } = await client
+      .from("quiniela_members")
+      .select("user_id, total_points")
+      .eq("quiniela_id", activeQuinielaId.value)
+      .in("user_id", userIds);
+
+    if (memberTotalsError) {
+      loading.value = false;
+      errorMessage.value = memberTotalsError.message;
+      return;
+    }
+
+    for (const member of (memberTotals as Array<{
+      user_id: string;
+      total_points: number | null;
+    }> | null) ?? []) {
+      memberTotalsByUserId.set(
+        member.user_id,
+        Number(member.total_points ?? 0),
+      );
+    }
+  }
+
   const profilesMap = new Map<
     string,
     { username: string; avatar_url: string | null }
   >();
   const championsMap = new Map<string, string | null>();
+  const championPredictionMetaMap = new Map<
+    string,
+    {
+      predictedChampion: string | null;
+      championPredictedAt: string | null;
+    }
+  >();
   const streaksMap = new Map<string, number>();
   const badgesMap = new Map<string, string[]>();
 
@@ -763,7 +1200,7 @@ const loadRanking = async () => {
   if (userIds.length > 0) {
     const { data: memberPicks, error: memberPicksError } = await client
       .from("quiniela_members")
-      .select("user_id, predicted_champion")
+      .select("user_id, predicted_champion, champion_predicted_at")
       .eq("quiniela_id", activeQuinielaId.value)
       .in("user_id", userIds);
 
@@ -778,6 +1215,12 @@ const loadRanking = async () => {
         member.user_id as string,
         (member.predicted_champion as string | null) ?? null,
       );
+
+      championPredictionMetaMap.set(member.user_id as string, {
+        predictedChampion: (member.predicted_champion as string | null) ?? null,
+        championPredictedAt:
+          (member.champion_predicted_at as string | null) ?? null,
+      });
     }
   }
 
@@ -855,20 +1298,91 @@ const loadRanking = async () => {
     }
   }
 
-  const normalized = rankingRows.map((member) => {
+  const baseRows = rankingRows.map((member) => {
     const profile = profilesMap.get(member.user_id);
+    const automaticPoints = memberTotalsByUserId.get(member.user_id);
+    const correctedTotal =
+      (automaticPoints ?? member.total_points) +
+      Number(member.manual_points ?? 0);
 
     return {
       rank: member.rank,
       user_id: member.user_id,
       username: profile?.username ?? "Jugador",
       avatar_url: profile?.avatar_url ?? null,
-      total_points: member.total_points,
+      total_points: correctedTotal,
       predicted_champion: championsMap.get(member.user_id) ?? null,
       current_streak: streaksMap.get(member.user_id) ?? 0,
       badge_icons: badgesMap.get(member.user_id) ?? [],
     };
   });
+
+  const maybeAdjustedRows =
+    championBonusShouldApply || !championTeamNormalized
+      ? baseRows
+      : baseRows.map((row) => {
+          const predictionMeta = championPredictionMetaMap.get(row.user_id);
+          const predictedChampionNormalized = normalizeTeamKey(
+            predictionMeta?.predictedChampion ?? "",
+          );
+          const championPredictedAtMs = predictionMeta?.championPredictedAt
+            ? new Date(predictionMeta.championPredictedAt).getTime()
+            : Number.NaN;
+          const predictedBeforeStart =
+            Number.isFinite(championPredictedAtMs) &&
+            Number.isFinite(quinielaStartAtMs) &&
+            championPredictedAtMs < quinielaStartAtMs;
+
+          const removeChampionBonus =
+            predictedBeforeStart &&
+            Boolean(predictedChampionNormalized) &&
+            predictedChampionNormalized === championTeamNormalized;
+
+          return {
+            ...row,
+            total_points: removeChampionBonus
+              ? Math.max(0, row.total_points - championBonusPoints)
+              : row.total_points,
+          };
+        });
+
+  const normalized = maybeAdjustedRows
+    .slice()
+    .sort((a, b) => {
+      const pointsDiff = b.total_points - a.total_points;
+
+      if (pointsDiff !== 0) {
+        return pointsDiff;
+      }
+
+      const usernameDiff = a.username.localeCompare(b.username, "es", {
+        sensitivity: "base",
+      });
+
+      if (usernameDiff !== 0) {
+        return usernameDiff;
+      }
+
+      return a.user_id.localeCompare(b.user_id);
+    })
+    .map((row, index, list) => {
+      if (index === 0) {
+        return {
+          ...row,
+          rank: 1,
+        };
+      }
+
+      const prev = list[index - 1];
+      const prevRank = list[index - 1]?.rank ?? index;
+
+      return {
+        ...row,
+        rank:
+          prev && row.total_points === prev.total_points ? prevRank : index + 1,
+      };
+    });
+
   const usernameByUserId = new Map<string, string>();
   for (const row of normalized) {
     usernameByUserId.set(row.user_id, row.username);
@@ -1052,11 +1566,11 @@ const saveChampion = async () => {
 };
 
 onMounted(() => {
-  void Promise.all([
-    loadActiveQuiniela(),
-    loadRanking(),
-    loadRegisteredTeams(),
-  ]);
+  void (async () => {
+    await loadActiveQuiniela();
+    await loadRanking();
+    await loadRegisteredTeams();
+  })();
 });
 
 watch(championPickerOpen, (open) => {
@@ -1083,7 +1597,10 @@ watch(
   () => {
     rankUpVisible.value = false;
     previousOwnRank.value = null;
-    void loadRanking();
+    void (async () => {
+      await loadActiveQuiniela();
+      await loadRanking();
+    })();
   },
 );
 
@@ -1176,6 +1693,13 @@ onBeforeUnmount(() => {
                   class="h-5 w-5 rounded-full border border-base-300 object-cover"
                   loading="lazy"
                 />
+                <span
+                  v-else-if="teamOptionFlagIconClass(team)"
+                  :class="teamOptionFlagIconClass(team) || undefined"
+                  class="inline-block h-4 w-5 rounded-[999px]"
+                  :title="`Bandera de ${team.name}`"
+                  aria-hidden="true"
+                />
                 <span v-else>{{ teamOptionFlag(team) }}</span>
                 <span>{{ team.name }}</span>
               </button>
@@ -1199,6 +1723,15 @@ onBeforeUnmount(() => {
               :alt="`Escudo de ${selectedChampionInfo.name}`"
               class="h-4 w-4 rounded-full border border-base-300 object-cover"
               loading="lazy"
+            />
+            <span
+              v-else-if="championFlagIconClass(selectedChampionInfo.name)"
+              :class="
+                championFlagIconClass(selectedChampionInfo.name) || undefined
+              "
+              class="inline-block h-3.5 w-5 rounded-[999px]"
+              :title="`Bandera de ${selectedChampionInfo.name}`"
+              aria-hidden="true"
             />
             <span v-else>{{
               teamFlagEmojiFromCode(selectedChampionInfo.code)
@@ -1285,6 +1818,16 @@ onBeforeUnmount(() => {
                 class="h-4 w-4 rounded-full border border-base-300 object-cover"
                 loading="lazy"
               />
+              <span
+                v-else-if="championFlagIconClass(leaderRow.predicted_champion)"
+                :class="
+                  championFlagIconClass(leaderRow.predicted_champion) ||
+                  undefined
+                "
+                class="inline-block h-3.5 w-5 rounded-[999px]"
+                :title="`Bandera de ${championDisplayName(leaderRow.predicted_champion)}`"
+                aria-hidden="true"
+              />
               <span v-else>{{
                 championFlag(leaderRow.predicted_champion)
               }}</span>
@@ -1334,6 +1877,7 @@ onBeforeUnmount(() => {
             <th class="px-4 py-3">Puntos</th>
             <th class="px-4 py-3">Racha</th>
             <th class="px-4 py-3">Campeon</th>
+            <th class="px-4 py-3">Historial</th>
             <th v-if="canViewOtherQuinielas" class="px-4 py-3">Quiniela</th>
           </tr>
         </thead>
@@ -1416,10 +1960,28 @@ onBeforeUnmount(() => {
                   class="h-4 w-4 rounded-full border border-base-300 object-cover"
                   loading="lazy"
                 />
+                <span
+                  v-else-if="championFlagIconClass(row.predicted_champion)"
+                  :class="
+                    championFlagIconClass(row.predicted_champion) || undefined
+                  "
+                  class="inline-block h-3.5 w-5 rounded-[999px]"
+                  :title="`Bandera de ${championDisplayName(row.predicted_champion)}`"
+                  aria-hidden="true"
+                />
                 <span v-else>{{ championFlag(row.predicted_champion) }}</span>
                 <span>{{ championDisplayName(row.predicted_champion) }}</span>
               </span>
               <span v-else>-</span>
+            </td>
+            <td class="px-4 py-3">
+              <button
+                class="btn btn-outline btn-xs"
+                :disabled="!canInspectUserHistory(row.user_id)"
+                @click="openPointsHistoryModal(row)"
+              >
+                Ver puntos
+              </button>
             </td>
             <td v-if="canViewOtherQuinielas" class="px-4 py-3">
               <button
@@ -1446,163 +2008,351 @@ onBeforeUnmount(() => {
       </div>
     </article>
 
-    <dialog class="modal" :class="{ 'modal-open': userQuinielaModalOpen }">
-      <div class="modal-box max-w-4xl">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <h3 class="text-lg font-semibold text-base-content">
-              Quiniela de
-              {{ selectedUserForQuinielaModal?.username || "Jugador" }}
-            </h3>
-            <p class="mt-1 text-xs text-base-content/70">
-              {{ selectedUserPredictionCountText }}
-            </p>
-          </div>
-          <button class="btn btn-ghost btn-xs" @click="closeUserQuinielaModal">
-            Cerrar
-          </button>
-        </div>
-
-        <div
-          v-if="loadingSelectedUserPredictions"
-          class="mt-4 text-sm text-base-content/70"
-        >
-          Cargando quiniela del usuario...
-        </div>
-
-        <p
-          v-else-if="selectedUserPredictionsError"
-          class="alert alert-error mt-4 text-xs"
-        >
-          {{ selectedUserPredictionsError }}
-        </p>
-
-        <p
-          v-else-if="selectedUserPredictions.length === 0"
-          class="mt-4 text-sm text-base-content/70"
-        >
-          Este usuario aun no tiene predicciones guardadas.
-        </p>
-
-        <div
-          v-else
-          class="mt-4 max-h-[60vh] overflow-auto rounded-xl border border-base-300"
-        >
-          <table class="table min-w-full text-sm">
-            <thead
-              class="bg-base-200 text-base-content/70 text-left text-xs uppercase tracking-[0.12em]"
+    <Teleport to="body">
+      <dialog class="modal" :class="{ 'modal-open': userQuinielaModalOpen }">
+        <div class="modal-box max-w-4xl">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h3 class="text-lg font-semibold text-base-content">
+                Quiniela de
+                {{ selectedUserForQuinielaModal?.username || "Jugador" }}
+              </h3>
+              <p class="mt-1 text-xs text-base-content/70">
+                {{ selectedUserPredictionCountText }}
+              </p>
+            </div>
+            <button
+              class="btn btn-ghost btn-xs"
+              @click="closeUserQuinielaModal"
             >
-              <tr>
-                <th class="px-3 py-2">Partido</th>
-                <th class="px-3 py-2">Pick</th>
-                <th class="px-3 py-2">Oficial</th>
-                <th class="px-3 py-2">Ganador</th>
-                <th class="px-3 py-2">Estado</th>
-                <th class="px-3 py-2">Pts</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="item in selectedUserPredictions"
-                :key="item.id"
-                class="border-t border-base-300"
+              Cerrar
+            </button>
+          </div>
+
+          <div
+            v-if="loadingSelectedUserPredictions"
+            class="mt-4 text-sm text-base-content/70"
+          >
+            Cargando quiniela del usuario...
+          </div>
+
+          <p
+            v-else-if="selectedUserPredictionsError"
+            class="alert alert-error mt-4 text-xs"
+          >
+            {{ selectedUserPredictionsError }}
+          </p>
+
+          <p
+            v-else-if="selectedUserPredictions.length === 0"
+            class="mt-4 text-sm text-base-content/70"
+          >
+            Este usuario aun no tiene predicciones guardadas.
+          </p>
+
+          <div
+            v-else
+            class="mt-4 max-h-[60vh] overflow-auto rounded-xl border border-base-300"
+          >
+            <table class="table min-w-full text-sm">
+              <thead
+                class="bg-base-200 text-base-content/70 text-left text-xs uppercase tracking-[0.12em]"
               >
-                <td class="px-3 py-2">
-                  <p class="text-xs text-base-content/70">
-                    {{ item.match ? stageLabel(item.match.stage) : "-" }}
-                  </p>
-                  <p class="font-medium">
-                    <span class="inline-flex items-center gap-1">
-                      <img
-                        v-if="
-                          item.match && matchTeamLogoUrl(item.match.home_team)
-                        "
-                        :src="
-                          matchTeamLogoUrl(item.match.home_team) || undefined
-                        "
-                        :alt="`Escudo de ${matchTeamDisplayName(item.match.home_team)}`"
-                        class="h-4 w-4 rounded-full border border-base-300 object-cover"
-                        loading="lazy"
-                      />
-                      <span
-                        v-else-if="
-                          item.match && matchTeamFlag(item.match.home_team)
-                        "
-                        >{{ matchTeamFlag(item.match.home_team) }}</span
-                      >
-                      <span>{{
-                        matchTeamDisplayName(item.match?.home_team)
-                      }}</span>
+                <tr>
+                  <th class="px-3 py-2">Partido</th>
+                  <th class="px-3 py-2">Pick</th>
+                  <th class="px-3 py-2">Oficial</th>
+                  <th class="px-3 py-2">Ganador</th>
+                  <th class="px-3 py-2">Estado</th>
+                  <th class="px-3 py-2">Pts</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="item in selectedUserPredictions"
+                  :key="item.id"
+                  class="border-t border-base-300"
+                >
+                  <td class="px-3 py-2">
+                    <p class="text-xs text-base-content/70">
+                      {{ item.match ? stageLabel(item.match.stage) : "-" }}
+                    </p>
+                    <p class="font-medium">
+                      <span class="inline-flex items-center gap-1">
+                        <img
+                          v-if="
+                            item.match && matchTeamLogoUrl(item.match.home_team)
+                          "
+                          :src="
+                            matchTeamLogoUrl(item.match.home_team) || undefined
+                          "
+                          :alt="`Escudo de ${matchTeamDisplayName(item.match.home_team)}`"
+                          class="h-4 w-4 rounded-full border border-base-300 object-cover"
+                          loading="lazy"
+                        />
+                        <span
+                          v-else-if="
+                            item.match &&
+                            matchTeamFlagIconClass(item.match.home_team)
+                          "
+                          :class="
+                            item.match
+                              ? matchTeamFlagIconClass(item.match.home_team) ||
+                                undefined
+                              : undefined
+                          "
+                          class="inline-block h-3.5 w-5 rounded-[999px]"
+                          :title="
+                            item.match
+                              ? `Bandera de ${matchTeamDisplayName(item.match.home_team)}`
+                              : undefined
+                          "
+                          aria-hidden="true"
+                        />
+                        <span
+                          v-else-if="
+                            item.match && matchTeamFlag(item.match.home_team)
+                          "
+                          >{{ matchTeamFlag(item.match.home_team) }}</span
+                        >
+                        <span>{{
+                          matchTeamDisplayName(item.match?.home_team)
+                        }}</span>
+                      </span>
+                      <span class="mx-1 text-base-content/60">vs</span>
+                      <span class="inline-flex items-center gap-1">
+                        <img
+                          v-if="
+                            item.match && matchTeamLogoUrl(item.match.away_team)
+                          "
+                          :src="
+                            matchTeamLogoUrl(item.match.away_team) || undefined
+                          "
+                          :alt="`Escudo de ${matchTeamDisplayName(item.match.away_team)}`"
+                          class="h-4 w-4 rounded-full border border-base-300 object-cover"
+                          loading="lazy"
+                        />
+                        <span
+                          v-else-if="
+                            item.match &&
+                            matchTeamFlagIconClass(item.match.away_team)
+                          "
+                          :class="
+                            item.match
+                              ? matchTeamFlagIconClass(item.match.away_team) ||
+                                undefined
+                              : undefined
+                          "
+                          class="inline-block h-3.5 w-5 rounded-[999px]"
+                          :title="
+                            item.match
+                              ? `Bandera de ${matchTeamDisplayName(item.match.away_team)}`
+                              : undefined
+                          "
+                          aria-hidden="true"
+                        />
+                        <span
+                          v-else-if="
+                            item.match && matchTeamFlag(item.match.away_team)
+                          "
+                          >{{ matchTeamFlag(item.match.away_team) }}</span
+                        >
+                        <span>{{
+                          matchTeamDisplayName(item.match?.away_team)
+                        }}</span>
+                      </span>
+                    </p>
+                    <p class="text-xs text-base-content/70" v-if="item.match">
+                      {{ kickoffText(item.match.match_time) }}
+                    </p>
+                  </td>
+                  <td class="px-3 py-2 font-semibold">
+                    <span v-if="item.hasPrediction">
+                      {{ item.home_score }} : {{ item.away_score }}
                     </span>
-                    <span class="mx-1 text-base-content/60">vs</span>
-                    <span class="inline-flex items-center gap-1">
-                      <img
-                        v-if="
-                          item.match && matchTeamLogoUrl(item.match.away_team)
-                        "
-                        :src="
-                          matchTeamLogoUrl(item.match.away_team) || undefined
-                        "
-                        :alt="`Escudo de ${matchTeamDisplayName(item.match.away_team)}`"
-                        class="h-4 w-4 rounded-full border border-base-300 object-cover"
-                        loading="lazy"
-                      />
-                      <span
-                        v-else-if="
-                          item.match && matchTeamFlag(item.match.away_team)
-                        "
-                        >{{ matchTeamFlag(item.match.away_team) }}</span
-                      >
-                      <span>{{
-                        matchTeamDisplayName(item.match?.away_team)
-                      }}</span>
+                    <span v-else class="text-base-content/70">Sin pick</span>
+                  </td>
+                  <td class="px-3 py-2">
+                    <span
+                      v-if="
+                        item.match?.home_score !== null &&
+                        item.match?.away_score !== null
+                      "
+                    >
+                      {{ item.match?.home_score ?? "-" }} :
+                      {{ item.match?.away_score ?? "-" }}
                     </span>
-                  </p>
-                  <p class="text-xs text-base-content/70" v-if="item.match">
-                    {{ kickoffText(item.match.match_time) }}
-                  </p>
-                </td>
-                <td class="px-3 py-2 font-semibold">
-                  {{ item.home_score }} : {{ item.away_score }}
-                </td>
-                <td class="px-3 py-2">
-                  <span
-                    v-if="
-                      item.match?.home_score !== null &&
-                      item.match?.away_score !== null
-                    "
-                  >
-                    {{ item.match?.home_score ?? "-" }} :
-                    {{ item.match?.away_score ?? "-" }}
-                  </span>
-                  <span v-else class="text-base-content/70">Pendiente</span>
-                </td>
-                <td class="px-3 py-2">
-                  <p class="text-xs text-base-content/70">
-                    Pick: {{ pickWinnerText(item) }}
-                  </p>
-                  <p class="text-xs text-base-content/70">
-                    Oficial: {{ officialWinnerText(item) }}
-                  </p>
-                </td>
-                <td class="px-3 py-2">
-                  {{ predictionStatusText(item) }}
-                </td>
-                <td class="px-3 py-2 font-semibold text-warning">
-                  {{ item.points_earned }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                    <span v-else class="text-base-content/70">Pendiente</span>
+                  </td>
+                  <td class="px-3 py-2">
+                    <p class="text-xs text-base-content/70">
+                      Pick: {{ pickWinnerText(item) }}
+                    </p>
+                    <p class="text-xs text-base-content/70">
+                      Oficial: {{ officialWinnerText(item) }}
+                    </p>
+                  </td>
+                  <td class="px-3 py-2">
+                    {{ predictionStatusText(item) }}
+                  </td>
+                  <td class="px-3 py-2 font-semibold text-warning">
+                    {{ item.points_earned }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
-      <form
-        method="dialog"
-        class="modal-backdrop"
-        @submit.prevent="closeUserQuinielaModal"
-      >
-        <button @click="closeUserQuinielaModal">close</button>
-      </form>
-    </dialog>
+        <form
+          method="dialog"
+          class="modal-backdrop"
+          @submit.prevent="closeUserQuinielaModal"
+        >
+          <button @click="closeUserQuinielaModal">close</button>
+        </form>
+      </dialog>
+    </Teleport>
+
+    <Teleport to="body">
+      <dialog class="modal" :class="{ 'modal-open': pointsHistoryModalOpen }">
+        <div class="modal-box max-w-4xl">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h3 class="text-lg font-semibold text-base-content">
+                Historial de puntos de
+                {{ pointsHistoryTargetRow?.username || "Jugador" }}
+              </h3>
+              <p class="mt-1 text-xs text-base-content/70">
+                {{ pointsHistoryCountText }}
+              </p>
+            </div>
+            <button
+              class="btn btn-ghost btn-xs"
+              @click="closePointsHistoryModal"
+            >
+              Cerrar
+            </button>
+          </div>
+
+          <div
+            v-if="pointsHistoryLoading"
+            class="mt-4 text-sm text-base-content/70"
+          >
+            Cargando historial de puntos...
+          </div>
+
+          <p
+            v-else-if="pointsHistoryError"
+            class="alert alert-warning mt-4 text-xs"
+          >
+            {{ pointsHistoryError }}
+          </p>
+
+          <div
+            v-if="!pointsHistoryLoading"
+            class="mt-4 grid gap-2 sm:grid-cols-4"
+          >
+            <article
+              class="card rounded-xl border border-base-300 bg-base-100/70 p-3"
+            >
+              <p class="text-base-content/70 text-xs uppercase">Partidos</p>
+              <p class="text-lg font-semibold">
+                {{ pointsHistorySummary.matchPoints }}
+              </p>
+            </article>
+            <article
+              class="card rounded-xl border border-base-300 bg-base-100/70 p-3"
+            >
+              <p class="text-base-content/70 text-xs uppercase">Manuales</p>
+              <p class="text-lg font-semibold">
+                {{ pointsHistorySummary.manualPoints }}
+              </p>
+            </article>
+            <article
+              class="card rounded-xl border border-base-300 bg-base-100/70 p-3"
+            >
+              <p class="text-base-content/70 text-xs uppercase">
+                Bonus campeon
+              </p>
+              <p class="text-lg font-semibold">
+                {{ pointsHistorySummary.championBonusPoints }}
+              </p>
+            </article>
+            <article
+              class="card rounded-xl border border-base-300 bg-base-100/70 p-3"
+            >
+              <p class="text-base-content/70 text-xs uppercase">
+                Total calculado
+              </p>
+              <p class="text-lg font-semibold">
+                {{ pointsHistorySummary.computedTotal }}
+              </p>
+            </article>
+          </div>
+
+          <p
+            v-if="!pointsHistoryLoading && pointsHistoryEntries.length === 0"
+            class="mt-4 text-sm text-base-content/70"
+          >
+            Sin movimientos de puntos para este usuario.
+          </p>
+
+          <div
+            v-else-if="!pointsHistoryLoading"
+            class="mt-4 max-h-[55vh] overflow-auto rounded-xl border border-base-300"
+          >
+            <table class="table min-w-full text-sm">
+              <thead
+                class="bg-base-200 text-base-content/70 text-left text-xs uppercase tracking-[0.12em]"
+              >
+                <tr>
+                  <th class="px-3 py-2">Fecha</th>
+                  <th class="px-3 py-2">Origen</th>
+                  <th class="px-3 py-2">Referencia</th>
+                  <th class="px-3 py-2">Detalle</th>
+                  <th class="px-3 py-2">Puntos</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="entry in pointsHistoryEntries"
+                  :key="entry.id"
+                  class="border-t border-base-300"
+                >
+                  <td class="px-3 py-2 text-xs text-base-content/70">
+                    {{ kickoffText(entry.created_at) }}
+                  </td>
+                  <td class="px-3 py-2">
+                    <span
+                      class="badge badge-sm"
+                      :class="sourceBadgeClassByHistory(entry.source)"
+                    >
+                      {{ sourceLabelByHistory(entry.source) }}
+                    </span>
+                  </td>
+                  <td class="px-3 py-2 font-medium">{{ entry.title }}</td>
+                  <td class="px-3 py-2 text-xs text-base-content/70">
+                    {{ entry.detail }}
+                  </td>
+                  <td
+                    class="px-3 py-2 font-semibold"
+                    :class="entry.points >= 0 ? 'text-success' : 'text-error'"
+                  >
+                    {{ entry.points >= 0 ? `+${entry.points}` : entry.points }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <form
+          method="dialog"
+          class="modal-backdrop"
+          @submit.prevent="closePointsHistoryModal"
+        >
+          <button @click="closePointsHistoryModal">close</button>
+        </form>
+      </dialog>
+    </Teleport>
   </section>
 </template>
