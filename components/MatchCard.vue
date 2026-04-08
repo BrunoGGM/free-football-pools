@@ -121,6 +121,28 @@ const KNOCKOUT_STAGES = new Set([
   "final",
 ]);
 
+const isKnockoutMatch = computed(() => KNOCKOUT_STAGES.has(props.match.stage));
+
+const shouldShowPenaltyLine = computed(() => {
+  if (!isKnockoutMatch.value) {
+    return false;
+  }
+
+  if (
+    props.match.home_penalty_score !== null ||
+    props.match.away_penalty_score !== null
+  ) {
+    return true;
+  }
+
+  return (
+    props.match.status === "finished" &&
+    props.match.home_score !== null &&
+    props.match.away_score !== null &&
+    props.match.home_score === props.match.away_score
+  );
+});
+
 const qualifiedTeamLabel = computed(() => {
   if (!KNOCKOUT_STAGES.has(props.match.stage)) {
     return null;
@@ -524,17 +546,40 @@ onBeforeUnmount(() => {
         <p v-if="props.match.venue" class="text-base-content/70 mt-1 text-xs">
           {{ props.match.venue }}
         </p>
-        <p class="text-primary mt-2 text-xl font-bold">
-          {{ props.match.home_score ?? "-" }} :
-          {{ props.match.away_score ?? "-" }}
-        </p>
+        <div
+          class="bg-info/10 border-info/30 mt-2 rounded-lg border px-3 py-1.5"
+        >
+          <p class="text-info/90 text-[10px] font-semibold tracking-[0.16em]">
+            GOLES
+          </p>
+          <p class="text-primary text-xl font-bold">
+            {{ props.match.home_score ?? "-" }} :
+            {{ props.match.away_score ?? "-" }}
+          </p>
+        </div>
+        <div
+          v-if="shouldShowPenaltyLine"
+          class="bg-warning/10 border-warning/40 mt-2 rounded-lg border border-dashed px-3 py-1.5"
+        >
+          <p
+            class="text-warning/90 text-[10px] font-semibold tracking-[0.16em]"
+          >
+            PENALES
+          </p>
+          <p class="text-warning text-lg font-bold">
+            {{ props.match.home_penalty_score ?? "-" }} :
+            {{ props.match.away_penalty_score ?? "-" }}
+          </p>
+        </div>
         <p
           v-if="qualifiedTeamLabel"
           class="mt-1 text-xs font-semibold"
           :class="
             qualifiedTeamLabel.includes('Sin clasificado')
               ? 'text-warning'
-              : 'text-success'
+              : qualifiedTeamLabel.includes('(penales)')
+                ? 'text-info'
+                : 'text-success'
           "
         >
           {{ qualifiedTeamLabel }}

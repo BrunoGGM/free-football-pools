@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import {
+  normalizeTeamKey,
+  resolveTeamCode,
+  teamFlagEmojiFromCode,
+} from "~/utils/teamMeta";
+
 definePageMeta({
   middleware: ["auth"],
 });
@@ -150,6 +156,12 @@ const tournamentDrawsTotal = ref(0);
 const mostWinningTeam = ref<{ name: string; value: number } | null>(null);
 const mostLosingTeam = ref<{ name: string; value: number } | null>(null);
 const mostScoringTeam = ref<{ name: string; value: number } | null>(null);
+const isTournamentFinished = ref(false);
+const tournamentChampionTeam = ref<string | null>(null);
+const tournamentChampionLogoUrl = ref<string | null>(null);
+const tournamentWinnerUser = ref<string | null>(null);
+const tournamentWinnerPoints = ref<number | null>(null);
+const tournamentWinnerCount = ref(0);
 const allPredictions = ref<NormalizedPredictionRow[]>([]);
 const unresolvedPredictionsByUser = ref<Record<string, number>>({});
 const exactScoreBonusPoints = ref(3);
@@ -366,6 +378,27 @@ const hasLeaderboardData = computed(() => leaderboardLabels.value.length > 0);
 const hasDistributionData = computed(() => {
   return distributionValues.value.some((value) => value > 0);
 });
+const showTournamentWinnersBanner = computed(() => {
+  return (
+    isTournamentFinished.value &&
+    Boolean(tournamentChampionTeam.value || tournamentWinnerUser.value)
+  );
+});
+const tournamentWinnerPrizeTotal = computed(() => {
+  const ticketPrice = Number(quiniela.value?.ticket_price ?? 0);
+  return Math.max(0, ticketPrice * memberCount.value);
+});
+const tournamentWinnerPrizeText = computed(() => {
+  return tournamentWinnerPrizeTotal.value.toLocaleString("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+});
+const championFlagEmoji = computed(() => {
+  return teamFlagEmojiFromCode(resolveTeamCode(tournamentChampionTeam.value));
+});
 
 const distributionSchemeText = computed(
   () => `${exactScoreMaxPoints.value}/${correctOutcomePoints.value}/0`,
@@ -405,6 +438,12 @@ const clearStats = () => {
   mostWinningTeam.value = null;
   mostLosingTeam.value = null;
   mostScoringTeam.value = null;
+  isTournamentFinished.value = false;
+  tournamentChampionTeam.value = null;
+  tournamentChampionLogoUrl.value = null;
+  tournamentWinnerUser.value = null;
+  tournamentWinnerPoints.value = null;
+  tournamentWinnerCount.value = 0;
   allPredictions.value = [];
   unresolvedPredictionsByUser.value = {};
   exactScoreBonusPoints.value = 3;
@@ -1329,6 +1368,160 @@ const loadTournamentInsights = async () => {
   mostScoringTeam.value = pickTopTeam(goalsByTeam);
 };
 
+const loadTournamentWinners = async () => {
+  if (!activeQuinielaId.value) {
+    isTournamentFinished.value = false;
+    tournamentChampionTeam.value = null;
+    tournamentChampionLogoUrl.value = null;
+    tournamentWinnerUser.value = null;
+    tournamentWinnerPoints.value = null;
+    tournamentWinnerCount.value = 0;
+    return;
+  }
+
+  const [openMatchesResult, finalMatchResult] = await Promise.all([
+    client
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["pending", "in_progress"]),
+    client
+      .from("matches")
+      .select(
+        "home_team, away_team, home_score, away_score, home_penalty_score, away_penalty_score, home_team_logo_url, away_team_logo_url, match_time, updated_at",
+      )
+      .eq("stage", "final")
+      .eq("status", "finished")
+      .not("home_score", "is", null)
+      .not("away_score", "is", null)
+      .order("match_time", { ascending: false })
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  if (openMatchesResult.error) {
+    throw openMatchesResult.error;
+  }
+
+  if (finalMatchResult.error) {
+    throw finalMatchResult.error;
+  }
+
+  let winnerFromFinalMatch: string | null = null;
+  let winnerLogoFromFinalMatch: string | null = null;
+
+  if (finalMatchResult.data) {
+    const finalMatch = finalMatchResult.data as {
+      home_team: string;
+      away_team: string;
+      home_score: number;
+      away_score: number;
+      home_penalty_score: number | null;
+      away_penalty_score: number | null;
+      home_team_logo_url: string | null;
+      away_team_logo_url: string | null;
+    };
+
+    if (finalMatch.home_score > finalMatch.away_score) {
+      winnerFromFinalMatch = finalMatch.home_team;
+      winnerLogoFromFinalMatch = finalMatch.home_team_logo_url;
+    } else if (finalMatch.home_score < finalMatch.away_score) {
+      winnerFromFinalMatch = finalMatch.away_team;
+      winnerLogoFromFinalMatch = finalMatch.away_team_logo_url;
+    } else if (
+      finalMatch.home_penalty_score !== null &&
+      finalMatch.away_penalty_score !== null
+    ) {
+      if (finalMatch.home_penalty_score > finalMatch.away_penalty_score) {
+        winnerFromFinalMatch = finalMatch.home_team;
+        winnerLogoFromFinalMatch = finalMatch.home_team_logo_url;
+      } else if (
+        finalMatch.home_penalty_score < finalMatch.away_penalty_score
+      ) {
+        winnerFromFinalMatch = finalMatch.away_team;
+        winnerLogoFromFinalMatch = finalMatch.away_team_logo_url;
+      }
+    }
+  }
+
+  const configuredChampion =
+    typeof quiniela.value?.champion_team === "string"
+      ? quiniela.value.champion_team.trim()
+      : "";
+  const hasOpenMatches = Number(openMatchesResult.count ?? 0) > 0;
+  const hasFinishedFinal = Boolean(finalMatchResult.data);
+  const quinielaEndAtMs = quiniela.value?.end_date
+    ? new Date(quiniela.value.end_date).getTime()
+    : Number.NaN;
+  const hasEndedByDate =
+    Number.isFinite(quinielaEndAtMs) && Date.now() >= quinielaEndAtMs;
+
+  isTournamentFinished.value =
+    hasFinishedFinal || !hasOpenMatches || hasEndedByDate;
+
+  if (!isTournamentFinished.value) {
+    tournamentChampionTeam.value = null;
+    tournamentChampionLogoUrl.value = null;
+    tournamentWinnerUser.value = null;
+    tournamentWinnerPoints.value = null;
+    tournamentWinnerCount.value = 0;
+    return;
+  }
+
+  tournamentChampionTeam.value = configuredChampion || winnerFromFinalMatch;
+  tournamentChampionLogoUrl.value = winnerLogoFromFinalMatch;
+
+  if (tournamentChampionTeam.value) {
+    const teamProfileResult = await client
+      .from("team_profiles")
+      .select("logo_url")
+      .eq("team_key", normalizeTeamKey(tournamentChampionTeam.value))
+      .maybeSingle();
+
+    if (!teamProfileResult.error && teamProfileResult.data?.logo_url) {
+      tournamentChampionLogoUrl.value = teamProfileResult.data.logo_url;
+    } else if (
+      teamProfileResult.error &&
+      !isMissingTableError(teamProfileResult.error, [
+        "team_profiles",
+        "logo_url",
+      ])
+    ) {
+      throw teamProfileResult.error;
+    }
+  }
+
+  const firstPlaceRows = rankingRows.value.filter((row) => row.rank === 1);
+  const winners = firstPlaceRows.length ? firstPlaceRows : rankingRows.value;
+  tournamentWinnerCount.value = winners.length;
+
+  if (winners.length === 0) {
+    tournamentWinnerUser.value = null;
+    tournamentWinnerPoints.value = null;
+    tournamentWinnerCount.value = 0;
+    return;
+  }
+
+  const leadWinner = winners[0];
+
+  if (!leadWinner) {
+    tournamentWinnerUser.value = null;
+    tournamentWinnerPoints.value = null;
+    return;
+  }
+
+  const leadPoints = leadWinner.total_points;
+
+  if (winners.length === 1) {
+    tournamentWinnerUser.value = leadWinner.username;
+  } else {
+    tournamentWinnerUser.value = `${leadWinner.username} y ${winners.length - 1} mas`;
+  }
+
+  tournamentWinnerPoints.value =
+    typeof leadPoints === "number" ? leadPoints : null;
+};
+
 const loadMatchPulse = async () => {
   const [liveResult, upcomingResult] = await Promise.all([
     client
@@ -1406,6 +1599,7 @@ const loadStats = async () => {
     await loadAchievementStats();
     await loadTournamentInsights();
     await loadMatchPulse();
+    await loadTournamentWinners();
     loadProjectionStats();
     loadRivalComparison();
     loadHeatmaps();
@@ -1477,6 +1671,108 @@ watch(
     </article>
 
     <template v-else>
+      <article
+        v-if="showTournamentWinnersBanner"
+        class="relative overflow-hidden rounded-3xl border border-warning/35 bg-linear-to-br from-warning/15 via-base-100 to-primary/10 p-5 shadow-lg"
+      >
+        <div
+          class="bg-warning/30 pointer-events-none absolute -right-14 -top-14 h-40 w-40 rounded-full blur-2xl"
+          aria-hidden="true"
+        ></div>
+        <div
+          class="bg-primary/20 pointer-events-none absolute -bottom-16 -left-16 h-44 w-44 rounded-full blur-3xl"
+          aria-hidden="true"
+        ></div>
+
+        <div
+          class="relative z-10 flex flex-wrap items-center justify-between gap-3"
+        >
+          <div>
+            <p class="text-base-content/75 text-xs uppercase tracking-[0.18em]">
+              Cierre del torneo
+            </p>
+            <h2 class="text-base-content mt-1 text-2xl font-black sm:text-3xl">
+              Campeones de la quiniela
+            </h2>
+          </div>
+          <span class="badge badge-warning badge-lg">Torneo terminado</span>
+        </div>
+
+        <div class="relative z-10 mt-4 grid gap-3 md:grid-cols-2">
+          <article
+            class="rounded-2xl border border-success/35 bg-success/10 px-4 py-4"
+          >
+            <p class="text-success/80 text-[11px] uppercase tracking-[0.16em]">
+              Equipo ganador
+            </p>
+            <div class="mt-2 flex items-center gap-3">
+              <div
+                class="grid h-12 w-12 place-content-center rounded-xl border border-success/35 bg-success/15 text-2xl"
+                aria-hidden="true"
+              >
+                🏆
+              </div>
+              <div
+                v-if="tournamentChampionLogoUrl"
+                class="grid h-12 w-12 place-content-center overflow-hidden rounded-xl border border-success/35 bg-base-100"
+              >
+                <img
+                  :src="tournamentChampionLogoUrl"
+                  :alt="`Escudo de ${tournamentChampionTeam || 'equipo campeon'}`"
+                  class="h-10 w-10 object-contain"
+                  loading="lazy"
+                />
+              </div>
+              <div
+                v-else
+                class="grid h-12 w-12 place-content-center rounded-xl border border-success/35 bg-base-100 text-2xl"
+                aria-hidden="true"
+              >
+                {{ championFlagEmoji }}
+              </div>
+
+              <p class="text-base-content text-xl font-extrabold sm:text-2xl">
+                {{ tournamentChampionTeam || "-" }}
+              </p>
+            </div>
+            <p class="text-base-content/70 mt-1 text-xs">
+              Campeon oficial del torneo
+            </p>
+          </article>
+
+          <article
+            class="rounded-2xl border border-warning/40 bg-warning/12 px-4 py-4"
+          >
+            <p class="text-warning/90 text-[11px] uppercase tracking-[0.16em]">
+              Usuario ganador de la bolsa
+            </p>
+            <p class="mt-1 text-lg" aria-hidden="true">💰 💸</p>
+            <p
+              class="text-base-content mt-1 text-xl font-extrabold sm:text-2xl"
+            >
+              {{ tournamentWinnerUser || "-" }}
+            </p>
+            <p class="text-base-content/70 mt-1 text-xs">
+              {{
+                tournamentWinnerPoints !== null
+                  ? `${tournamentWinnerPoints} pts al cierre`
+                  : "Sin ranking final disponible"
+              }}
+            </p>
+
+            <p class="text-warning mt-2 text-lg font-black sm:text-xl">
+              Total ganado: {{ tournamentWinnerPrizeText }}
+            </p>
+            <p
+              v-if="tournamentWinnerCount > 1"
+              class="text-base-content/70 mt-1 text-xs"
+            >
+              Empate en primer lugar: {{ tournamentWinnerCount }} usuarios.
+            </p>
+          </article>
+        </div>
+      </article>
+
       <article class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">

@@ -89,6 +89,8 @@ const exactHitsInitialized = ref(false);
 const exactHitsCount = ref(0);
 const correctOutcomePoints = ref(1);
 const exactScoreBonusPoints = ref(3);
+const showStatsPanel = ref(true);
+const picksSectionRef = ref<HTMLElement | null>(null);
 
 const username = computed(() => {
   const metadataName = user.value?.user_metadata?.username;
@@ -288,6 +290,35 @@ const predictionsProgressText = computed(() => {
 
   return `${predictionsMadeCount.value}/${totalMatchesCount.value}`;
 });
+
+const goToPicks = () => {
+  if (!process.client) {
+    return;
+  }
+
+  if (showStatsPanel.value) {
+    showStatsPanel.value = false;
+  }
+
+  requestAnimationFrame(() => {
+    picksSectionRef.value?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  });
+};
+
+const goToStats = () => {
+  showStatsPanel.value = true;
+
+  if (!process.client) {
+    return;
+  }
+
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+};
 
 const rankEmoji = computed(() => {
   if (myRank.value === 1) {
@@ -1074,6 +1105,37 @@ onBeforeUnmount(() => {
 
     <article
       v-else
+      class="rounded-2xl border border-info/35 bg-info/10 px-4 py-3"
+    >
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p class="text-info/80 text-xs uppercase tracking-[0.14em]">Vista</p>
+          <p class="text-base-content text-sm">
+            Aqui puedes ver tus stats y tambien tus picks por partido.
+          </p>
+        </div>
+
+        <div class="join">
+          <button
+            class="btn btn-sm join-item"
+            :class="showStatsPanel ? 'btn-primary' : 'btn-outline'"
+            @click="goToStats"
+          >
+            Ver stats
+          </button>
+          <button
+            class="btn btn-sm join-item"
+            :class="!showStatsPanel ? 'btn-primary' : 'btn-outline'"
+            @click="goToPicks"
+          >
+            Ver picks
+          </button>
+        </div>
+      </div>
+    </article>
+
+    <article
+      v-if="activeQuinielaId && showStatsPanel"
       class="pitch-panel card neon-border rounded-3xl border border-base-300 bg-base-200/70 p-6 shadow-xl sm:p-8"
     >
       <p class="text-primary text-xs uppercase tracking-[0.18em]">
@@ -1313,30 +1375,55 @@ onBeforeUnmount(() => {
       >
         {{ compatibilityMessage }}
       </p>
+
+      <div class="mt-4 flex justify-end">
+        <button class="btn btn-sm btn-outline" @click="goToPicks">
+          Ir a mis picks
+        </button>
+      </div>
     </article>
 
-    <article v-if="loading" class="alert rounded-2xl text-sm">
-      Cargando tus predicciones...
-    </article>
-    <article
-      v-else-if="errorMessage"
-      class="alert alert-error rounded-2xl text-sm"
-    >
-      {{ errorMessage }}
-    </article>
-    <article v-else-if="!hasMatches" class="alert rounded-2xl text-sm">
-      Todavia no hay partidos programados.
-    </article>
-    <article v-else>
-      <DashboardQuinielaPredictionsTable
-        :rows="predictions"
-        pick-header="Tu prediccion"
-        show-prediction-explanation
-        show-points-breakdown
-        :correct-outcome-points="correctOutcomePoints"
-        kickoff-date-style="medium"
-        :resolve-team-display-name="(team) => (team || '').trim() || '-'"
-      />
-    </article>
+    <section v-if="activeQuinielaId" ref="picksSectionRef" class="space-y-3">
+      <article class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
+              Picks
+            </p>
+            <h2 class="text-base-content mt-1 text-xl font-semibold">
+              Tus picks por partido
+            </h2>
+          </div>
+
+          <button class="btn btn-sm btn-ghost" @click="goToStats">
+            Volver a stats
+          </button>
+        </div>
+      </article>
+
+      <article v-if="loading" class="alert rounded-2xl text-sm">
+        Cargando tus predicciones...
+      </article>
+      <article
+        v-else-if="errorMessage"
+        class="alert alert-error rounded-2xl text-sm"
+      >
+        {{ errorMessage }}
+      </article>
+      <article v-else-if="!hasMatches" class="alert rounded-2xl text-sm">
+        Todavia no hay partidos programados.
+      </article>
+      <article v-else>
+        <DashboardQuinielaPredictionsTable
+          :rows="predictions"
+          pick-header="Tu prediccion"
+          show-prediction-explanation
+          show-points-breakdown
+          :correct-outcome-points="correctOutcomePoints"
+          kickoff-date-style="medium"
+          :resolve-team-display-name="(team) => (team || '').trim() || '-'"
+        />
+      </article>
+    </section>
   </section>
 </template>

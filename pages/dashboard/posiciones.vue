@@ -124,6 +124,7 @@ const championInputRef = ref<HTMLInputElement | null>(null);
 const championDropdownStyle = ref<Record<string, string>>({});
 const savingChampion = ref(false);
 const championSaved = ref(false);
+const championLockStartedAt = ref<string | null>(null);
 let championSaveTimer: ReturnType<typeof setTimeout> | null = null;
 const rankUpVisible = ref(false);
 const rankUpFrom = ref<number | null>(null);
@@ -151,6 +152,30 @@ const pointsHistorySummary = ref({
   manualPoints: 0,
   championBonusPoints: 0,
   computedTotal: 0,
+});
+
+const championSelectionLocked = computed(() => {
+  const lockStartedAt = championLockStartedAt.value;
+
+  if (!lockStartedAt) {
+    return false;
+  }
+
+  const lockStartedAtMs = new Date(lockStartedAt).getTime();
+
+  if (!Number.isFinite(lockStartedAtMs)) {
+    return false;
+  }
+
+  return Date.now() >= lockStartedAtMs;
+});
+
+const championLockText = computed(() => {
+  if (!championSelectionLocked.value || !championLockStartedAt.value) {
+    return "";
+  }
+
+  return `El pick de campeon quedo bloqueado desde ${kickoffText(championLockStartedAt.value)} porque ya inicio el primer partido.`;
 });
 
 const rankUpSubtitle = computed(() => {
@@ -470,6 +495,10 @@ const teamOptionFlagIconClass = (team: TeamProfileOption) =>
   flagIconClassFromCode(team.code || resolveTeamCode(team.name));
 
 const selectChampionFromList = (team: TeamProfileOption) => {
+  if (championSelectionLocked.value) {
+    return;
+  }
+
   championInput.value = team.name;
   championPickerOpen.value = false;
 };
@@ -1069,12 +1098,38 @@ const appendGamificationMessage = (message: string) => {
   }
 };
 
+const loadChampionLockStartedAt = async () => {
+  if (!activeQuinielaId.value) {
+    championLockStartedAt.value = null;
+    return;
+  }
+
+  const firstMatchResult = await client
+    .from("matches")
+    .select("match_time")
+    .order("match_time", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (firstMatchResult.error) {
+    championLockStartedAt.value = quiniela.value?.start_date ?? null;
+    return;
+  }
+
+  championLockStartedAt.value =
+    (firstMatchResult.data as { match_time?: string | null } | null)
+      ?.match_time ??
+    quiniela.value?.start_date ??
+    null;
+};
+
 const loadRanking = async () => {
   if (!activeQuinielaId.value) {
     rows.value = [];
     gamificationMessage.value = null;
     weeklyLeaders.value = [];
     canViewOtherQuinielas.value = false;
+    championLockStartedAt.value = null;
     closeUserQuinielaModal();
     return;
   }
@@ -1083,6 +1138,8 @@ const loadRanking = async () => {
   errorMessage.value = null;
   gamificationMessage.value = null;
   weeklyLeaders.value = [];
+
+  await loadChampionLockStartedAt();
 
   const visibilityResult = await client
     .from("quiniela_rules")
@@ -1639,6 +1696,13 @@ const saveChampion = async () => {
     return;
   }
 
+  if (championSelectionLocked.value) {
+    championPickerOpen.value = false;
+    errorMessage.value =
+      "El pick de campeon ya esta bloqueado porque inicio el primer partido.";
+    return;
+  }
+
   savingChampion.value = true;
   errorMessage.value = null;
 
@@ -1698,6 +1762,14 @@ watch(championPickerOpen, (open) => {
 
   window.removeEventListener("resize", onChampionDropdownViewportChange);
   window.removeEventListener("scroll", onChampionDropdownViewportChange, true);
+});
+
+watch(championSelectionLocked, (locked) => {
+  if (!locked) {
+    return;
+  }
+
+  championPickerOpen.value = false;
 });
 
 watch(
@@ -1775,9 +1847,10 @@ onBeforeUnmount(() => {
             ref="championInputRef"
             v-model="championInput"
             class="input input-bordered w-full"
+            :disabled="championSelectionLocked"
             placeholder="Busca y selecciona campeon"
-            @focus="championPickerOpen = true"
-            @input="championPickerOpen = true"
+            @focus="!championSelectionLocked && (championPickerOpen = true)"
+            @input="!championSelectionLocked && (championPickerOpen = true)"
             @blur="onChampionInputBlur"
           />
 
@@ -1846,10 +1919,17 @@ onBeforeUnmount(() => {
             }}</span>
             <span>Seleccionado: {{ selectedChampionInfo.name }}</span>
           </p>
+
+          <p
+            v-if="championSelectionLocked"
+            class="alert alert-warning mt-2 rounded-lg px-3 py-2 text-xs"
+          >
+            {{ championLockText }}
+          </p>
         </div>
 
         <button
-          :disabled="savingChampion"
+          :disabled="savingChampion || championSelectionLocked"
           class="btn btn-primary btn-bet-glow"
           @click="saveChampion"
         >

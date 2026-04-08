@@ -187,6 +187,7 @@ const latestMatches = ref<
   }[]
 >([]);
 const matchesSearch = ref("");
+const matchesStageFilter = ref("all");
 const matchesPage = ref(1);
 const MATCHES_PAGE_SIZE = 12;
 const savingMatchScoreId = ref<string | null>(null);
@@ -311,9 +312,47 @@ const adminRoleLabel = computed(() => {
 
   return "Admin de quiniela";
 });
+
+const MATCH_STAGE_ORDER: Record<string, number> = {
+  group_stage: 1,
+  round_32: 2,
+  round_16: 3,
+  quarter_final: 4,
+  semi_final: 5,
+  third_place: 6,
+  final: 7,
+};
+
+const formatMatchStageLabel = (stage: string) => {
+  return stage.replaceAll("_", " ");
+};
+
 const adminSection = ref<AdminSectionKey>("overview");
+const matchStageOptions = computed(() => {
+  const uniqueStages = Array.from(
+    new Set(latestMatches.value.map((item) => item.stage).filter(Boolean)),
+  );
+
+  uniqueStages.sort((a, b) => {
+    const orderA = MATCH_STAGE_ORDER[a] ?? Number.MAX_SAFE_INTEGER;
+    const orderB = MATCH_STAGE_ORDER[b] ?? Number.MAX_SAFE_INTEGER;
+
+    if (orderA !== orderB) {
+      return orderA - orderB;
+    }
+
+    return a.localeCompare(b);
+  });
+
+  return uniqueStages.map((stage) => ({
+    value: stage,
+    label: formatMatchStageLabel(stage),
+  }));
+});
+
 const filteredMatches = computed(() => {
   const query = matchesSearch.value.trim().toLowerCase();
+  const stageFilter = matchesStageFilter.value;
 
   const sorted = [...latestMatches.value].sort((a, b) => {
     return (
@@ -322,11 +361,16 @@ const filteredMatches = computed(() => {
     );
   });
 
+  const stageFiltered =
+    stageFilter === "all"
+      ? sorted
+      : sorted.filter((item) => item.stage === stageFilter);
+
   if (!query) {
-    return sorted;
+    return stageFiltered;
   }
 
-  return sorted.filter((item) => {
+  return stageFiltered.filter((item) => {
     const stageLabel = item.stage.replaceAll("_", " ");
     const haystack = [
       item.home_team,
@@ -968,7 +1012,7 @@ const loadIngestionLogs = async () => {
   matchScoreDraftById.value = nextDrafts;
 };
 
-watch(matchesSearch, () => {
+watch([matchesSearch, matchesStageFilter], () => {
   matchesPage.value = 1;
 });
 
@@ -1694,6 +1738,8 @@ watch(
       :logs-error="logsError"
       :latest-matches="paginatedMatches"
       :match-search="matchesSearch"
+      :match-stage="matchesStageFilter"
+      :match-stage-options="matchStageOptions"
       :current-page="matchesPage"
       :total-pages="matchesTotalPages"
       :total-matches="filteredMatches.length"
@@ -1706,6 +1752,7 @@ watch(
       @run-fixtures-sync="runFixturesSync"
       @run-teams-sync="runTeamsSync"
       @update:match-search="matchesSearch = $event"
+      @update:match-stage="matchesStageFilter = $event"
       @go-to-page="goToMatchesPage"
       @update-match-score-draft="updateMatchScoreDraft"
       @save-match-score="saveMatchScore"

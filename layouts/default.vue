@@ -14,27 +14,26 @@ const {
 } = useActiveQuiniela();
 const { lastEvent } = useGameUx();
 
-const links = [
-  { to: "/dashboard/mi-quiniela", label: "Mi quiniela" },
-  { to: "/dashboard/grupos", label: "Grupos" },
-  { to: "/dashboard/eliminatorias", label: "Eliminatorias" },
-  { to: "/dashboard/posiciones", label: "Posiciones" },
-  { to: "/dashboard/estadisticas", label: "Estadisticas" },
-  { to: "/dashboard", label: "Dashboard" },
-  { to: "/admin", label: "Admin", requiresAdmin: true },
-];
-
 const canAccessAdmin = ref(false);
-
-const navLinks = computed(() => {
-  return links.filter((link) => {
-    if (link.requiresAdmin) {
-      return canAccessAdmin.value;
-    }
-
-    return true;
-  });
+const desktopPartidosDetails = ref<HTMLDetailsElement | null>(null);
+const mobilePartidosDetails = ref<HTMLDetailsElement | null>(null);
+const isPartidosActive = computed(() => {
+  return isActive("/dashboard/grupos") || isActive("/dashboard/eliminatorias");
 });
+
+const closePartidosMenus = () => {
+  if (desktopPartidosDetails.value) {
+    desktopPartidosDetails.value.open = false;
+  }
+
+  if (mobilePartidosDetails.value) {
+    mobilePartidosDetails.value.open = false;
+  }
+
+  if (process.client && document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur();
+  }
+};
 
 interface HeaderMetric {
   label: string;
@@ -645,6 +644,13 @@ watch(
   },
 );
 
+watch(
+  () => route.path,
+  () => {
+    closePartidosMenus();
+  },
+);
+
 onBeforeUnmount(() => {
   if (metricsRefreshTimer) {
     clearInterval(metricsRefreshTimer);
@@ -683,19 +689,172 @@ onBeforeUnmount(() => {
           </div>
         </NuxtLink>
 
-        <nav class="hidden items-center gap-2 lg:flex" v-if="user">
-          <NuxtLink
-            v-for="link in navLinks"
-            :key="link.to"
-            :to="link.to"
-            class="btn btn-sm"
-            :class="[isActive(link.to) ? 'btn-primary' : 'btn-outline']"
-          >
-            {{ link.label }}
-          </NuxtLink>
-        </nav>
+        <div v-if="user" class="relative z-30 hidden flex-none lg:block">
+          <ul class="menu menu-horizontal gap-1 px-1">
+            <li>
+              <NuxtLink
+                to="/dashboard"
+                :class="[
+                  isActive('/dashboard')
+                    ? 'bg-primary text-primary-content'
+                    : '',
+                ]"
+              >
+                Dashboard
+              </NuxtLink>
+            </li>
+            <li>
+              <NuxtLink
+                to="/dashboard/mi-quiniela"
+                :class="[
+                  isActive('/dashboard/mi-quiniela')
+                    ? 'bg-primary text-primary-content'
+                    : '',
+                ]"
+              >
+                Mi quiniela
+              </NuxtLink>
+            </li>
+            <li class="relative">
+              <details ref="desktopPartidosDetails">
+                <summary
+                  :class="[
+                    isPartidosActive
+                      ? 'bg-primary text-primary-content'
+                      : 'text-base-content',
+                  ]"
+                >
+                  Partidos
+                </summary>
+                <ul
+                  class="bg-base-100 absolute left-0 top-full z-50 mt-2 min-w-44 rounded-box border border-base-300 p-2 shadow-xl"
+                >
+                  <li>
+                    <NuxtLink
+                      to="/dashboard/grupos"
+                      :class="[isActive('/dashboard/grupos') ? 'active' : '']"
+                      @click="closePartidosMenus"
+                    >
+                      Grupos
+                    </NuxtLink>
+                  </li>
+                  <li>
+                    <NuxtLink
+                      to="/dashboard/eliminatorias"
+                      :class="[
+                        isActive('/dashboard/eliminatorias') ? 'active' : '',
+                      ]"
+                      @click="closePartidosMenus"
+                    >
+                      Eliminatorias
+                    </NuxtLink>
+                  </li>
+                </ul>
+              </details>
+            </li>
+            <li>
+              <NuxtLink
+                to="/dashboard/posiciones"
+                :class="[
+                  isActive('/dashboard/posiciones')
+                    ? 'bg-primary text-primary-content'
+                    : '',
+                ]"
+              >
+                Ranking usuarios
+              </NuxtLink>
+            </li>
+            <li>
+              <NuxtLink
+                to="/dashboard/estadisticas"
+                :class="[
+                  isActive('/dashboard/estadisticas')
+                    ? 'bg-primary text-primary-content'
+                    : '',
+                ]"
+              >
+                Estadisticas
+              </NuxtLink>
+            </li>
+            <li v-if="canAccessAdmin">
+              <NuxtLink
+                to="/admin"
+                :class="[
+                  isActive('/admin') ? 'bg-primary text-primary-content' : '',
+                ]"
+              >
+                Admin
+              </NuxtLink>
+            </li>
+          </ul>
+        </div>
 
         <div class="flex items-center gap-2">
+          <div v-if="user" class="dropdown dropdown-start lg:hidden">
+            <button
+              tabindex="0"
+              role="button"
+              class="btn btn-ghost btn-sm"
+              aria-label="Abrir menu de navegacion"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                class="h-5 w-5 stroke-current"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            </button>
+
+            <ul
+              tabindex="0"
+              class="menu dropdown-content left-0 right-auto z-40 mt-2 w-56 max-w-[calc(100vw-2rem)] rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
+            >
+              <li>
+                <NuxtLink to="/dashboard">Dashboard</NuxtLink>
+              </li>
+              <li>
+                <NuxtLink to="/dashboard/mi-quiniela">Mi quiniela</NuxtLink>
+              </li>
+              <li>
+                <details ref="mobilePartidosDetails">
+                  <summary>Partidos</summary>
+                  <ul class="bg-base-100 rounded-t-none p-2">
+                    <li>
+                      <NuxtLink
+                        to="/dashboard/grupos"
+                        @click="closePartidosMenus"
+                        >Grupos</NuxtLink
+                      >
+                    </li>
+                    <li>
+                      <NuxtLink
+                        to="/dashboard/eliminatorias"
+                        @click="closePartidosMenus"
+                        >Eliminatorias</NuxtLink
+                      >
+                    </li>
+                  </ul>
+                </details>
+              </li>
+              <li>
+                <NuxtLink to="/dashboard/posiciones">Ranking usuarios</NuxtLink>
+              </li>
+              <li>
+                <NuxtLink to="/dashboard/estadisticas">Estadisticas</NuxtLink>
+              </li>
+              <li v-if="canAccessAdmin">
+                <NuxtLink to="/admin">Admin</NuxtLink>
+              </li>
+            </ul>
+          </div>
+
           <label for="theme-selector" class="sr-only">Tema</label>
 
           <button class="btn btn-outline btn-sm" @click="toggleSound">
