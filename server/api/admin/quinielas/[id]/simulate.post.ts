@@ -627,6 +627,8 @@ const resetDownstreamKnockoutSeeds = async (
           away_team_logo_url: null,
           home_score: null,
           away_score: null,
+          home_penalty_score: null,
+          away_penalty_score: null,
           status: 'pending',
         }
       })
@@ -722,7 +724,7 @@ const captureGlobalMatchesSnapshotIfMissing = async (
 
   const { data: matches, error: matchesError } = await supabase
     .from('matches')
-    .select('id, home_team, away_team, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url, home_score, away_score, status')
+    .select('*')
 
   if (matchesError) {
     throw createError({ statusCode: 500, statusMessage: matchesError.message })
@@ -739,6 +741,8 @@ const captureGlobalMatchesSnapshotIfMissing = async (
     away_team_logo_url: match.away_team_logo_url ? String(match.away_team_logo_url) : null,
     home_score: Number.isInteger(Number(match.home_score)) ? Number(match.home_score) : null,
     away_score: Number.isInteger(Number(match.away_score)) ? Number(match.away_score) : null,
+    home_penalty_score: Number.isInteger(Number(match.home_penalty_score)) ? Number(match.home_penalty_score) : null,
+    away_penalty_score: Number.isInteger(Number(match.away_penalty_score)) ? Number(match.away_penalty_score) : null,
     status: String(match.status || 'pending'),
   }))
 
@@ -888,6 +892,8 @@ export default defineEventHandler(async (event) => {
         .update({
           home_score: homeScore,
           away_score: awayScore,
+          home_penalty_score: null,
+          away_penalty_score: null,
           status: 'finished',
         })
         .eq('id', match.id)

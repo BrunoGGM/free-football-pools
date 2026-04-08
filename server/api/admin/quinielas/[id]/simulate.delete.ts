@@ -18,7 +18,7 @@ const restoreMatchesFromSnapshot = async (
 ): Promise<SnapshotRestoreResult> => {
   const { data: snapshotRows, error: snapshotRowsError } = await supabase
     .from('simulation_match_snapshots')
-    .select('match_id, home_team, away_team, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url, home_score, away_score, status')
+    .select('*')
     .eq('quiniela_id', quinielaId)
 
   if (snapshotRowsError?.code === '42P01') {
@@ -41,6 +41,8 @@ const restoreMatchesFromSnapshot = async (
     away_team_logo_url: item.away_team_logo_url ? String(item.away_team_logo_url) : null,
     home_score: Number.isInteger(Number(item.home_score)) ? Number(item.home_score) : null,
     away_score: Number.isInteger(Number(item.away_score)) ? Number(item.away_score) : null,
+    home_penalty_score: Number.isInteger(Number(item.home_penalty_score)) ? Number(item.home_penalty_score) : null,
+    away_penalty_score: Number.isInteger(Number(item.away_penalty_score)) ? Number(item.away_penalty_score) : null,
     status: String(item.status || 'pending'),
   }))
 
@@ -143,6 +145,8 @@ export default defineEventHandler(async (event) => {
           .update({
             home_score: null,
             away_score: null,
+            home_penalty_score: null,
+            away_penalty_score: null,
             status: 'pending',
           })
           .in('id', resetIds)

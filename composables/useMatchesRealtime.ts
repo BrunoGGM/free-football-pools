@@ -9,6 +9,8 @@ export interface MatchItem {
   away_team_logo_url: string | null
   home_score: number | null
   away_score: number | null
+  home_penalty_score: number | null
+  away_penalty_score: number | null
   status: 'pending' | 'in_progress' | 'finished'
   match_time: string
   source_time: string | null
@@ -123,7 +125,7 @@ export function useMatchesRealtime(stageFilter: string[] = []) {
 
     let query = client
       .from('matches')
-      .select('id, api_fixture_id, home_team, away_team, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url, home_score, away_score, status, match_time, source_time, source_timezone, venue, stage')
+      .select('*')
       .order('match_time', { ascending: true })
 
     if (stageFilter.length > 0) {

@@ -134,24 +134,50 @@ const qualifiedTeamLabel = computed(() => {
     return null;
   }
 
-  if (props.match.home_score === props.match.away_score) {
-    return "Sin clasificado (empate)";
+  const regularTie = props.match.home_score === props.match.away_score;
+
+  let winner = "";
+  let winnerByPenalties = false;
+
+  if (!regularTie) {
+    winner =
+      props.match.home_score > props.match.away_score
+        ? props.match.home_team
+        : props.match.away_team;
+  } else {
+    const homePenalties = props.match.home_penalty_score;
+    const awayPenalties = props.match.away_penalty_score;
+
+    if (homePenalties === null || awayPenalties === null) {
+      return "Sin clasificado (empate)";
+    }
+
+    if (homePenalties === awayPenalties) {
+      return "Sin clasificado (penales empatados)";
+    }
+
+    winner =
+      homePenalties > awayPenalties
+        ? props.match.home_team
+        : props.match.away_team;
+    winnerByPenalties = true;
   }
 
-  const winner =
-    props.match.home_score > props.match.away_score
-      ? props.match.home_team
-      : props.match.away_team;
-
   if (props.match.stage === "final") {
-    return `Campeon: ${winner}`;
+    return winnerByPenalties
+      ? `Campeon: ${winner} (penales)`
+      : `Campeon: ${winner}`;
   }
 
   if (props.match.stage === "third_place") {
-    return `Tercer lugar: ${winner}`;
+    return winnerByPenalties
+      ? `Tercer lugar: ${winner} (penales)`
+      : `Tercer lugar: ${winner}`;
   }
 
-  return `Clasifica: ${winner}`;
+  return winnerByPenalties
+    ? `Clasifica: ${winner} (penales)`
+    : `Clasifica: ${winner}`;
 });
 
 const isMissingQuinielaColumnError = (error: any) => {

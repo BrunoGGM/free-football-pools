@@ -104,11 +104,13 @@ export type Database = {
       matches: {
         Row: {
           api_fixture_id: number
+          away_penalty_score: number | null
           away_score: number | null
           away_team: string
           away_team_code: string | null
           away_team_logo_url: string | null
           created_at: string
+          home_penalty_score: number | null
           home_score: number | null
           home_team: string
           home_team_code: string | null
@@ -124,11 +126,13 @@ export type Database = {
         }
         Insert: {
           api_fixture_id: number
+          away_penalty_score?: number | null
           away_score?: number | null
           away_team: string
           away_team_code?: string | null
           away_team_logo_url?: string | null
           created_at?: string
+          home_penalty_score?: number | null
           home_score?: number | null
           home_team: string
           home_team_code?: string | null
@@ -144,11 +148,13 @@ export type Database = {
         }
         Update: {
           api_fixture_id?: number
+          away_penalty_score?: number | null
           away_score?: number | null
           away_team?: string
           away_team_code?: string | null
           away_team_logo_url?: string | null
           created_at?: string
+          home_penalty_score?: number | null
           home_score?: number | null
           home_team?: string
           home_team_code?: string | null
@@ -589,11 +595,13 @@ export type Database = {
       }
       simulation_match_snapshots: {
         Row: {
+          away_penalty_score: number | null
           away_score: number | null
           away_team: string
           away_team_code: string | null
           away_team_logo_url: string | null
           created_at: string
+          home_penalty_score: number | null
           home_score: number | null
           home_team: string
           home_team_code: string | null
@@ -603,11 +611,13 @@ export type Database = {
           status: Database["public"]["Enums"]["match_status"]
         }
         Insert: {
+          away_penalty_score?: number | null
           away_score?: number | null
           away_team: string
           away_team_code?: string | null
           away_team_logo_url?: string | null
           created_at?: string
+          home_penalty_score?: number | null
           home_score?: number | null
           home_team: string
           home_team_code?: string | null
@@ -617,11 +627,13 @@ export type Database = {
           status: Database["public"]["Enums"]["match_status"]
         }
         Update: {
+          away_penalty_score?: number | null
           away_score?: number | null
           away_team?: string
           away_team_code?: string | null
           away_team_logo_url?: string | null
           created_at?: string
+          home_penalty_score?: number | null
           home_score?: number | null
           home_team?: string
           home_team_code?: string | null

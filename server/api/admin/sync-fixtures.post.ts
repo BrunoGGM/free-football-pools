@@ -32,6 +32,12 @@ type ApiFootballFixture = {
     home?: number | null
     away?: number | null
   }
+  score?: {
+    penalty?: {
+      home?: number | null
+      away?: number | null
+    }
+  }
 }
 
 type SyncBody = {
@@ -155,6 +161,8 @@ export default defineEventHandler(async (event) => {
     away_team_logo_url: string | null
     home_score: number | null
     away_score: number | null
+    home_penalty_score: number | null
+    away_penalty_score: number | null
     status: 'pending' | 'in_progress' | 'finished'
     match_time: string
     stage: string
@@ -205,6 +213,8 @@ export default defineEventHandler(async (event) => {
       away_team_logo_url: awayTeamLogo,
       home_score: fixture.goals?.home ?? null,
       away_score: fixture.goals?.away ?? null,
+      home_penalty_score: fixture.score?.penalty?.home ?? null,
+      away_penalty_score: fixture.score?.penalty?.away ?? null,
       status: normalizeApiFootballStatus(fixture.fixture?.status?.short),
       match_time: matchTime,
       stage,
@@ -258,7 +268,17 @@ export default defineEventHandler(async (event) => {
       .from('matches')
       .upsert(rowsToUpsert, { onConflict: 'stage,match_time,home_team,away_team' })
 
-    if (upsertError) {
+    if (upsertError?.code === '42703') {
+      const legacyRows = rowsToUpsert.map(({ home_penalty_score, away_penalty_score, ...row }) => row)
+
+      const { error: legacyUpsertError } = await supabase
+        .from('matches')
+        .upsert(legacyRows, { onConflict: 'stage,match_time,home_team,away_team' })
+
+      if (legacyUpsertError) {
+        throw createError({ statusCode: 500, statusMessage: legacyUpsertError.message })
+      }
+    } else if (upsertError) {
       throw createError({ statusCode: 500, statusMessage: upsertError.message })
     }
   }

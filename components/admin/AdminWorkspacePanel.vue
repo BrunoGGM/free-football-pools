@@ -180,6 +180,8 @@ const latestMatches = ref<
     away_team: string;
     home_score: number | null;
     away_score: number | null;
+    home_penalty_score: number | null;
+    away_penalty_score: number | null;
     status: string;
     updated_at: string;
   }[]
@@ -196,6 +198,8 @@ const matchScoreDraftById = ref<
     {
       home_score: string;
       away_score: string;
+      home_penalty_score: string;
+      away_penalty_score: string;
       status: MatchStatus;
     }
   >
@@ -889,9 +893,7 @@ const loadIngestionLogs = async () => {
 
   const { data, error } = await client
     .from("matches")
-    .select(
-      "id, stage, match_time, home_team, away_team, home_score, away_score, status, updated_at",
-    )
+    .select("*")
     .order("match_time", { ascending: true });
 
   loadingLogs.value = false;
@@ -920,6 +922,14 @@ const loadIngestionLogs = async () => {
         item.away_score === null || item.away_score === undefined
           ? null
           : Number(item.away_score),
+      home_penalty_score:
+        item.home_penalty_score === null || item.home_penalty_score === undefined
+          ? null
+          : Number(item.home_penalty_score),
+      away_penalty_score:
+        item.away_penalty_score === null || item.away_penalty_score === undefined
+          ? null
+          : Number(item.away_penalty_score),
       status: item.status as string,
       updated_at: new Date(item.updated_at as string).toLocaleString("es-MX", {
         dateStyle: "short",
@@ -941,6 +951,16 @@ const loadIngestionLogs = async () => {
       away_score:
         previous?.away_score ??
         (item.away_score === null ? "" : String(item.away_score)),
+      home_penalty_score:
+        previous?.home_penalty_score ??
+        (item.home_penalty_score === null
+          ? ""
+          : String(item.home_penalty_score)),
+      away_penalty_score:
+        previous?.away_penalty_score ??
+        (item.away_penalty_score === null
+          ? ""
+          : String(item.away_penalty_score)),
       status: previous?.status ?? ((item.status as MatchStatus) || "pending"),
     };
   }
@@ -960,14 +980,27 @@ watch(matchesTotalPages, (value) => {
 
 const updateMatchScoreDraft = (payload: {
   id: string;
-  field: "home_score" | "away_score" | "status";
+  field:
+    | "home_score"
+    | "away_score"
+    | "home_penalty_score"
+    | "away_penalty_score"
+    | "status";
   value: string;
 }) => {
   const current =
     matchScoreDraftById.value[payload.id] ||
-    ({ home_score: "", away_score: "", status: "pending" } as {
+    ({
+      home_score: "",
+      away_score: "",
+      home_penalty_score: "",
+      away_penalty_score: "",
+      status: "pending",
+    } as {
       home_score: string;
       away_score: string;
+      home_penalty_score: string;
+      away_penalty_score: string;
       status: MatchStatus;
     });
 
@@ -990,6 +1023,7 @@ const updateMatchScoreDraft = (payload: {
 
 const saveMatchScore = async (matchId: string) => {
   const draft = matchScoreDraftById.value[matchId];
+  const targetMatch = latestMatches.value.find((item) => item.id === matchId);
 
   matchScoreMessage.value = null;
   matchScoreError.value = null;
@@ -998,6 +1032,20 @@ const saveMatchScore = async (matchId: string) => {
     matchScoreError.value = "No se encontro borrador para el partido.";
     return;
   }
+
+  if (!targetMatch) {
+    matchScoreError.value = "No se encontro partido para validar el borrador.";
+    return;
+  }
+
+  const isKnockoutStage = [
+    "round_32",
+    "round_16",
+    "quarter_final",
+    "semi_final",
+    "third_place",
+    "final",
+  ].includes(targetMatch.stage);
 
   const parseDraftScore = (raw: string): number | null => {
     const value = raw.trim();
@@ -1017,10 +1065,14 @@ const saveMatchScore = async (matchId: string) => {
 
   let homeScore: number | null;
   let awayScore: number | null;
+  let homePenaltyScore: number | null;
+  let awayPenaltyScore: number | null;
 
   try {
     homeScore = parseDraftScore(draft.home_score);
     awayScore = parseDraftScore(draft.away_score);
+    homePenaltyScore = parseDraftScore(draft.home_penalty_score);
+    awayPenaltyScore = parseDraftScore(draft.away_penalty_score);
   } catch (error: any) {
     matchScoreError.value = error?.message || "Marcador invalido";
     return;
@@ -1029,6 +1081,12 @@ const saveMatchScore = async (matchId: string) => {
   if ((homeScore === null) !== (awayScore === null)) {
     matchScoreError.value =
       "Debes capturar ambos marcadores o dejar ambos vacios.";
+    return;
+  }
+
+  if ((homePenaltyScore === null) !== (awayPenaltyScore === null)) {
+    matchScoreError.value =
+      "Debes capturar ambos penales o dejar ambos vacios.";
     return;
   }
 
@@ -1041,16 +1099,41 @@ const saveMatchScore = async (matchId: string) => {
     return;
   }
 
+  if (draft.status === "finished" && isKnockoutStage && homeScore === awayScore) {
+    if (homePenaltyScore === null || awayPenaltyScore === null) {
+      matchScoreError.value =
+        "En eliminatoria, si hay empate debes capturar penales.";
+      return;
+    }
+
+    if (homePenaltyScore === awayPenaltyScore) {
+      matchScoreError.value = "En penales no puede haber empate.";
+      return;
+    }
+  }
+
+  if (draft.status !== "finished" || homeScore !== awayScore || !isKnockoutStage) {
+    homePenaltyScore = null;
+    awayPenaltyScore = null;
+  }
+
   savingMatchScoreId.value = matchId;
 
   try {
+    const payload: Record<string, unknown> = {
+      home_score: homeScore,
+      away_score: awayScore,
+      status: draft.status,
+    };
+
+    if (homePenaltyScore !== null && awayPenaltyScore !== null) {
+      payload.home_penalty_score = homePenaltyScore;
+      payload.away_penalty_score = awayPenaltyScore;
+    }
+
     await adminFetch(`/api/admin/matches/${matchId}/score`, {
       method: "PATCH",
-      body: {
-        home_score: homeScore,
-        away_score: awayScore,
-        status: draft.status,
-      },
+      body: payload,
     });
 
     matchScoreMessage.value = "Marcador actualizado correctamente.";

@@ -28,6 +28,8 @@ defineProps<{
     away_team: string;
     home_score: number | null;
     away_score: number | null;
+    home_penalty_score: number | null;
+    away_penalty_score: number | null;
     status: string;
     updated_at: string;
   }>;
@@ -42,6 +44,8 @@ defineProps<{
     {
       home_score: string;
       away_score: string;
+      home_penalty_score: string;
+      away_penalty_score: string;
       status: "pending" | "in_progress" | "finished";
     }
   >;
@@ -58,7 +62,12 @@ const emit = defineEmits<{
   updateMatchScoreDraft: [
     payload: {
       id: string;
-      field: "home_score" | "away_score" | "status";
+      field:
+        | "home_score"
+        | "away_score"
+        | "home_penalty_score"
+        | "away_penalty_score"
+        | "status";
       value: string;
     },
   ];
@@ -252,44 +261,99 @@ const emit = defineEmits<{
                 {{ entry.match_time }}
               </td>
               <td class="px-4 py-3">
-                <div class="flex items-center gap-2">
-                  <input
-                    :value="
-                      matchScoreDraftById[entry.id]?.home_score ??
-                      (entry.home_score === null
-                        ? ''
-                        : String(entry.home_score))
+                <div class="flex flex-col gap-1">
+                  <div class="flex items-center gap-2">
+                    <input
+                      :value="
+                        matchScoreDraftById[entry.id]?.home_score ??
+                        (entry.home_score === null
+                          ? ''
+                          : String(entry.home_score))
+                      "
+                      type="number"
+                      min="0"
+                      class="input input-bordered input-xs w-16"
+                      @input="
+                        emit('updateMatchScoreDraft', {
+                          id: entry.id,
+                          field: 'home_score',
+                          value: ($event.target as HTMLInputElement).value,
+                        })
+                      "
+                    />
+                    <span class="text-base-content/60 text-xs">-</span>
+                    <input
+                      :value="
+                        matchScoreDraftById[entry.id]?.away_score ??
+                        (entry.away_score === null
+                          ? ''
+                          : String(entry.away_score))
+                      "
+                      type="number"
+                      min="0"
+                      class="input input-bordered input-xs w-16"
+                      @input="
+                        emit('updateMatchScoreDraft', {
+                          id: entry.id,
+                          field: 'away_score',
+                          value: ($event.target as HTMLInputElement).value,
+                        })
+                      "
+                    />
+                  </div>
+
+                  <div
+                    v-if="
+                      [
+                        'round_32',
+                        'round_16',
+                        'quarter_final',
+                        'semi_final',
+                        'third_place',
+                        'final',
+                      ].includes(entry.stage)
                     "
-                    type="number"
-                    min="0"
-                    class="input input-bordered input-xs w-16"
-                    @input="
-                      emit('updateMatchScoreDraft', {
-                        id: entry.id,
-                        field: 'home_score',
-                        value: ($event.target as HTMLInputElement).value,
-                      })
-                    "
-                  />
-                  <span class="text-base-content/60 text-xs">-</span>
-                  <input
-                    :value="
-                      matchScoreDraftById[entry.id]?.away_score ??
-                      (entry.away_score === null
-                        ? ''
-                        : String(entry.away_score))
-                    "
-                    type="number"
-                    min="0"
-                    class="input input-bordered input-xs w-16"
-                    @input="
-                      emit('updateMatchScoreDraft', {
-                        id: entry.id,
-                        field: 'away_score',
-                        value: ($event.target as HTMLInputElement).value,
-                      })
-                    "
-                  />
+                    class="flex items-center gap-2"
+                  >
+                    <span class="text-base-content/60 w-8 text-[10px]">PEN</span>
+                    <input
+                      :value="
+                        matchScoreDraftById[entry.id]?.home_penalty_score ??
+                        (entry.home_penalty_score === null
+                          ? ''
+                          : String(entry.home_penalty_score))
+                      "
+                      type="number"
+                      min="0"
+                      class="input input-bordered input-xs w-16"
+                      @input="
+                        emit('updateMatchScoreDraft', {
+                          id: entry.id,
+                          field: 'home_penalty_score',
+                          value: ($event.target as HTMLInputElement).value,
+                        })
+                      "
+                    />
+                    <span class="text-base-content/60 text-xs">-</span>
+                    <input
+                      :value="
+                        matchScoreDraftById[entry.id]?.away_penalty_score ??
+                        (entry.away_penalty_score === null
+                          ? ''
+                          : String(entry.away_penalty_score))
+                      "
+                      type="number"
+                      min="0"
+                      class="input input-bordered input-xs w-16"
+                      @input="
+                        emit('updateMatchScoreDraft', {
+                          id: entry.id,
+                          field: 'away_penalty_score',
+                          value: ($event.target as HTMLInputElement).value,
+                        })
+                      "
+                    />
+                  </div>
                 </div>
               </td>
               <td class="px-4 py-3">
