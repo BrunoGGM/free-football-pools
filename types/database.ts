@@ -106,12 +106,15 @@ export type Database = {
           api_fixture_id: number
           away_penalty_score: number | null
           away_score: number | null
+          away_seed_token: string | null
           away_team: string
           away_team_code: string | null
           away_team_logo_url: string | null
+          bracket_match_no: number | null
           created_at: string
           home_penalty_score: number | null
           home_score: number | null
+          home_seed_token: string | null
           home_team: string
           home_team_code: string | null
           home_team_logo_url: string | null
@@ -128,12 +131,15 @@ export type Database = {
           api_fixture_id: number
           away_penalty_score?: number | null
           away_score?: number | null
+          away_seed_token?: string | null
           away_team: string
           away_team_code?: string | null
           away_team_logo_url?: string | null
+          bracket_match_no?: number | null
           created_at?: string
           home_penalty_score?: number | null
           home_score?: number | null
+          home_seed_token?: string | null
           home_team: string
           home_team_code?: string | null
           home_team_logo_url?: string | null
@@ -150,12 +156,15 @@ export type Database = {
           api_fixture_id?: number
           away_penalty_score?: number | null
           away_score?: number | null
+          away_seed_token?: string | null
           away_team?: string
           away_team_code?: string | null
           away_team_logo_url?: string | null
+          bracket_match_no?: number | null
           created_at?: string
           home_penalty_score?: number | null
           home_score?: number | null
+          home_seed_token?: string | null
           home_team?: string
           home_team_code?: string | null
           home_team_logo_url?: string | null
@@ -260,6 +269,60 @@ export type Database = {
           username?: string
         }
         Relationships: []
+      }
+      quiniela_group_overrides: {
+        Row: {
+          created_at: string
+          group_code: string
+          id: string
+          position: number
+          quiniela_id: string
+          team_code: string | null
+          team_logo_url: string | null
+          team_name: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          group_code: string
+          id?: string
+          position: number
+          quiniela_id: string
+          team_code?: string | null
+          team_logo_url?: string | null
+          team_name: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          group_code?: string
+          id?: string
+          position?: number
+          quiniela_id?: string
+          team_code?: string | null
+          team_logo_url?: string | null
+          team_name?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiniela_group_overrides_quiniela_id_fkey"
+            columns: ["quiniela_id"]
+            isOneToOne: false
+            referencedRelation: "quinielas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiniela_group_overrides_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       quiniela_member_manual_points: {
         Row: {
@@ -597,12 +660,15 @@ export type Database = {
         Row: {
           away_penalty_score: number | null
           away_score: number | null
+          away_seed_token: string | null
           away_team: string
           away_team_code: string | null
           away_team_logo_url: string | null
+          bracket_match_no: number | null
           created_at: string
           home_penalty_score: number | null
           home_score: number | null
+          home_seed_token: string | null
           home_team: string
           home_team_code: string | null
           home_team_logo_url: string | null
@@ -613,12 +679,15 @@ export type Database = {
         Insert: {
           away_penalty_score?: number | null
           away_score?: number | null
+          away_seed_token?: string | null
           away_team: string
           away_team_code?: string | null
           away_team_logo_url?: string | null
+          bracket_match_no?: number | null
           created_at?: string
           home_penalty_score?: number | null
           home_score?: number | null
+          home_seed_token?: string | null
           home_team: string
           home_team_code?: string | null
           home_team_logo_url?: string | null
@@ -629,12 +698,15 @@ export type Database = {
         Update: {
           away_penalty_score?: number | null
           away_score?: number | null
+          away_seed_token?: string | null
           away_team?: string
           away_team_code?: string | null
           away_team_logo_url?: string | null
+          bracket_match_no?: number | null
           created_at?: string
           home_penalty_score?: number | null
           home_score?: number | null
+          home_seed_token?: string | null
           home_team?: string
           home_team_code?: string | null
           home_team_logo_url?: string | null
