@@ -152,7 +152,9 @@ const mostLosingTeam = ref<{ name: string; value: number } | null>(null);
 const mostScoringTeam = ref<{ name: string; value: number } | null>(null);
 const allPredictions = ref<NormalizedPredictionRow[]>([]);
 const unresolvedPredictionsByUser = ref<Record<string, number>>({});
-const exactScoreMaxPoints = ref(3);
+const exactScoreBonusPoints = ref(3);
+const correctOutcomePoints = ref(1);
+const exactScoreMaxPoints = ref(4);
 
 const projectedTop1Chance = ref<number | null>(null);
 const projectedTop3Chance = ref<number | null>(null);
@@ -206,7 +208,7 @@ const statsKpis = computed(() => {
     {
       label: "Exactos",
       value: `${exactRate}%`,
-      hint: `${exactCount} picks exactos (3 pts)`,
+      hint: `${exactCount} picks exactos (${exactScoreMaxPoints.value} pts)`,
       tone: "success" as const,
     },
     {
@@ -365,6 +367,20 @@ const hasDistributionData = computed(() => {
   return distributionValues.value.some((value) => value > 0);
 });
 
+const distributionSchemeText = computed(
+  () => `${exactScoreMaxPoints.value}/${correctOutcomePoints.value}/0`,
+);
+
+const distributionLabels = computed(() => [
+  `Exacto (${exactScoreMaxPoints.value})`,
+  `Resultado (${correctOutcomePoints.value})`,
+  "Sin acierto (0)",
+]);
+
+const distributionTitle = computed(
+  () => `Distribucion de aciertos (${distributionSchemeText.value})`,
+);
+
 const clearStats = () => {
   rankingRows.value = [];
   leaderboardLabels.value = [];
@@ -391,7 +407,9 @@ const clearStats = () => {
   mostScoringTeam.value = null;
   allPredictions.value = [];
   unresolvedPredictionsByUser.value = {};
-  exactScoreMaxPoints.value = 3;
+  exactScoreBonusPoints.value = 3;
+  correctOutcomePoints.value = 1;
+  exactScoreMaxPoints.value = 4;
   projectedTop1Chance.value = null;
   projectedTop3Chance.value = null;
   projectionRuns.value = 0;
@@ -665,19 +683,19 @@ const loadPredictionDerivedStats = async () => {
       match_time: item.match?.match_time || item.created_at,
     }));
 
-  let exact3 = 0;
-  let outcome1 = 0;
+  let exactHits = 0;
+  let outcomeHits = 0;
   let misses0 = 0;
   let others = 0;
 
   for (const row of finishedRows) {
-    if (row.points_earned === 3) {
-      exact3 += 1;
+    if (row.points_earned === exactScoreMaxPoints.value) {
+      exactHits += 1;
       continue;
     }
 
-    if (row.points_earned === 1) {
-      outcome1 += 1;
+    if (row.points_earned === correctOutcomePoints.value) {
+      outcomeHits += 1;
       continue;
     }
 
@@ -689,12 +707,12 @@ const loadPredictionDerivedStats = async () => {
     others += 1;
   }
 
-  distributionValues.value = [exact3, outcome1, misses0];
+  distributionValues.value = [exactHits, outcomeHits, misses0];
   distributionOthers.value = others;
 
   if (others > 0) {
     appendCompatibilityMessage(
-      "Se detectaron puntuaciones fuera de 3/1/0 por reglas personalizadas; el donut principal muestra solo esas tres categorias.",
+      `Se detectaron puntuaciones fuera de ${distributionSchemeText.value} por reglas personalizadas; el donut principal muestra solo esas tres categorias.`,
     );
   }
 
@@ -878,13 +896,15 @@ const loadAchievementStats = async () => {
 
 const loadRuleMaxPoints = async () => {
   if (!activeQuinielaId.value) {
-    exactScoreMaxPoints.value = 3;
+    exactScoreBonusPoints.value = 3;
+    correctOutcomePoints.value = 1;
+    exactScoreMaxPoints.value = 4;
     return;
   }
 
   const rulesResult = await client
     .from("quiniela_rules")
-    .select("exact_score_points")
+    .select("exact_score_points, correct_outcome_points")
     .eq("quiniela_id", activeQuinielaId.value)
     .maybeSingle();
 
@@ -895,9 +915,11 @@ const loadRuleMaxPoints = async () => {
       "exact_score_points",
     ])
   ) {
-    exactScoreMaxPoints.value = 3;
+    exactScoreBonusPoints.value = 3;
+    correctOutcomePoints.value = 1;
+    exactScoreMaxPoints.value = 4;
     appendCompatibilityMessage(
-      "Reglas configurables no disponibles aun. Se asume maximo de 3 puntos por marcador exacto.",
+      "Reglas configurables no disponibles aun. Se asume +1 por resultado y +3 por exacto (4 pts total).",
     );
     return;
   }
@@ -906,7 +928,14 @@ const loadRuleMaxPoints = async () => {
     throw rulesResult.error;
   }
 
-  exactScoreMaxPoints.value = Number(rulesResult.data?.exact_score_points ?? 3);
+  exactScoreBonusPoints.value = Number(
+    rulesResult.data?.exact_score_points ?? 3,
+  );
+  correctOutcomePoints.value = Number(
+    rulesResult.data?.correct_outcome_points ?? 1,
+  );
+  exactScoreMaxPoints.value =
+    exactScoreBonusPoints.value + correctOutcomePoints.value;
 };
 
 const loadProjectionStats = () => {
@@ -1914,8 +1943,8 @@ watch(
         <ClientOnly>
           <StatsDoughnutChart
             v-if="hasDistributionData"
-            title="Distribucion de aciertos (3/1/0)"
-            :labels="['Exacto (3)', 'Resultado (1)', 'Sin acierto (0)']"
+            :title="distributionTitle"
+            :labels="distributionLabels"
             :values="distributionValues"
             :colors="['#22c55e', '#0ea5e9', '#ef4444']"
           />
@@ -1926,7 +1955,7 @@ watch(
             <h3
               class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]"
             >
-              Distribucion de aciertos (3/1/0)
+              {{ distributionTitle }}
             </h3>
             <p class="text-base-content/70 mt-3 text-sm">
               No hay resultados finalizados para calcular distribucion.
@@ -1976,7 +2005,7 @@ watch(
           class="mt-3 text-xs text-base-content/70"
         >
           Nota: hay {{ distributionOthers }} predicciones con puntajes
-          personalizados fuera del esquema 3/1/0.
+          personalizados fuera del esquema {{ distributionSchemeText }}.
         </p>
       </article>
     </template>

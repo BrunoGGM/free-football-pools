@@ -164,6 +164,25 @@ const exactPredictionsCount = computed(
     }).length,
 );
 
+const exactPointsEarnedTotal = computed(() =>
+  predictions.value.reduce((total, row) => {
+    if (
+      !row.hasPrediction ||
+      row.home_score === null ||
+      row.away_score === null ||
+      row.match?.status !== "finished" ||
+      row.match.home_score === null ||
+      row.match.away_score === null ||
+      row.home_score !== row.match.home_score ||
+      row.away_score !== row.match.away_score
+    ) {
+      return total;
+    }
+
+    return total + Number(row.points_earned ?? 0);
+  }, 0),
+);
+
 const pendingResolutionCount = computed(
   () =>
     predictions.value.filter(
@@ -481,7 +500,7 @@ const outcomeLabel = (row: PredictionRow) => {
     row.away_score === row.match.away_score;
 
   if (exactMatch) {
-    return "Marcador exacto (+3)";
+    return `Marcador exacto (+${Number(row.points_earned ?? 4)})`;
   }
 
   const predictedOutcome = resolveOutcome(row.home_score, row.away_score);
@@ -983,7 +1002,21 @@ const loadMyQuinielaView = async () => {
   }
 
   const nextExactHits = predictions.value.filter((row) => {
-    return row.match?.status === "finished" && Number(row.points_earned) >= 3;
+    if (
+      !row.hasPrediction ||
+      row.home_score === null ||
+      row.away_score === null ||
+      row.match?.status !== "finished" ||
+      row.match.home_score === null ||
+      row.match.away_score === null
+    ) {
+      return false;
+    }
+
+    return (
+      row.home_score === row.match.home_score &&
+      row.away_score === row.match.away_score
+    );
   }).length;
 
   if (!exactHitsInitialized.value) {
@@ -1042,7 +1075,7 @@ onBeforeUnmount(() => {
       :visible="showExactHitCelebration"
       class="mt-1"
       :title="exactHitDelta > 1 ? 'Exactos encadenados' : 'Marcador exacto'"
-      :subtitle="`+${exactHitDelta * 3} pts en exactos confirmados`"
+      :subtitle="`+${exactHitDelta * 4} pts en exactos confirmados`"
     />
 
     <article v-if="!activeQuinielaId" class="alert alert-warning rounded-2xl">
@@ -1203,7 +1236,7 @@ onBeforeUnmount(() => {
             {{ exactPredictionsCount }}
           </p>
           <p class="text-base-content/70 mt-1 text-xs">
-            {{ exactPredictionsCount * 3 }} pts ganados por exactos
+            {{ exactPointsEarnedTotal }} pts ganados por exactos
           </p>
         </div>
       </div>
