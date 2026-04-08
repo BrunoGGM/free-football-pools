@@ -62,6 +62,17 @@ interface FinishedMatchRow {
   away_score: number | null;
 }
 
+interface DashboardMatchRow {
+  id: string;
+  status: "pending" | "in_progress" | "finished";
+  stage: string;
+  match_time: string;
+  home_team: string;
+  away_team: string;
+  home_score: number | null;
+  away_score: number | null;
+}
+
 interface NormalizedPredictionRow {
   user_id: string;
   home_score: number;
@@ -134,8 +145,6 @@ const myCurrentStreak = ref(0);
 const globalBestStreak = ref(0);
 const totalAchievements = ref(0);
 const achievementMembers = ref(0);
-const completedMissions = ref(0);
-const claimedMissions = ref(0);
 const tournamentGoalsTotal = ref(0);
 const tournamentDrawsTotal = ref(0);
 const mostWinningTeam = ref<{ name: string; value: number } | null>(null);
@@ -162,6 +171,8 @@ const rivalDecisiveMatches = ref<RivalDecisiveItem[]>([]);
 
 const stageHeatmap = ref<StageHeatmapItem[]>([]);
 const teamHeatmap = ref<TeamHeatmapItem[]>([]);
+const liveMatches = ref<DashboardMatchRow[]>([]);
+const upcomingMatches = ref<DashboardMatchRow[]>([]);
 
 const statsKpis = computed(() => {
   const exactCount = distributionValues.value[0] ?? 0;
@@ -199,6 +210,21 @@ const statsKpis = computed(() => {
       tone: "success" as const,
     },
     {
+      label: "En juego",
+      value: String(liveMatches.value.length),
+      hint: "Partidos actualmente en progreso",
+      tone:
+        liveMatches.value.length > 0
+          ? ("warning" as const)
+          : ("neutral" as const),
+    },
+    {
+      label: "Proximos",
+      value: String(upcomingMatches.value.length),
+      hint: "Partidos pendientes por disputarse",
+      tone: "info" as const,
+    },
+    {
       label: "Racha actual",
       value: String(myCurrentStreak.value),
       hint: "Tu seguidilla vigente",
@@ -218,12 +244,6 @@ const statsKpis = computed(() => {
       value: String(totalAchievements.value),
       hint: `${achievementMembers.value} jugador(es) con logros`,
       tone: "info" as const,
-    },
-    {
-      label: "Misiones completadas",
-      value: String(completedMissions.value),
-      hint: `${claimedMissions.value} ya reclamadas`,
-      tone: "neutral" as const,
     },
   ];
 });
@@ -364,8 +384,6 @@ const clearStats = () => {
   globalBestStreak.value = 0;
   totalAchievements.value = 0;
   achievementMembers.value = 0;
-  completedMissions.value = 0;
-  claimedMissions.value = 0;
   tournamentGoalsTotal.value = 0;
   tournamentDrawsTotal.value = 0;
   mostWinningTeam.value = null;
@@ -383,6 +401,8 @@ const clearStats = () => {
   rivalDecisiveMatches.value = [];
   stageHeatmap.value = [];
   teamHeatmap.value = [];
+  liveMatches.value = [];
+  upcomingMatches.value = [];
 };
 
 const pickTopTeam = (source: Map<string, number>) => {
@@ -432,6 +452,13 @@ const formatDateLabel = (isoDate: string) => {
   return date.toLocaleDateString("es-MX", {
     day: "2-digit",
     month: "short",
+  });
+};
+
+const formatKickoff = (value: string) => {
+  return new Date(value).toLocaleString("es-MX", {
+    dateStyle: "short",
+    timeStyle: "short",
   });
 };
 
@@ -818,12 +845,10 @@ const loadStreakStats = async () => {
   }, 0);
 };
 
-const loadAchievementAndMissionStats = async () => {
+const loadAchievementStats = async () => {
   if (!activeQuinielaId.value) {
     totalAchievements.value = 0;
     achievementMembers.value = 0;
-    completedMissions.value = 0;
-    claimedMissions.value = 0;
     return;
   }
 
@@ -849,38 +874,6 @@ const loadAchievementAndMissionStats = async () => {
     totalAchievements.value = rows.length;
     achievementMembers.value = new Set(rows.map((row) => row.user_id)).size;
   }
-
-  const missionsResult = await client
-    .from("user_mission_progress")
-    .select("is_completed, is_claimed")
-    .eq("quiniela_id", activeQuinielaId.value);
-
-  if (
-    missionsResult.error &&
-    isMissingTableError(missionsResult.error, ["user_mission_progress"])
-  ) {
-    appendCompatibilityMessage(
-      "Misiones no disponibles aun. Aplica migracion 0018 para habilitarlas.",
-    );
-    completedMissions.value = 0;
-    claimedMissions.value = 0;
-    return;
-  }
-
-  if (missionsResult.error) {
-    throw missionsResult.error;
-  }
-
-  const rows =
-    (missionsResult.data as Array<{
-      is_completed: boolean | null;
-      is_claimed: boolean | null;
-    }> | null) ?? [];
-
-  completedMissions.value = rows.filter((row) =>
-    Boolean(row.is_completed),
-  ).length;
-  claimedMissions.value = rows.filter((row) => Boolean(row.is_claimed)).length;
 };
 
 const loadRuleMaxPoints = async () => {
@@ -1307,6 +1300,63 @@ const loadTournamentInsights = async () => {
   mostScoringTeam.value = pickTopTeam(goalsByTeam);
 };
 
+const loadMatchPulse = async () => {
+  const [liveResult, upcomingResult] = await Promise.all([
+    client
+      .from("matches")
+      .select(
+        "id, status, stage, match_time, home_team, away_team, home_score, away_score",
+      )
+      .eq("status", "in_progress")
+      .order("match_time", { ascending: true })
+      .limit(6),
+    client
+      .from("matches")
+      .select(
+        "id, status, stage, match_time, home_team, away_team, home_score, away_score",
+      )
+      .eq("status", "pending")
+      .order("match_time", { ascending: true })
+      .limit(8),
+  ]);
+
+  if (liveResult.error) {
+    throw liveResult.error;
+  }
+
+  if (upcomingResult.error) {
+    throw upcomingResult.error;
+  }
+
+  liveMatches.value = (
+    (liveResult.data as DashboardMatchRow[] | null) ?? []
+  ).map((item) => ({
+    ...item,
+    home_score:
+      item.home_score === null || item.home_score === undefined
+        ? null
+        : Number(item.home_score),
+    away_score:
+      item.away_score === null || item.away_score === undefined
+        ? null
+        : Number(item.away_score),
+  }));
+
+  upcomingMatches.value = (
+    (upcomingResult.data as DashboardMatchRow[] | null) ?? []
+  ).map((item) => ({
+    ...item,
+    home_score:
+      item.home_score === null || item.home_score === undefined
+        ? null
+        : Number(item.home_score),
+    away_score:
+      item.away_score === null || item.away_score === undefined
+        ? null
+        : Number(item.away_score),
+  }));
+};
+
 const loadStats = async () => {
   if (!user.value || !activeQuinielaId.value) {
     clearStats();
@@ -1324,8 +1374,9 @@ const loadStats = async () => {
     const finishedRows = await loadPredictionDerivedStats();
     await loadWeeklyStats(finishedRows);
     await loadStreakStats();
-    await loadAchievementAndMissionStats();
+    await loadAchievementStats();
     await loadTournamentInsights();
+    await loadMatchPulse();
     loadProjectionStats();
     loadRivalComparison();
     loadHeatmaps();
@@ -1419,6 +1470,117 @@ watch(
       </article>
 
       <StatsKpiStrip :items="statsKpis" />
+
+      <div class="grid gap-4 xl:grid-cols-2">
+        <article class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
+          <h3
+            class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]"
+          >
+            Pulso de partidos
+          </h3>
+          <div class="mt-3 grid gap-3 lg:grid-cols-2">
+            <article
+              class="rounded-xl border border-base-300 bg-base-200/55 px-3 py-3"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-base-content text-xs font-semibold uppercase">
+                  Partidos en juego
+                </p>
+                <span class="badge badge-warning badge-sm">
+                  {{ liveMatches.length }}
+                </span>
+              </div>
+
+              <div
+                v-if="liveMatches.length"
+                class="mt-2 max-h-52 space-y-2 overflow-auto"
+              >
+                <div
+                  v-for="item in liveMatches"
+                  :key="`live-${item.id}`"
+                  class="rounded-lg border border-base-300 bg-base-100/70 px-2 py-2"
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <p class="text-base-content text-xs font-semibold">
+                      {{ item.home_team }} vs {{ item.away_team }}
+                    </p>
+                    <span class="badge badge-warning badge-xs">LIVE</span>
+                  </div>
+                  <p class="mt-1 text-xs font-semibold text-warning">
+                    {{ item.home_score ?? "-" }} - {{ item.away_score ?? "-" }}
+                  </p>
+                  <p class="text-base-content/70 text-[11px]">
+                    {{ stageLabel(item.stage) }} ·
+                    {{ formatKickoff(item.match_time) }}
+                  </p>
+                </div>
+              </div>
+              <p v-else class="text-base-content/70 mt-2 text-xs">
+                Ahora no hay partidos en curso.
+              </p>
+            </article>
+
+            <article
+              class="rounded-xl border border-base-300 bg-base-200/55 px-3 py-3"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-base-content text-xs font-semibold uppercase">
+                  Proximos partidos
+                </p>
+                <span class="badge badge-info badge-sm">
+                  {{ upcomingMatches.length }}
+                </span>
+              </div>
+
+              <div
+                v-if="upcomingMatches.length"
+                class="mt-2 max-h-52 space-y-2 overflow-auto"
+              >
+                <div
+                  v-for="item in upcomingMatches"
+                  :key="`upcoming-${item.id}`"
+                  class="rounded-lg border border-base-300 bg-base-100/70 px-2 py-2"
+                >
+                  <p class="text-base-content text-xs font-semibold">
+                    {{ item.home_team }} vs {{ item.away_team }}
+                  </p>
+                  <p class="text-base-content/70 mt-1 text-[11px]">
+                    {{ stageLabel(item.stage) }} ·
+                    {{ formatKickoff(item.match_time) }}
+                  </p>
+                </div>
+              </div>
+              <p v-else class="text-base-content/70 mt-2 text-xs">
+                No hay partidos pendientes por ahora.
+              </p>
+            </article>
+          </div>
+        </article>
+
+        <article class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
+          <h3
+            class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]"
+          >
+            Top 5 del ranking
+          </h3>
+          <div class="mt-3 space-y-2">
+            <div
+              v-for="row in topRankingRows.slice(0, 5)"
+              :key="`ranking-${row.user_id}`"
+              class="flex items-center justify-between rounded-xl border border-base-300 bg-base-200/55 px-3 py-2 text-sm"
+            >
+              <p class="font-semibold">#{{ row.rank }} {{ row.username }}</p>
+              <p class="text-warning font-bold">{{ row.total_points }} pts</p>
+            </div>
+            <p
+              v-if="topRankingRows.length === 0"
+              class="text-base-content/70 text-sm"
+            >
+              Sin ranking disponible.
+            </p>
+          </div>
+        </article>
+      </div>
 
       <article class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
         <h3
@@ -1658,88 +1820,6 @@ watch(
       <div class="grid gap-4 xl:grid-cols-2">
         <ClientOnly>
           <StatsLineChart
-            v-if="hasWeeklyData"
-            title="Rendimiento semanal"
-            :labels="weeklyLabels"
-            :datasets="[
-              {
-                label: 'Promedio semanal',
-                values: weeklyAverageValues,
-                color: '#22c55e',
-                fill: true,
-              },
-              {
-                label: 'Puntos totales',
-                values: weeklyTotalValues,
-                color: '#0ea5e9',
-              },
-            ]"
-          />
-          <article
-            v-else
-            class="rounded-2xl border border-base-300 bg-base-100/70 p-4"
-          >
-            <h3
-              class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]"
-            >
-              Rendimiento semanal
-            </h3>
-            <p class="text-base-content/70 mt-3 text-sm">
-              Aun no hay datos suficientes para esta grafica.
-            </p>
-          </article>
-        </ClientOnly>
-
-        <ClientOnly>
-          <StatsDoughnutChart
-            v-if="hasDistributionData"
-            title="Distribucion de aciertos (3/1/0)"
-            :labels="['Exacto (3)', 'Resultado (1)', 'Sin acierto (0)']"
-            :values="distributionValues"
-            :colors="['#22c55e', '#0ea5e9', '#ef4444']"
-          />
-          <article
-            v-else
-            class="rounded-2xl border border-base-300 bg-base-100/70 p-4"
-          >
-            <h3
-              class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]"
-            >
-              Distribucion de aciertos (3/1/0)
-            </h3>
-            <p class="text-base-content/70 mt-3 text-sm">
-              No hay resultados finalizados para calcular distribucion.
-            </p>
-          </article>
-        </ClientOnly>
-      </div>
-
-      <div class="grid gap-4 xl:grid-cols-2">
-        <ClientOnly>
-          <StatsBarChart
-            v-if="hasLeaderboardData"
-            title="Leaderboard de la quiniela"
-            :labels="leaderboardLabels"
-            :values="leaderboardValues"
-            color="#f59e0b"
-          />
-          <article
-            v-else
-            class="rounded-2xl border border-base-300 bg-base-100/70 p-4"
-          >
-            <h3
-              class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]"
-            >
-              Leaderboard de la quiniela
-            </h3>
-            <p class="text-base-content/70 mt-3 text-sm">
-              Sin datos de ranking por ahora.
-            </p>
-          </article>
-        </ClientOnly>
-
-        <ClientOnly>
-          <StatsLineChart
             v-if="hasEvolutionData"
             title="Evolucion de puntos (tu progreso)"
             :labels="evolutionLabels"
@@ -1771,89 +1851,134 @@ watch(
             </p>
           </article>
         </ClientOnly>
+
+        <ClientOnly>
+          <StatsLineChart
+            v-if="hasWeeklyData"
+            title="Rendimiento semanal"
+            :labels="weeklyLabels"
+            :datasets="[
+              {
+                label: 'Promedio semanal',
+                values: weeklyAverageValues,
+                color: '#22c55e',
+                fill: true,
+              },
+              {
+                label: 'Puntos totales',
+                values: weeklyTotalValues,
+                color: '#0ea5e9',
+              },
+            ]"
+          />
+          <article
+            v-else
+            class="rounded-2xl border border-base-300 bg-base-100/70 p-4"
+          >
+            <h3
+              class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]"
+            >
+              Rendimiento semanal
+            </h3>
+            <p class="text-base-content/70 mt-3 text-sm">
+              Aun no hay datos suficientes para esta grafica.
+            </p>
+          </article>
+        </ClientOnly>
       </div>
 
-      <div class="grid gap-4 lg:grid-cols-2">
-        <article class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
-          <h3
-            class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]"
+      <div class="grid gap-4 xl:grid-cols-2">
+        <ClientOnly>
+          <StatsBarChart
+            v-if="hasLeaderboardData"
+            title="Leaderboard de la quiniela"
+            :labels="leaderboardLabels"
+            :values="leaderboardValues"
+            color="#f59e0b"
+          />
+          <article
+            v-else
+            class="rounded-2xl border border-base-300 bg-base-100/70 p-4"
           >
-            Top 5 del ranking
-          </h3>
-          <div class="mt-3 space-y-2">
-            <div
-              v-for="row in topRankingRows.slice(0, 5)"
-              :key="`ranking-${row.user_id}`"
-              class="flex items-center justify-between rounded-xl border border-base-300 bg-base-200/55 px-3 py-2 text-sm"
+            <h3
+              class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]"
             >
-              <p class="font-semibold">#{{ row.rank }} {{ row.username }}</p>
-              <p class="text-warning font-bold">{{ row.total_points }} pts</p>
-            </div>
-            <p
-              v-if="topRankingRows.length === 0"
-              class="text-base-content/70 text-sm"
+              Leaderboard de la quiniela
+            </h3>
+            <p class="text-base-content/70 mt-3 text-sm">
+              Sin datos de ranking por ahora.
+            </p>
+          </article>
+        </ClientOnly>
+
+        <ClientOnly>
+          <StatsDoughnutChart
+            v-if="hasDistributionData"
+            title="Distribucion de aciertos (3/1/0)"
+            :labels="['Exacto (3)', 'Resultado (1)', 'Sin acierto (0)']"
+            :values="distributionValues"
+            :colors="['#22c55e', '#0ea5e9', '#ef4444']"
+          />
+          <article
+            v-else
+            class="rounded-2xl border border-base-300 bg-base-100/70 p-4"
+          >
+            <h3
+              class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]"
             >
-              Sin ranking disponible.
+              Distribucion de aciertos (3/1/0)
+            </h3>
+            <p class="text-base-content/70 mt-3 text-sm">
+              No hay resultados finalizados para calcular distribucion.
+            </p>
+          </article>
+        </ClientOnly>
+      </div>
+
+      <article class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
+        <h3
+          class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]"
+        >
+          Gamificacion de la quiniela
+        </h3>
+        <div class="mt-3 grid gap-2 sm:grid-cols-2">
+          <div
+            class="rounded-xl border border-base-300 bg-base-200/55 px-3 py-2"
+          >
+            <p class="text-base-content/70 text-xs">Tu racha actual</p>
+            <p class="text-success text-xl font-bold">
+              {{ myCurrentStreak }}
             </p>
           </div>
-        </article>
-
-        <article class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
-          <h3
-            class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]"
+          <div
+            class="rounded-xl border border-base-300 bg-base-200/55 px-3 py-2"
           >
-            Gamificacion de la quiniela
-          </h3>
-          <div class="mt-3 grid gap-2 sm:grid-cols-2">
-            <div
-              class="rounded-xl border border-base-300 bg-base-200/55 px-3 py-2"
-            >
-              <p class="text-base-content/70 text-xs">Tu racha actual</p>
-              <p class="text-success text-xl font-bold">
-                {{ myCurrentStreak }}
-              </p>
-            </div>
-            <div
-              class="rounded-xl border border-base-300 bg-base-200/55 px-3 py-2"
-            >
-              <p class="text-base-content/70 text-xs">Mejor racha global</p>
-              <p class="text-warning text-xl font-bold">
-                {{ globalBestStreak }}
-              </p>
-            </div>
-            <div
-              class="rounded-xl border border-base-300 bg-base-200/55 px-3 py-2"
-            >
-              <p class="text-base-content/70 text-xs">Logros desbloqueados</p>
-              <p class="text-primary text-xl font-bold">
-                {{ totalAchievements }}
-              </p>
-              <p class="text-base-content/70 text-xs">
-                {{ achievementMembers }} jugador(es) con logros
-              </p>
-            </div>
-            <div
-              class="rounded-xl border border-base-300 bg-base-200/55 px-3 py-2"
-            >
-              <p class="text-base-content/70 text-xs">Misiones</p>
-              <p class="text-primary text-xl font-bold">
-                {{ completedMissions }}
-              </p>
-              <p class="text-base-content/70 text-xs">
-                {{ claimedMissions }} reclamadas
-              </p>
-            </div>
+            <p class="text-base-content/70 text-xs">Mejor racha global</p>
+            <p class="text-warning text-xl font-bold">
+              {{ globalBestStreak }}
+            </p>
           </div>
-
-          <p
-            v-if="distributionOthers > 0"
-            class="mt-3 text-xs text-base-content/70"
+          <div
+            class="rounded-xl border border-base-300 bg-base-200/55 px-3 py-2"
           >
-            Nota: hay {{ distributionOthers }} predicciones con puntajes
-            personalizados fuera del esquema 3/1/0.
-          </p>
-        </article>
-      </div>
+            <p class="text-base-content/70 text-xs">Logros desbloqueados</p>
+            <p class="text-primary text-xl font-bold">
+              {{ totalAchievements }}
+            </p>
+            <p class="text-base-content/70 text-xs">
+              {{ achievementMembers }} jugador(es) con logros
+            </p>
+          </div>
+        </div>
+
+        <p
+          v-if="distributionOthers > 0"
+          class="mt-3 text-xs text-base-content/70"
+        >
+          Nota: hay {{ distributionOthers }} predicciones con puntajes
+          personalizados fuera del esquema 3/1/0.
+        </p>
+      </article>
     </template>
   </section>
 </template>

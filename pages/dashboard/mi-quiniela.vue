@@ -53,20 +53,6 @@ interface AchievementItem {
   unlockedAt: string;
 }
 
-interface MissionItem {
-  code: string;
-  name: string;
-  description: string | null;
-  periodStartDate: string;
-  progressValue: number;
-  targetValue: number;
-  rewardPoints: number;
-  isCompleted: boolean;
-  isClaimed: boolean;
-  completedAt: string | null;
-  claimedAt: string | null;
-}
-
 const user = useSupabaseUser();
 const client = useSupabaseClient<any>();
 const { quiniela, activeQuinielaId, loadActiveQuiniela } = useActiveQuiniela();
@@ -77,10 +63,6 @@ const predictionsByQuinielaSupported = useState<boolean | null>(
 );
 const gamificationSupported = useState<boolean | null>(
   "gamification-supported",
-  () => null,
-);
-const missionsSupported = useState<boolean | null>(
-  "missions-supported",
   () => null,
 );
 
@@ -100,11 +82,6 @@ const tiePeersPreview = ref<string[]>([]);
 const currentStreak = ref(0);
 const bestStreak = ref(0);
 const earnedBadges = ref<AchievementItem[]>([]);
-const missions = ref<MissionItem[]>([]);
-const missionsLoading = ref(false);
-const missionsError = ref<string | null>(null);
-const missionsMessage = ref<string | null>(null);
-const claimingMissionCode = ref<string | null>(null);
 const showExactHitCelebration = ref(false);
 const exactHitDelta = ref(0);
 let exactHitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -124,6 +101,107 @@ const username = computed(() => {
 
 const hasMatches = computed(() => predictions.value.length > 0);
 const isLeader = computed(() => myRank.value === 1 && totalMembers.value > 0);
+const totalMatchesCount = computed(() => predictions.value.length);
+
+const predictionsMadeCount = computed(
+  () => predictions.value.filter((row) => row.hasPrediction).length,
+);
+
+const finishedPredictionsCount = computed(
+  () =>
+    predictions.value.filter(
+      (row) =>
+        row.hasPrediction &&
+        row.match?.status === "finished" &&
+        row.match.home_score !== null &&
+        row.match.away_score !== null,
+    ).length,
+);
+
+const wonPredictionsCount = computed(
+  () =>
+    predictions.value.filter((row) => {
+      if (
+        !row.hasPrediction ||
+        row.home_score === null ||
+        row.away_score === null ||
+        row.match?.status !== "finished" ||
+        row.match.home_score === null ||
+        row.match.away_score === null
+      ) {
+        return false;
+      }
+
+      return (
+        resolveOutcome(row.home_score, row.away_score) ===
+        resolveOutcome(row.match.home_score, row.match.away_score)
+      );
+    }).length,
+);
+
+const lostPredictionsCount = computed(() =>
+  Math.max(0, finishedPredictionsCount.value - wonPredictionsCount.value),
+);
+
+const exactPredictionsCount = computed(
+  () =>
+    predictions.value.filter((row) => {
+      if (
+        !row.hasPrediction ||
+        row.home_score === null ||
+        row.away_score === null ||
+        row.match?.status !== "finished" ||
+        row.match.home_score === null ||
+        row.match.away_score === null
+      ) {
+        return false;
+      }
+
+      return (
+        row.home_score === row.match.home_score &&
+        row.away_score === row.match.away_score
+      );
+    }).length,
+);
+
+const pendingResolutionCount = computed(
+  () =>
+    predictions.value.filter(
+      (row) => row.hasPrediction && row.match?.status !== "finished",
+    ).length,
+);
+
+const missingPredictionsCount = computed(
+  () => predictions.value.filter((row) => !row.hasPrediction).length,
+);
+
+const completionRate = computed(() => {
+  if (totalMatchesCount.value <= 0) {
+    return 0;
+  }
+
+  return Math.round(
+    (predictionsMadeCount.value / totalMatchesCount.value) * 100,
+  );
+});
+
+const accuracyRate = computed(() => {
+  if (finishedPredictionsCount.value <= 0) {
+    return 0;
+  }
+
+  return Math.round(
+    (wonPredictionsCount.value / finishedPredictionsCount.value) * 100,
+  );
+});
+
+const predictionsProgressText = computed(() => {
+  if (totalMatchesCount.value <= 0) {
+    return "0/0";
+  }
+
+  return `${predictionsMadeCount.value}/${totalMatchesCount.value}`;
+});
 
 const rankEmoji = computed(() => {
   if (myRank.value === 1) {
@@ -271,14 +349,6 @@ const kickoffText = (value: string) =>
     timeStyle: "short",
   });
 
-const getCurrentWeekStartDate = () => {
-  const today = new Date();
-  const dayOffset = (today.getUTCDay() + 6) % 7;
-  today.setUTCDate(today.getUTCDate() - dayOffset);
-  today.setUTCHours(0, 0, 0, 0);
-  return today.toISOString().slice(0, 10);
-};
-
 const flagIconClassFromCode = (code: string | null | undefined) => {
   const normalized = (code || "").trim().toLowerCase();
   return /^[a-z]{2}$/.test(normalized) ? `fi fi-${normalized}` : null;
@@ -321,20 +391,6 @@ const isMissingGamificationTableError = (error: any) => {
     message.includes("quiniela_member_streaks") ||
     message.includes("user_achievements") ||
     message.includes("achievement_definitions")
-  );
-};
-
-const isMissingMissionsFeatureError = (error: any) => {
-  const message = String(error?.message || "").toLowerCase();
-
-  return (
-    error?.code === "42P01" ||
-    error?.code === "42883" ||
-    message.includes("user_mission_progress") ||
-    message.includes("quiniela_missions") ||
-    message.includes("mission_definitions") ||
-    message.includes("get_user_missions_snapshot") ||
-    message.includes("claim_user_mission_reward")
   );
 };
 
@@ -597,130 +653,6 @@ const loadGamificationSnapshot = async () => {
     .filter((row): row is AchievementItem => Boolean(row));
 };
 
-const loadMissionsSnapshot = async () => {
-  if (!user.value || !activeQuinielaId.value) {
-    missions.value = [];
-    missionsError.value = null;
-    missionsMessage.value = null;
-    return;
-  }
-
-  missionsLoading.value = true;
-  missionsError.value = null;
-
-  if (missionsSupported.value === false) {
-    missions.value = [];
-    appendCompatibilityMessage(
-      "Misiones semanales no disponibles aun. Aplica la migracion 0018 para habilitarlas.",
-    );
-    missionsLoading.value = false;
-    return;
-  }
-
-  const weekStartDate = getCurrentWeekStartDate();
-  const result = await client.rpc("get_user_missions_snapshot", {
-    p_user_id: user.value.id,
-    p_quiniela_id: activeQuinielaId.value,
-    p_period_start_date: weekStartDate,
-  });
-
-  missionsLoading.value = false;
-
-  if (result.error) {
-    if (isMissingMissionsFeatureError(result.error)) {
-      missionsSupported.value = false;
-      missions.value = [];
-      appendCompatibilityMessage(
-        "Misiones semanales no disponibles aun. Aplica la migracion 0018 para habilitarlas.",
-      );
-      return;
-    }
-
-    missionsError.value =
-      result.error.message || "No se pudo cargar el progreso de misiones.";
-    return;
-  }
-
-  missionsSupported.value = true;
-  missions.value = (
-    (result.data as Array<{
-      mission_code: string;
-      mission_name: string;
-      mission_description: string | null;
-      period_start_date: string;
-      progress_value: number | null;
-      target_value: number | null;
-      reward_points: number | null;
-      is_completed: boolean | null;
-      is_claimed: boolean | null;
-      completed_at: string | null;
-      claimed_at: string | null;
-    }> | null) ?? []
-  )
-    .map((item) => ({
-      code: item.mission_code,
-      name: item.mission_name,
-      description: item.mission_description,
-      periodStartDate: item.period_start_date,
-      progressValue: Number(item.progress_value ?? 0),
-      targetValue: Number(item.target_value ?? 0),
-      rewardPoints: Number(item.reward_points ?? 0),
-      isCompleted: Boolean(item.is_completed),
-      isClaimed: Boolean(item.is_claimed),
-      completedAt: item.completed_at,
-      claimedAt: item.claimed_at,
-    }))
-    .sort((a, b) => a.targetValue - b.targetValue);
-};
-
-const claimMissionReward = async (mission: MissionItem) => {
-  if (!user.value || !activeQuinielaId.value) {
-    return;
-  }
-
-  if (!mission.isCompleted || mission.isClaimed) {
-    return;
-  }
-
-  missionsError.value = null;
-  missionsMessage.value = null;
-  claimingMissionCode.value = mission.code;
-
-  const result = await client.rpc("claim_user_mission_reward", {
-    p_quiniela_id: activeQuinielaId.value,
-    p_mission_code: mission.code,
-    p_period_start_date: mission.periodStartDate,
-  });
-
-  if (result.error) {
-    if (isMissingMissionsFeatureError(result.error)) {
-      missionsSupported.value = false;
-      appendCompatibilityMessage(
-        "Misiones semanales no disponibles aun. Aplica la migracion 0018 para habilitarlas.",
-      );
-      claimingMissionCode.value = null;
-      return;
-    }
-
-    missionsError.value =
-      result.error.message || "No se pudo reclamar la recompensa.";
-    claimingMissionCode.value = null;
-    return;
-  }
-
-  const response = (result.data || {}) as {
-    message?: string;
-    pointsAwarded?: number;
-  };
-
-  missionsMessage.value =
-    response.message ||
-    `Recompensa reclamada. +${Number(response.pointsAwarded ?? 0)} pts`;
-
-  claimingMissionCode.value = null;
-  await loadMyQuinielaView();
-};
-
 const loadMyQuinielaView = async () => {
   if (!user.value || !activeQuinielaId.value) {
     predictions.value = [];
@@ -736,9 +668,6 @@ const loadMyQuinielaView = async () => {
     currentStreak.value = 0;
     bestStreak.value = 0;
     earnedBadges.value = [];
-    missions.value = [];
-    missionsError.value = null;
-    missionsMessage.value = null;
     return;
   }
 
@@ -1053,8 +982,6 @@ const loadMyQuinielaView = async () => {
     errorMessage.value = error?.message || "No se pudo cargar la gamificacion.";
   }
 
-  await loadMissionsSnapshot();
-
   const nextExactHits = predictions.value.filter((row) => {
     return row.match?.status === "finished" && Number(row.points_earned) >= 3;
   }).length;
@@ -1086,8 +1013,6 @@ watch(
     showExactHitCelebration.value = false;
     exactHitsInitialized.value = false;
     exactHitsCount.value = 0;
-    missionsMessage.value = null;
-    missionsError.value = null;
     void loadMyQuinielaView();
   },
 );
@@ -1186,14 +1111,22 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="card rounded-2xl border border-base-300 bg-base-100/70 p-4">
-          <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
-            Racha actual
-          </p>
+          <div
+            class="tooltip tooltip-bottom"
+            data-tip="La racha es la cantidad maxima de picks consecutivos acertados en partidos finalizados."
+          >
+            <p
+              class="text-base-content/70 inline-flex items-center gap-1 text-xs uppercase tracking-[0.14em]"
+            >
+              Racha maxima
+              <span class="badge badge-ghost badge-xs">i</span>
+            </p>
+          </div>
           <p class="text-success mt-1 text-3xl font-bold">
-            {{ currentStreak }}
+            {{ bestStreak }}
           </p>
           <p class="text-base-content/70 mt-1 text-xs">
-            Mejor racha: {{ bestStreak }}
+            Racha actual: {{ currentStreak }}
           </p>
         </div>
 
@@ -1219,8 +1152,66 @@ onBeforeUnmount(() => {
           <p class="text-base-content/70 mt-2 text-xs">
             {{ badgeCountText }} desbloqueadas
           </p>
+          <p class="text-base-content/60 mt-1 text-xs">
+            Racha evolutiva: 3, 5 y 10 aciertos consecutivos.
+          </p>
         </div>
       </div>
+
+      <div class="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="card rounded-2xl border border-base-300 bg-base-100/70 p-4">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
+            Predicciones cargadas
+          </p>
+          <p class="text-info mt-1 text-3xl font-bold">
+            {{ predictionsProgressText }}
+          </p>
+          <p class="text-base-content/70 mt-1 text-xs">
+            {{ completionRate }}% del calendario actual
+          </p>
+        </div>
+
+        <div class="card rounded-2xl border border-base-300 bg-base-100/70 p-4">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
+            Predicciones ganadas
+          </p>
+          <p class="text-success mt-1 text-3xl font-bold">
+            {{ wonPredictionsCount }}
+          </p>
+          <p class="text-base-content/70 mt-1 text-xs">
+            {{ accuracyRate }}% de acierto en partidos cerrados
+          </p>
+        </div>
+
+        <div class="card rounded-2xl border border-base-300 bg-base-100/70 p-4">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
+            Predicciones perdidas
+          </p>
+          <p class="text-error mt-1 text-3xl font-bold">
+            {{ lostPredictionsCount }}
+          </p>
+          <p class="text-base-content/70 mt-1 text-xs">
+            Sobre {{ finishedPredictionsCount }} partidos ya finalizados
+          </p>
+        </div>
+
+        <div class="card rounded-2xl border border-base-300 bg-base-100/70 p-4">
+          <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
+            Marcadores exactos
+          </p>
+          <p class="text-warning mt-1 text-3xl font-bold">
+            {{ exactPredictionsCount }}
+          </p>
+          <p class="text-base-content/70 mt-1 text-xs">
+            {{ exactPredictionsCount * 3 }} pts ganados por exactos
+          </p>
+        </div>
+      </div>
+
+      <p class="text-base-content/70 mt-3 text-xs">
+        En revision: {{ pendingResolutionCount }} pick(s) pendientes de cierre.
+        Sin pick: {{ missingPredictionsCount }} partido(s).
+      </p>
 
       <div
         v-if="myRank"
@@ -1290,114 +1281,6 @@ onBeforeUnmount(() => {
       >
         {{ compatibilityMessage }}
       </p>
-    </article>
-
-    <article
-      v-if="activeQuinielaId && missionsSupported !== false"
-      class="rounded-2xl border border-base-300 bg-base-100/70 p-5"
-    >
-      <div class="flex items-center justify-between gap-3">
-        <div>
-          <p class="text-primary text-xs uppercase tracking-[0.18em]">
-            Misiones
-          </p>
-          <h2 class="text-base-content mt-1 text-xl">Pre-jornada semanal</h2>
-        </div>
-        <button
-          class="btn btn-outline btn-xs"
-          :disabled="missionsLoading"
-          @click="loadMissionsSnapshot"
-        >
-          {{ missionsLoading ? "Cargando..." : "Refrescar" }}
-        </button>
-      </div>
-
-      <p class="text-base-content/70 mt-2 text-xs">
-        Completa predicciones antes del silbatazo para desbloquear puntos extra.
-      </p>
-
-      <p v-if="missionsMessage" class="alert alert-success mt-3 text-xs">
-        {{ missionsMessage }}
-      </p>
-
-      <p v-if="missionsError" class="alert alert-error mt-3 text-xs">
-        {{ missionsError }}
-      </p>
-
-      <div v-if="missionsLoading" class="mt-4 text-sm text-base-content/70">
-        Cargando misiones de la semana...
-      </div>
-
-      <div
-        v-else-if="missions.length === 0"
-        class="mt-4 text-sm text-base-content/70"
-      >
-        No hay misiones activas para esta quiniela.
-      </div>
-
-      <div v-else class="mt-4 grid gap-3 md:grid-cols-2">
-        <div
-          v-for="mission in missions"
-          :key="`${mission.code}-${mission.periodStartDate}`"
-          class="rounded-xl border border-base-300 bg-base-200/55 p-4"
-        >
-          <div class="flex items-start justify-between gap-2">
-            <div>
-              <p class="text-sm font-semibold text-base-content">
-                {{ mission.name }}
-              </p>
-              <p class="mt-1 text-xs text-base-content/70">
-                {{ mission.description || "Mision semanal" }}
-              </p>
-            </div>
-            <span class="badge badge-sm badge-primary">
-              +{{ mission.rewardPoints }} pts
-            </span>
-          </div>
-
-          <div class="mt-3">
-            <progress
-              class="progress progress-primary h-2 w-full"
-              :max="mission.targetValue"
-              :value="Math.min(mission.progressValue, mission.targetValue)"
-            />
-            <p class="mt-1 text-xs text-base-content/70">
-              {{ mission.progressValue }}/{{ mission.targetValue }} completado
-            </p>
-          </div>
-
-          <div class="mt-3 flex items-center justify-between gap-2">
-            <span v-if="mission.isClaimed" class="badge badge-success badge-sm">
-              Reclamada
-            </span>
-            <span
-              v-else-if="mission.isCompleted"
-              class="badge badge-warning badge-sm"
-            >
-              Lista para reclamar
-            </span>
-            <span v-else class="badge badge-ghost badge-sm">En progreso</span>
-
-            <button
-              class="btn btn-primary btn-xs"
-              :disabled="
-                !mission.isCompleted ||
-                mission.isClaimed ||
-                claimingMissionCode === mission.code
-              "
-              @click="claimMissionReward(mission)"
-            >
-              {{
-                claimingMissionCode === mission.code
-                  ? "Reclamando..."
-                  : mission.isClaimed
-                    ? "Reclamada"
-                    : "Reclamar"
-              }}
-            </button>
-          </div>
-        </div>
-      </div>
     </article>
 
     <article v-if="loading" class="alert rounded-2xl text-sm">

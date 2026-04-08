@@ -623,11 +623,19 @@ h3,
 
 .odds-track {
   display: flex;
-  gap: 2rem;
   width: max-content;
   padding: 0.5rem 0;
   white-space: nowrap;
-  animation: odds-scroll 22s linear infinite;
+  will-change: transform;
+  animation: odds-scroll 40s linear infinite;
+}
+
+.odds-segment {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2rem;
+  padding-right: 2rem;
 }
 
 .odds-chip {

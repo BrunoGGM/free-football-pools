@@ -312,7 +312,7 @@ const loadAdminAccess = async () => {
   canAccessAdmin.value = !adminCheckError && Boolean(adminCheck?.id);
 };
 
-const metricsTape = computed(() => [
+const tickerMetrics = computed(() => [
   ...headerMetrics.value,
   ...headerMetrics.value,
 ]);
@@ -663,21 +663,27 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div v-if="user && metricsTape.length" class="odds-strip">
+      <div v-if="user && tickerMetrics.length" class="odds-strip">
         <div class="odds-track">
-          <span
-            v-for="(item, index) in metricsTape"
-            :key="`${item.label}-${index}`"
-            class="odds-chip"
-            :class="item.highlight && 'odds-chip-pot'"
+          <div
+            v-for="segment in 2"
+            :key="`segment-${segment}`"
+            class="odds-segment"
           >
-            <span class="odds-market">{{ item.label }}</span>
-            <strong
-              class="odds-price"
-              :class="item.highlight && 'odds-price-pot'"
-              >{{ item.value }}</strong
+            <span
+              v-for="(item, index) in tickerMetrics"
+              :key="`${segment}-${item.label}-${index}`"
+              class="odds-chip"
+              :class="item.highlight && 'odds-chip-pot'"
             >
-          </span>
+              <span class="odds-market">{{ item.label }}</span>
+              <strong
+                class="odds-price"
+                :class="item.highlight && 'odds-price-pot'"
+                >{{ item.value }}</strong
+              >
+            </span>
+          </div>
         </div>
       </div>
     </header>
