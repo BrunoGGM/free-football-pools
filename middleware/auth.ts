@@ -1,8 +1,13 @@
-export default defineNuxtRouteMiddleware(async () => {
+export default defineNuxtRouteMiddleware(async (to) => {
   const user = useSupabaseUser()
 
   if (!user.value) {
-    return navigateTo('/auth')
+    return navigateTo({
+      path: '/auth',
+      query: {
+        redirect: to.fullPath,
+      },
+    })
   }
 
   const { activeQuinielaId, ensureActiveQuiniela } = useActiveQuiniela()

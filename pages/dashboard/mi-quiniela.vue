@@ -1144,9 +1144,17 @@ onBeforeUnmount(() => {
       <h2 class="text-base-content mt-2 text-3xl sm:text-4xl">
         {{ username }}
       </h2>
-      <p class="text-base-content/70 mt-2 text-sm">
-        Quiniela activa: {{ quiniela?.name || "Sin nombre" }}
-      </p>
+      <div class="mt-2 flex items-center gap-3 text-sm">
+        <img
+          v-if="quiniela?.logo_url"
+          :src="quiniela.logo_url"
+          :alt="`Logo de ${quiniela.name}`"
+          class="h-10 w-10 rounded-lg border border-base-300 bg-base-100 object-contain p-1"
+        />
+        <p class="text-base-content/70">
+          Quiniela activa: {{ quiniela?.name || "Sin nombre" }}
+        </p>
+      </div>
       <p class="text-base-content/70 mt-2 text-xs">
         Regla: +{{ correctOutcomePoints }} por acertar pick
         (local/empate/visita) y +{{ exactScoreBonusPoints }} por marcador

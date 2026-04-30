@@ -2,6 +2,7 @@ interface QuinielaRow {
   id: string
   name: string
   description: string | null
+  logo_url: string | null
   access_code: string
   ticket_price: number
   start_date: string
@@ -32,12 +33,13 @@ export function useActiveQuiniela() {
   const errorMessage = useState<string | null>('active-quiniela-error', () => null)
   const ticketPriceSupported = useState<boolean | null>('quiniela-ticket-price-supported', () => null)
 
-  const isMissingTicketPriceColumnError = (error: any) => {
+  const isMissingOptionalQuinielaColumnError = (error: any) => {
     const message = String(error?.message || '').toLowerCase()
 
     return (
       error?.code === '42703' ||
       message.includes('ticket_price') ||
+      message.includes('logo_url') ||
       (message.includes('column') && message.includes('quinielas'))
     )
   }
@@ -62,7 +64,7 @@ export function useActiveQuiniela() {
       client
         .from('quiniela_members')
         .select(
-          'quiniela_id, total_points, created_at, quiniela:quinielas(id, name, description, access_code, ticket_price, start_date, end_date, admin_id, champion_team)',
+          'quiniela_id, total_points, created_at, quiniela:quinielas(id, name, description, logo_url, access_code, ticket_price, start_date, end_date, admin_id, champion_team)',
         )
         .eq('user_id', user.value.id)
         .order('created_at', { ascending: false })
@@ -83,7 +85,7 @@ export function useActiveQuiniela() {
     } else {
       const scopedResult = await queryWithTicketPrice()
 
-      if (scopedResult.error && isMissingTicketPriceColumnError(scopedResult.error)) {
+      if (scopedResult.error && isMissingOptionalQuinielaColumnError(scopedResult.error)) {
         ticketPriceSupported.value = false
         result = await legacyQuery()
       } else {
@@ -108,6 +110,7 @@ export function useActiveQuiniela() {
         quiniela: row.quiniela
           ? {
             ...(row.quiniela as QuinielaRow),
+            logo_url: (row.quiniela as any).logo_url ?? null,
             ticket_price: Number((row.quiniela as any).ticket_price ?? 0),
           }
           : null,
@@ -149,7 +152,7 @@ export function useActiveQuiniela() {
     const queryWithTicketPrice = () =>
       client
         .from('quinielas')
-        .select('id, name, description, access_code, ticket_price, start_date, end_date, admin_id, champion_team')
+        .select('id, name, description, logo_url, access_code, ticket_price, start_date, end_date, admin_id, champion_team')
         .eq('id', activeQuinielaId.value)
         .maybeSingle()
 
@@ -167,7 +170,7 @@ export function useActiveQuiniela() {
     } else {
       const scopedResult = await queryWithTicketPrice()
 
-      if (scopedResult.error && isMissingTicketPriceColumnError(scopedResult.error)) {
+      if (scopedResult.error && isMissingOptionalQuinielaColumnError(scopedResult.error)) {
         ticketPriceSupported.value = false
         result = await legacyQuery()
       } else {
@@ -190,6 +193,7 @@ export function useActiveQuiniela() {
     quiniela.value = data
       ? {
         ...(data as QuinielaRow),
+        logo_url: (data as any).logo_url ?? null,
         ticket_price: Number((data as any).ticket_price ?? 0),
       }
       : null

@@ -81,6 +81,7 @@ interface ManagedQuiniela {
   id: string;
   name: string;
   description: string | null;
+  logo_url: string | null;
   access_code: string;
   has_test_data: boolean;
   ticket_price: number;
@@ -234,6 +235,7 @@ const quinielaForm = reactive({
   id: "",
   name: "",
   description: "",
+  logo_url: "",
   access_code: "",
   ticket_price: 0,
   start_date: "",
@@ -493,6 +495,7 @@ const resetQuinielaForm = () => {
   quinielaForm.id = "";
   quinielaForm.name = "";
   quinielaForm.description = "";
+  quinielaForm.logo_url = "";
   quinielaForm.access_code = "";
   quinielaForm.ticket_price = 0;
   quinielaForm.start_date = "";
@@ -508,6 +511,7 @@ const editQuiniela = (item: ManagedQuiniela) => {
   quinielaForm.id = item.id;
   quinielaForm.name = item.name;
   quinielaForm.description = item.description ?? "";
+  quinielaForm.logo_url = item.logo_url ?? "";
   quinielaForm.access_code = item.access_code;
   quinielaForm.ticket_price = Number(item.ticket_price ?? 0);
   quinielaForm.start_date = toInputDateTime(item.start_date);
@@ -841,6 +845,7 @@ const saveQuiniela = async () => {
   const payload = {
     name: quinielaForm.name.trim(),
     description: quinielaForm.description.trim() || null,
+    logo_url: quinielaForm.logo_url.trim() || null,
     access_code: quinielaForm.access_code.trim().toUpperCase(),
     ticket_price: Number(quinielaForm.ticket_price),
     start_date: toIsoOrNull(quinielaForm.start_date),

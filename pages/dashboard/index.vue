@@ -77,12 +77,22 @@ const quickLinks = [
         class="card mt-5 rounded-2xl border border-base-300 bg-base-100/70 p-4 text-sm text-base-content"
         v-if="quiniela"
       >
-        <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
-          Quiniela activa
-        </p>
-        <p class="text-primary mt-1 text-lg font-semibold">
-          {{ quiniela.name }}
-        </p>
+        <div class="flex items-start gap-3">
+          <img
+            v-if="quiniela.logo_url"
+            :src="quiniela.logo_url"
+            :alt="`Logo de ${quiniela.name}`"
+            class="h-14 w-14 rounded-xl border border-base-300 bg-base-200 object-contain p-1"
+          />
+          <div class="min-w-0">
+            <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
+              Quiniela activa
+            </p>
+            <p class="text-primary mt-1 text-lg font-semibold">
+              {{ quiniela.name }}
+            </p>
+          </div>
+        </div>
         <p class="text-base-content/70 mt-1">
           {{ quiniela.description || "Sin descripcion." }}
         </p>
@@ -148,12 +158,22 @@ const quickLinks = [
           ]"
           @click="selectQuiniela(membership.quiniela_id)"
         >
-          <p class="text-base-content text-sm font-semibold">
-            {{ membership.quiniela?.name || "Quiniela" }}
-          </p>
-          <p class="text-base-content/70 mt-1 text-xs">
-            {{ membership.quiniela?.description || "Sin descripcion." }}
-          </p>
+          <div class="flex items-start gap-3">
+            <img
+              v-if="membership.quiniela?.logo_url"
+              :src="membership.quiniela.logo_url"
+              :alt="`Logo de ${membership.quiniela.name}`"
+              class="h-10 w-10 rounded-lg border border-base-300 bg-base-200 object-contain p-1"
+            />
+            <div class="min-w-0">
+              <p class="text-base-content text-sm font-semibold">
+                {{ membership.quiniela?.name || "Quiniela" }}
+              </p>
+              <p class="text-base-content/70 mt-1 text-xs">
+                {{ membership.quiniela?.description || "Sin descripcion." }}
+              </p>
+            </div>
+          </div>
           <p class="text-warning mt-2 text-xs">
             Puntos actuales: {{ membership.total_points }}
           </p>

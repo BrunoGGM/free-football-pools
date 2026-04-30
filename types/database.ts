@@ -270,6 +270,128 @@ export type Database = {
         }
         Relationships: []
       }
+      quiniela_access_ticket_redemptions: {
+        Row: {
+          created_at: string
+          id: string
+          message: string | null
+          quiniela_id: string | null
+          status: string
+          ticket_id: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          quiniela_id?: string | null
+          status: string
+          ticket_id?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          quiniela_id?: string | null
+          status?: string
+          ticket_id?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiniela_access_ticket_redemptions_quiniela_id_fkey"
+            columns: ["quiniela_id"]
+            isOneToOne: false
+            referencedRelation: "quinielas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiniela_access_ticket_redemptions_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "quiniela_access_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiniela_access_ticket_redemptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiniela_access_tickets: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          id: string
+          label: string | null
+          last_redeemed_at: string | null
+          quiniela_id: string
+          redeemed_count: number
+          revoked_at: string | null
+          revoked_by: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          label?: string | null
+          last_redeemed_at?: string | null
+          quiniela_id: string
+          redeemed_count?: number
+          revoked_at?: string | null
+          revoked_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          label?: string | null
+          last_redeemed_at?: string | null
+          quiniela_id?: string
+          redeemed_count?: number
+          revoked_at?: string | null
+          revoked_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiniela_access_tickets_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiniela_access_tickets_quiniela_id_fkey"
+            columns: ["quiniela_id"]
+            isOneToOne: false
+            referencedRelation: "quinielas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiniela_access_tickets_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quiniela_group_overrides: {
         Row: {
           created_at: string
@@ -613,6 +735,7 @@ export type Database = {
           end_date: string | null
           has_test_data: boolean
           id: string
+          logo_url: string | null
           name: string
           start_date: string
           ticket_price: number
@@ -627,6 +750,7 @@ export type Database = {
           end_date?: string | null
           has_test_data?: boolean
           id?: string
+          logo_url?: string | null
           name: string
           start_date: string
           ticket_price?: number
@@ -641,6 +765,7 @@ export type Database = {
           end_date?: string | null
           has_test_data?: boolean
           id?: string
+          logo_url?: string | null
           name?: string
           start_date?: string
           ticket_price?: number

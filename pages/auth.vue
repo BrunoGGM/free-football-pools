@@ -8,6 +8,18 @@ type Mode = "login" | "register";
 const route = useRoute();
 const mode = ref<Mode>(route.query.mode === "register" ? "register" : "login");
 
+const redirectPath = computed(() => {
+  const raw = Array.isArray(route.query.redirect)
+    ? route.query.redirect[0]
+    : route.query.redirect;
+
+  if (typeof raw !== "string" || !raw.startsWith("/") || raw.startsWith("//")) {
+    return "/dashboard";
+  }
+
+  return raw;
+});
+
 const email = ref("");
 const password = ref("");
 const confirmPassword = ref("");
@@ -47,7 +59,16 @@ const setMode = (nextMode: Mode) => {
     confirmPassword.value = "";
   }
 
-  void navigateTo(`/auth?mode=${nextMode}`, { replace: true });
+  void navigateTo(
+    {
+      path: "/auth",
+      query: {
+        mode: nextMode,
+        redirect: redirectPath.value !== "/dashboard" ? redirectPath.value : undefined,
+      },
+    },
+    { replace: true },
+  );
 };
 
 const submit = async () => {
@@ -58,7 +79,7 @@ const submit = async () => {
     });
 
     if (ok) {
-      await navigateTo("/dashboard");
+      await navigateTo(redirectPath.value);
     }
 
     return;
@@ -76,7 +97,7 @@ const submit = async () => {
   });
 
   if (ok) {
-    await navigateTo("/dashboard");
+    await navigateTo(redirectPath.value);
   }
 };
 </script>

@@ -82,6 +82,11 @@ const sessionUserName = computed(() => {
   return "Jugador";
 });
 
+const brandName = computed(() => quiniela.value?.name || "Quiniela 2026");
+const brandSubtitle = computed(() =>
+  quiniela.value ? "Quiniela activa" : "Modo torneo en vivo",
+);
+
 const onActiveQuinielaChange = async (event: Event) => {
   const target = event.target as HTMLSelectElement | null;
   if (!target || switchingQuiniela.value) {
@@ -675,17 +680,26 @@ onBeforeUnmount(() => {
       <div
         class="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6"
       >
-        <NuxtLink to="/" class="flex items-center gap-3">
+        <NuxtLink to="/" class="flex min-w-0 items-center gap-3">
           <div
-            class="text-primary bg-primary/15 grid h-9 w-9 place-content-center rounded-xl neon-border"
+            class="text-primary bg-primary/15 grid h-9 w-9 flex-none place-content-center overflow-hidden rounded-xl neon-border"
           >
-            <span class="logo-font text-lg leading-none">Q</span>
+            <img
+              v-if="quiniela?.logo_url"
+              :src="quiniela.logo_url"
+              :alt="`Logo de ${quiniela.name}`"
+              class="h-full w-full object-contain p-1"
+            />
+            <span v-else class="logo-font text-lg leading-none">Q</span>
           </div>
-          <div>
-            <p class="logo-font text-primary text-xl uppercase leading-none">
-              Quiniela 2026
+          <div class="min-w-0">
+            <p
+              class="logo-font text-primary max-w-36 truncate text-xl uppercase leading-none sm:max-w-52 md:max-w-64"
+              :title="brandName"
+            >
+              {{ brandName }}
             </p>
-            <p class="text-base-content/70 text-xs">Modo torneo en vivo</p>
+            <p class="text-base-content/70 text-xs">{{ brandSubtitle }}</p>
           </div>
         </NuxtLink>
 
@@ -900,6 +914,12 @@ onBeforeUnmount(() => {
           <span class="hidden h-4 w-px bg-base-300/70 sm:inline-block"></span>
 
           <span class="text-base-content/70">Quiniela:</span>
+          <img
+            v-if="quiniela?.logo_url"
+            :src="quiniela.logo_url"
+            :alt="`Logo de ${quiniela.name}`"
+            class="h-7 w-7 rounded-lg border border-base-300 bg-base-100 object-contain"
+          />
           <strong class="text-base-content max-w-52 truncate">
             {{ quiniela?.name || "Sin quiniela" }}
           </strong>

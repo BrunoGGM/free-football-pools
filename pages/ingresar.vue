@@ -5,6 +5,7 @@ definePageMeta({
 
 const user = useSupabaseUser();
 const client = useSupabaseClient<any>();
+const route = useRoute();
 const {
   setActiveQuiniela,
   myQuinielas,
@@ -15,9 +16,20 @@ const {
 
 const accessCode = ref("");
 const loading = ref(false);
+const ticketRedeeming = ref(false);
 const errorMessage = ref<string | null>(null);
+const successMessage = ref<string | null>(null);
 
 onMounted(() => {
+  const ticket = Array.isArray(route.query.ticket)
+    ? route.query.ticket[0]
+    : route.query.ticket;
+
+  if (typeof ticket === "string" && ticket.trim()) {
+    void redeemTicket(ticket.trim());
+    return;
+  }
+
   void loadMyQuinielas();
 });
 
@@ -27,6 +39,57 @@ const selectQuiniela = async (quinielaId: string) => {
   setActiveQuiniela(quinielaId);
   await loadActiveQuiniela();
   await navigateTo("/dashboard");
+};
+
+const getAuthHeaders = async () => {
+  const { data } = await client.auth.getSession();
+  const token = data.session?.access_token;
+
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+const redeemTicket = async (ticketId: string) => {
+  if (!user.value || ticketRedeeming.value) {
+    return;
+  }
+
+  ticketRedeeming.value = true;
+  loading.value = true;
+  errorMessage.value = null;
+  successMessage.value = "Validando boleto de acceso...";
+
+  try {
+    const headers = await getAuthHeaders();
+    const result = await $fetch<{
+      status: "redeemed" | "already_member";
+      quiniela: { id: string; name: string };
+    }>("/api/quiniela-tickets/redeem", {
+      method: "POST",
+      headers,
+      body: {
+        ticket_id: ticketId,
+      },
+    });
+
+    setActiveQuiniela(result.quiniela.id);
+    await loadMyQuinielas();
+    await loadActiveQuiniela();
+    successMessage.value =
+      result.status === "already_member"
+        ? `Ya pertenecias a ${result.quiniela.name}. Abriendo dashboard...`
+        : `Boleto canjeado. Bienvenido a ${result.quiniela.name}.`;
+    await navigateTo("/dashboard");
+  } catch (error: any) {
+    errorMessage.value =
+      error?.data?.message ||
+      error?.message ||
+      "No se pudo canjear este boleto.";
+    successMessage.value = null;
+    await loadMyQuinielas();
+  } finally {
+    ticketRedeeming.value = false;
+    loading.value = false;
+  }
 };
 
 const submit = async () => {
@@ -44,6 +107,7 @@ const submit = async () => {
 
   loading.value = true;
   errorMessage.value = null;
+  successMessage.value = null;
 
   const { data: quiniela, error: quinielaError } = await client
     .from("quinielas")
@@ -98,6 +162,13 @@ const submit = async () => {
     </article>
 
     <article
+      v-if="ticketRedeeming || successMessage"
+      class="alert alert-info rounded-2xl text-sm"
+    >
+      {{ successMessage || "Validando boleto de acceso..." }}
+    </article>
+
+    <article
       v-else
       class="pitch-panel card rounded-3xl border border-base-300 bg-base-200/70 p-5 shadow-lg sm:p-6"
     >
@@ -120,12 +191,22 @@ const submit = async () => {
           ]"
           @click="selectQuiniela(membership.quiniela_id)"
         >
-          <p class="text-base-content text-sm font-semibold">
-            {{ membership.quiniela?.name || "Quiniela" }}
-          </p>
-          <p class="text-base-content/70 mt-1 text-xs">
-            {{ membership.quiniela?.description || "Sin descripcion." }}
-          </p>
+          <div class="flex items-start gap-3">
+            <img
+              v-if="membership.quiniela?.logo_url"
+              :src="membership.quiniela.logo_url"
+              :alt="`Logo de ${membership.quiniela.name}`"
+              class="h-10 w-10 rounded-lg border border-base-300 bg-base-200 object-contain p-1"
+            />
+            <div class="min-w-0">
+              <p class="text-base-content text-sm font-semibold">
+                {{ membership.quiniela?.name || "Quiniela" }}
+              </p>
+              <p class="text-base-content/70 mt-1 text-xs">
+                {{ membership.quiniela?.description || "Sin descripcion." }}
+              </p>
+            </div>
+          </div>
           <p class="text-primary mt-2 text-xs font-semibold">
             Boleto:
             {{

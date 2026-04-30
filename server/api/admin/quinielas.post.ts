@@ -9,6 +9,7 @@ import {
 type CreateQuinielaBody = {
   name?: string
   description?: string | null
+  logo_url?: string | null
   access_code?: string
   start_date?: string
   end_date?: string | null
@@ -38,6 +39,32 @@ const parseTicketPrice = (value: unknown) => {
   return Number(parsed.toFixed(2))
 }
 
+const parseLogoUrl = (value: unknown) => {
+  if (value === undefined || value === null) {
+    return null
+  }
+
+  const raw = typeof value === 'string' ? value.trim() : ''
+  if (!raw) {
+    return null
+  }
+
+  if (raw.length > 2048) {
+    throw createError({ statusCode: 400, statusMessage: 'logo_url excede 2048 caracteres' })
+  }
+
+  try {
+    const url = new URL(raw)
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      throw new Error('invalid protocol')
+    }
+  } catch {
+    throw createError({ statusCode: 400, statusMessage: 'logo_url debe ser una URL http(s) valida' })
+  }
+
+  return raw
+}
+
 export default defineEventHandler(async (event) => {
   const supabase = serverSupabaseServiceRole<any>(event)
   const { user } = await requireGlobalAdminAccess(event, supabase)
@@ -46,6 +73,7 @@ export default defineEventHandler(async (event) => {
   const name = (body.name || '').trim()
   const accessCode = (body.access_code || '').trim().toUpperCase()
   const description = body.description?.trim() || null
+  const logoUrl = parseLogoUrl(body.logo_url)
   const startDate = body.start_date || null
   const endDate = body.end_date || null
   const adminId = (body.admin_id || user.id).trim()
@@ -85,13 +113,14 @@ export default defineEventHandler(async (event) => {
     .insert({
       name,
       description,
+      logo_url: logoUrl,
       access_code: accessCode,
       start_date: startDate,
       end_date: endDate,
       admin_id: adminId,
       ticket_price: ticketPrice,
     })
-    .select('id, name, access_code, admin_id, start_date, end_date, ticket_price')
+    .select('id, name, description, logo_url, access_code, admin_id, start_date, end_date, ticket_price')
     .single()
 
   if (error) {
