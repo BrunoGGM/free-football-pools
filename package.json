@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@nuxtjs/supabase": "^1.5.0",
+    "@vercel/speed-insights": "^2.0.0",
     "brackets-viewer": "^1.9.0",
     "chart.js": "^4.5.1",
     "flag-icons": "^7.5.0",
