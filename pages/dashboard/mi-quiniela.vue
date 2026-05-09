@@ -53,6 +53,9 @@ interface AchievementItem {
   unlockedAt: string;
 }
 
+type ViewMode = "stats" | "picks" | "profile";
+type ProfileTab = "profile" | "password";
+
 const user = useSupabaseUser();
 const client = useSupabaseClient<any>();
 const { quiniela, activeQuinielaId, loadActiveQuiniela } = useActiveQuiniela();
@@ -89,10 +92,28 @@ const exactHitsInitialized = ref(false);
 const exactHitsCount = ref(0);
 const correctOutcomePoints = ref(1);
 const exactScoreBonusPoints = ref(3);
-const showStatsPanel = ref(true);
+const activeView = ref<ViewMode>("stats");
+const profileTab = ref<ProfileTab>("profile");
 const picksSectionRef = ref<HTMLElement | null>(null);
+const profileLoading = ref(false);
+const profileSaving = ref(false);
+const passwordSaving = ref(false);
+const profileUsername = ref("");
+const profileAvatarUrl = ref("");
+const profileMessage = ref<string | null>(null);
+const profileError = ref<string | null>(null);
+const passwordMessage = ref<string | null>(null);
+const passwordError = ref<string | null>(null);
+const newPassword = ref("");
+const confirmNewPassword = ref("");
 
 const username = computed(() => {
+  const profileName = profileUsername.value.trim();
+
+  if (profileName.length > 0) {
+    return profileName;
+  }
+
   const metadataName = user.value?.user_metadata?.username;
 
   if (typeof metadataName === "string" && metadataName.length > 0) {
@@ -101,6 +122,35 @@ const username = computed(() => {
 
   const email = user.value?.email;
   return email ? email.split("@")[0] : "Jugador";
+});
+
+const profileEmail = computed(() => user.value?.email || "Sin correo");
+
+const profileAvatarPreview = computed(() => {
+  const profileValue = profileAvatarUrl.value.trim();
+
+  if (profileValue) {
+    return profileValue;
+  }
+
+  const metadataAvatar = user.value?.user_metadata?.avatar_url;
+  return typeof metadataAvatar === "string" && metadataAvatar.trim()
+    ? metadataAvatar.trim()
+    : null;
+});
+
+const profileInitials = computed(() => {
+  const source = username.value || profileEmail.value || "Jugador";
+  const parts = source
+    .split(/[\s._-]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length >= 2) {
+    return `${parts[0]?.charAt(0) || "J"}${parts[1]?.charAt(0) || ""}`.toUpperCase();
+  }
+
+  return source.slice(0, 2).toUpperCase();
 });
 
 const hasMatches = computed(() => predictions.value.length > 0);
@@ -293,12 +343,11 @@ const predictionsProgressText = computed(() => {
 
 const goToPicks = () => {
   if (!process.client) {
+    activeView.value = "picks";
     return;
   }
 
-  if (showStatsPanel.value) {
-    showStatsPanel.value = false;
-  }
+  activeView.value = "picks";
 
   requestAnimationFrame(() => {
     picksSectionRef.value?.scrollIntoView({
@@ -309,7 +358,7 @@ const goToPicks = () => {
 };
 
 const goToStats = () => {
-  showStatsPanel.value = true;
+  activeView.value = "stats";
 
   if (!process.client) {
     return;
@@ -318,6 +367,149 @@ const goToStats = () => {
   requestAnimationFrame(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
+};
+
+const goToProfile = () => {
+  activeView.value = "profile";
+
+  if (!process.client) {
+    return;
+  }
+
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+};
+
+const loadProfile = async () => {
+  if (!user.value) {
+    profileUsername.value = "";
+    profileAvatarUrl.value = "";
+    return;
+  }
+
+  const metadataName = user.value.user_metadata?.username;
+  const metadataAvatar = user.value.user_metadata?.avatar_url;
+
+  profileUsername.value =
+    typeof metadataName === "string" ? metadataName.trim() : "";
+  profileAvatarUrl.value =
+    typeof metadataAvatar === "string" ? metadataAvatar.trim() : "";
+  profileLoading.value = true;
+  profileError.value = null;
+
+  const { data, error } = await client
+    .from("profiles")
+    .select("username, avatar_url")
+    .eq("id", user.value.id)
+    .maybeSingle();
+
+  profileLoading.value = false;
+
+  if (error) {
+    profileError.value = error.message;
+    return;
+  }
+
+  if (typeof data?.username === "string") {
+    profileUsername.value = data.username;
+  }
+
+  profileAvatarUrl.value =
+    typeof data?.avatar_url === "string" ? data.avatar_url : "";
+};
+
+const saveProfile = async () => {
+  if (!user.value || profileSaving.value) {
+    return;
+  }
+
+  const nextUsername = profileUsername.value.trim();
+  const nextAvatarUrl = profileAvatarUrl.value.trim();
+
+  if (nextUsername.length < 3 || nextUsername.length > 32) {
+    profileError.value = "El username debe tener entre 3 y 32 caracteres.";
+    profileMessage.value = null;
+    return;
+  }
+
+  profileSaving.value = true;
+  profileError.value = null;
+  profileMessage.value = null;
+
+  const { error: profileUpdateError } = await client.from("profiles").upsert(
+    {
+      id: user.value.id,
+      username: nextUsername,
+      avatar_url: nextAvatarUrl || null,
+    },
+    { onConflict: "id" },
+  );
+
+  if (profileUpdateError) {
+    profileSaving.value = false;
+    profileError.value =
+      profileUpdateError.code === "23505"
+        ? "Ese username ya esta en uso. Prueba con otro."
+        : profileUpdateError.message;
+    return;
+  }
+
+  const { error: metadataError } = await client.auth.updateUser({
+    data: {
+      username: nextUsername,
+      avatar_url: nextAvatarUrl || null,
+    },
+  });
+
+  profileSaving.value = false;
+
+  if (metadataError) {
+    profileError.value =
+      "Perfil guardado, pero no se pudo refrescar la sesion. Vuelve a iniciar sesion si no ves el cambio.";
+    return;
+  }
+
+  profileUsername.value = nextUsername;
+  profileAvatarUrl.value = nextAvatarUrl;
+  profileMessage.value = "Perfil actualizado.";
+};
+
+const updateAccountPassword = async () => {
+  if (!user.value || passwordSaving.value) {
+    return;
+  }
+
+  if (newPassword.value.length < 6) {
+    passwordError.value = "La contrasena debe tener al menos 6 caracteres.";
+    passwordMessage.value = null;
+    return;
+  }
+
+  if (newPassword.value !== confirmNewPassword.value) {
+    passwordError.value = "Las contrasenas no coinciden.";
+    passwordMessage.value = null;
+    return;
+  }
+
+  passwordSaving.value = true;
+  passwordError.value = null;
+  passwordMessage.value = null;
+
+  const { error } = await client.auth.updateUser({
+    password: newPassword.value,
+  });
+
+  passwordSaving.value = false;
+
+  if (error) {
+    passwordError.value = error.message;
+    return;
+  }
+
+  newPassword.value = "";
+  confirmNewPassword.value = "";
+  passwordMessage.value = "Contrasena actualizada.";
 };
 
 const rankEmoji = computed(() => {
@@ -1055,7 +1247,7 @@ const loadMyQuinielaView = async () => {
 
 onMounted(async () => {
   await loadActiveQuiniela();
-  await loadMyQuinielaView();
+  await Promise.all([loadMyQuinielaView(), loadProfile()]);
 });
 
 watch(
@@ -1065,6 +1257,13 @@ watch(
     exactHitsInitialized.value = false;
     exactHitsCount.value = 0;
     void loadMyQuinielaView();
+  },
+);
+
+watch(
+  () => user.value?.id,
+  () => {
+    void loadProfile();
   },
 );
 
@@ -1096,46 +1295,55 @@ onBeforeUnmount(() => {
       :subtitle="`+${exactHitDelta * 4} pts en exactos confirmados`"
     />
 
-    <article v-if="!activeQuinielaId" class="alert alert-warning rounded-2xl">
+    <article
+      v-if="!activeQuinielaId && activeView !== 'profile'"
+      class="alert alert-warning rounded-2xl"
+    >
       No tienes una quiniela activa para mostrar tus respuestas.
       <NuxtLink to="/ingresar" class="link link-hover ml-2 font-semibold"
         >Ir a ingresar</NuxtLink
       >
     </article>
 
-    <article
-      v-else
-      class="rounded-2xl border border-info/35 bg-info/10 px-4 py-3"
-    >
+    <article class="rounded-2xl border border-info/35 bg-info/10 px-4 py-3">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p class="text-info/80 text-xs uppercase tracking-[0.14em]">Vista</p>
           <p class="text-base-content text-sm">
-            Aqui puedes ver tus stats y tambien tus picks por partido.
+            Aqui puedes ver tus stats, tus picks por partido y tu perfil.
           </p>
         </div>
 
         <div class="join">
           <button
             class="btn btn-sm join-item"
-            :class="showStatsPanel ? 'btn-primary' : 'btn-outline'"
+            :class="activeView === 'stats' ? 'btn-primary' : 'btn-outline'"
+            :disabled="!activeQuinielaId"
             @click="goToStats"
           >
             Ver stats
           </button>
           <button
             class="btn btn-sm join-item"
-            :class="!showStatsPanel ? 'btn-primary' : 'btn-outline'"
+            :class="activeView === 'picks' ? 'btn-primary' : 'btn-outline'"
+            :disabled="!activeQuinielaId"
             @click="goToPicks"
           >
             Ver picks
+          </button>
+          <button
+            class="btn btn-sm join-item"
+            :class="activeView === 'profile' ? 'btn-primary' : 'btn-outline'"
+            @click="goToProfile"
+          >
+            Perfil
           </button>
         </div>
       </div>
     </article>
 
     <article
-      v-if="activeQuinielaId && showStatsPanel"
+      v-if="activeQuinielaId && activeView === 'stats'"
       class="pitch-panel card neon-border rounded-3xl border border-base-300 bg-base-200/70 p-6 shadow-xl sm:p-8"
     >
       <p class="text-primary text-xs uppercase tracking-[0.18em]">
@@ -1391,7 +1599,211 @@ onBeforeUnmount(() => {
       </div>
     </article>
 
-    <section v-if="activeQuinielaId" ref="picksSectionRef" class="space-y-3">
+    <section v-if="activeView === 'profile'" class="space-y-4">
+      <article
+        class="pitch-panel card neon-border rounded-3xl border border-base-300 bg-base-200/70 p-6 shadow-xl sm:p-8"
+      >
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div class="flex min-w-0 items-center gap-4">
+            <div
+              class="grid h-16 w-16 flex-none place-content-center overflow-hidden rounded-2xl border border-primary/35 bg-primary/10 text-xl font-bold text-primary"
+            >
+              <img
+                v-if="profileAvatarPreview"
+                :src="profileAvatarPreview"
+                :alt="`Foto de perfil de ${username}`"
+                class="h-full w-full object-cover"
+              />
+              <span v-else>{{ profileInitials }}</span>
+            </div>
+            <div class="min-w-0">
+              <p class="text-primary text-xs uppercase tracking-[0.18em]">
+                Perfil
+              </p>
+              <h2 class="text-base-content mt-1 truncate text-2xl sm:text-3xl">
+                {{ username }}
+              </h2>
+              <p class="text-base-content/70 mt-1 truncate text-sm">
+                {{ profileEmail }}
+              </p>
+            </div>
+          </div>
+
+          <button class="btn btn-sm btn-outline" @click="loadProfile">
+            {{ profileLoading ? "Cargando..." : "Refrescar perfil" }}
+          </button>
+        </div>
+
+        <div class="tabs tabs-boxed mt-6 bg-base-100/70 p-1">
+          <button
+            class="tab w-full text-sm font-semibold"
+            :class="
+              profileTab === 'profile'
+                ? 'tab-active text-primary'
+                : 'text-base-content/70'
+            "
+            @click="profileTab = 'profile'"
+          >
+            Datos
+          </button>
+          <button
+            class="tab w-full text-sm font-semibold"
+            :class="
+              profileTab === 'password'
+                ? 'tab-active text-primary'
+                : 'text-base-content/70'
+            "
+            @click="profileTab = 'password'"
+          >
+            Contrasena
+          </button>
+        </div>
+
+        <form
+          v-if="profileTab === 'profile'"
+          class="mt-6 grid gap-4 lg:grid-cols-[1fr_1.2fr]"
+          @submit.prevent="saveProfile"
+        >
+          <div class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
+            <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
+              Vista publica
+            </p>
+            <div class="mt-4 flex items-center gap-3">
+              <div
+                class="grid h-14 w-14 flex-none place-content-center overflow-hidden rounded-xl border border-base-300 bg-base-200 text-base font-bold text-primary"
+              >
+                <img
+                  v-if="profileAvatarPreview"
+                  :src="profileAvatarPreview"
+                  :alt="`Foto de perfil de ${username}`"
+                  class="h-full w-full object-cover"
+                />
+                <span v-else>{{ profileInitials }}</span>
+              </div>
+              <div class="min-w-0">
+                <p class="truncate text-base font-semibold">{{ username }}</p>
+                <p class="text-base-content/70 truncate text-xs">
+                  {{ profileEmail }}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div class="form-control space-y-1">
+              <label
+                class="label-text text-base-content/70 text-xs uppercase tracking-[0.12em]"
+                >Username</label
+              >
+              <input
+                v-model="profileUsername"
+                required
+                minlength="3"
+                maxlength="32"
+                class="input input-bordered w-full"
+                placeholder="tu_usuario"
+              />
+            </div>
+
+            <div class="form-control space-y-1">
+              <label
+                class="label-text text-base-content/70 text-xs uppercase tracking-[0.12em]"
+                >Foto de perfil</label
+              >
+              <input
+                v-model="profileAvatarUrl"
+                type="url"
+                class="input input-bordered w-full"
+                placeholder="https://ejemplo.com/avatar.jpg"
+              />
+            </div>
+
+            <div class="form-control space-y-1">
+              <label
+                class="label-text text-base-content/70 text-xs uppercase tracking-[0.12em]"
+                >Email</label
+              >
+              <input
+                :value="profileEmail"
+                disabled
+                class="input input-bordered w-full"
+              />
+            </div>
+
+            <button
+              type="submit"
+              class="btn btn-primary w-full sm:w-auto"
+              :disabled="profileSaving || profileLoading"
+            >
+              {{ profileSaving ? "Guardando..." : "Guardar perfil" }}
+            </button>
+          </div>
+        </form>
+
+        <form
+          v-else
+          class="mt-6 max-w-xl space-y-4"
+          @submit.prevent="updateAccountPassword"
+        >
+          <div class="form-control space-y-1">
+            <label
+              class="label-text text-base-content/70 text-xs uppercase tracking-[0.12em]"
+              >Nueva contrasena</label
+            >
+            <input
+              v-model="newPassword"
+              required
+              minlength="6"
+              type="password"
+              class="input input-bordered w-full"
+              placeholder="******"
+            />
+          </div>
+
+          <div class="form-control space-y-1">
+            <label
+              class="label-text text-base-content/70 text-xs uppercase tracking-[0.12em]"
+              >Confirmar contrasena</label
+            >
+            <input
+              v-model="confirmNewPassword"
+              required
+              minlength="6"
+              type="password"
+              class="input input-bordered w-full"
+              placeholder="******"
+            />
+          </div>
+
+          <button
+            type="submit"
+            class="btn btn-primary w-full sm:w-auto"
+            :disabled="passwordSaving"
+          >
+            {{ passwordSaving ? "Actualizando..." : "Actualizar contrasena" }}
+          </button>
+        </form>
+
+        <p v-if="profileError" class="alert alert-error mt-4 text-sm">
+          {{ profileError }}
+        </p>
+        <p v-if="profileMessage" class="alert alert-success mt-4 text-sm">
+          {{ profileMessage }}
+        </p>
+        <p v-if="passwordError" class="alert alert-error mt-4 text-sm">
+          {{ passwordError }}
+        </p>
+        <p v-if="passwordMessage" class="alert alert-success mt-4 text-sm">
+          {{ passwordMessage }}
+        </p>
+      </article>
+    </section>
+
+    <section
+      v-if="activeQuinielaId && activeView === 'picks'"
+      ref="picksSectionRef"
+      class="space-y-3"
+    >
       <article class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div>

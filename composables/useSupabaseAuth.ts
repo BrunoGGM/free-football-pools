@@ -9,6 +9,11 @@ interface SignUpPayload {
   username: string
 }
 
+interface ResetPasswordPayload {
+  email: string
+  redirectTo?: string
+}
+
 export function useSupabaseAuth() {
   const client = useSupabaseClient<any>()
   const user = useSupabaseUser()
@@ -107,6 +112,40 @@ export function useSupabaseAuth() {
     return true
   }
 
+  const resetPasswordForEmail = async (payload: ResetPasswordPayload) => {
+    loading.value = true
+    errorMessage.value = null
+
+    const { error } = await client.auth.resetPasswordForEmail(payload.email, {
+      redirectTo: payload.redirectTo,
+    })
+
+    loading.value = false
+
+    if (error) {
+      errorMessage.value = error.message
+      return false
+    }
+
+    return true
+  }
+
+  const updatePassword = async (password: string) => {
+    loading.value = true
+    errorMessage.value = null
+
+    const { error } = await client.auth.updateUser({ password })
+
+    loading.value = false
+
+    if (error) {
+      errorMessage.value = error.message
+      return false
+    }
+
+    return true
+  }
+
   const signOut = async () => {
     loading.value = true
     errorMessage.value = null
@@ -130,6 +169,8 @@ export function useSupabaseAuth() {
     resetError,
     signInWithPassword,
     signUpWithPassword,
+    resetPasswordForEmail,
+    updatePassword,
     signOut,
   }
 }
