@@ -175,7 +175,7 @@ const championLockText = computed(() => {
     return "";
   }
 
-  return `El pick de campeon quedo bloqueado desde ${kickoffText(championLockStartedAt.value)} porque ya inicio el primer partido.`;
+  return `El pick de campeon quedo bloqueado desde ${kickoffText(championLockStartedAt.value)} porque ya inicio el primer partido de eliminatorias.`;
 });
 
 const rankUpSubtitle = computed(() => {
@@ -1104,23 +1104,29 @@ const loadChampionLockStartedAt = async () => {
     return;
   }
 
-  const firstMatchResult = await client
+  const firstKnockoutMatchResult = await client
     .from("matches")
     .select("match_time")
+    .in("stage", [
+      "round_32",
+      "round_16",
+      "quarter_final",
+      "semi_final",
+      "third_place",
+      "final",
+    ])
     .order("match_time", { ascending: true })
     .limit(1)
     .maybeSingle();
 
-  if (firstMatchResult.error) {
-    championLockStartedAt.value = quiniela.value?.start_date ?? null;
+  if (firstKnockoutMatchResult.error) {
+    championLockStartedAt.value = null;
     return;
   }
 
   championLockStartedAt.value =
-    (firstMatchResult.data as { match_time?: string | null } | null)
-      ?.match_time ??
-    quiniela.value?.start_date ??
-    null;
+    (firstKnockoutMatchResult.data as { match_time?: string | null } | null)
+      ?.match_time ?? null;
 };
 
 const loadRanking = async () => {
@@ -1699,7 +1705,7 @@ const saveChampion = async () => {
   if (championSelectionLocked.value) {
     championPickerOpen.value = false;
     errorMessage.value =
-      "El pick de campeon ya esta bloqueado porque inicio el primer partido.";
+      "El pick de campeon ya esta bloqueado porque inicio el primer partido de eliminatorias.";
     return;
   }
 
@@ -1838,7 +1844,8 @@ onBeforeUnmount(() => {
     >
       <h2 class="text-primary text-lg">Prediccion de campeon</h2>
       <p class="text-base-content/70 mt-1 text-sm">
-        Si aciertas antes del inicio del torneo, sumas 10 puntos bonus.
+        Puedes asignarlo hasta que inicie el primer partido de eliminatorias.
+        Si aciertas, sumas 10 puntos bonus.
       </p>
 
       <div class="mt-4 flex flex-wrap gap-3">
