@@ -975,6 +975,7 @@ export type Database = {
         }
         Returns: number
       }
+      champion_pick_lock_time: { Args: never; Returns: string }
       get_quiniela_rules: {
         Args: { p_quiniela_id: string }
         Returns: {
