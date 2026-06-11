@@ -18,7 +18,11 @@ const canAccessAdmin = ref(false);
 const desktopPartidosDetails = ref<HTMLDetailsElement | null>(null);
 const mobilePartidosDetails = ref<HTMLDetailsElement | null>(null);
 const isPartidosActive = computed(() => {
-  return isActive("/dashboard/grupos") || isActive("/dashboard/eliminatorias");
+  return (
+    isActive("/dashboard/grupos") ||
+    isActive("/dashboard/eliminatorias") ||
+    isActive("/dashboard/picks-adicionales")
+  );
 });
 
 const closePartidosMenus = () => {
@@ -763,6 +767,17 @@ onBeforeUnmount(() => {
                       Eliminatorias
                     </NuxtLink>
                   </li>
+                  <li>
+                    <NuxtLink
+                      to="/dashboard/picks-adicionales"
+                      :class="[
+                        isActive('/dashboard/picks-adicionales') ? 'active' : '',
+                      ]"
+                      @click="closePartidosMenus"
+                    >
+                      Picks adicionales
+                    </NuxtLink>
+                  </li>
                 </ul>
               </details>
             </li>
@@ -852,6 +867,13 @@ onBeforeUnmount(() => {
                         to="/dashboard/eliminatorias"
                         @click="closePartidosMenus"
                         >Eliminatorias</NuxtLink
+                      >
+                    </li>
+                    <li>
+                      <NuxtLink
+                        to="/dashboard/picks-adicionales"
+                        @click="closePartidosMenus"
+                        >Picks adicionales</NuxtLink
                       >
                     </li>
                   </ul>

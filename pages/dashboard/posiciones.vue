@@ -39,6 +39,7 @@ type PointHistorySource =
   | "pick_outcome"
   | "exact_score"
   | "manual"
+  | "custom_pick"
   | "champion_bonus";
 
 interface PointHistoryEntry {
@@ -103,7 +104,7 @@ interface RankedUserRawPredictionRow {
 
 const client = useSupabaseClient<any>();
 const user = useSupabaseUser();
-const { emitChampionSaved, emitRankUp } = useGameUx();
+const { emitRankUp } = useGameUx();
 const activeQuinielaId = useCookie<string | null>("active_quiniela_id");
 const { quiniela, loadActiveQuiniela } = useActiveQuiniela();
 const gamificationSupported = useState<boolean | null>(
@@ -118,14 +119,6 @@ const weeklyRankingSupported = useState<boolean | null>(
 const rows = ref<PositionRow[]>([]);
 const loading = ref(false);
 const errorMessage = ref<string | null>(null);
-const championInput = ref("");
-const championPickerOpen = ref(false);
-const championInputRef = ref<HTMLInputElement | null>(null);
-const championDropdownStyle = ref<Record<string, string>>({});
-const savingChampion = ref(false);
-const championSaved = ref(false);
-const championLockStartedAt = ref<string | null>(null);
-let championSaveTimer: ReturnType<typeof setTimeout> | null = null;
 const rankUpVisible = ref(false);
 const rankUpFrom = ref<number | null>(null);
 const rankUpTo = ref<number | null>(null);
@@ -150,32 +143,9 @@ const pointsHistorySummary = ref({
   pickOutcomePoints: 0,
   exactScorePoints: 0,
   manualPoints: 0,
+  customPickPoints: 0,
   championBonusPoints: 0,
   computedTotal: 0,
-});
-
-const championSelectionLocked = computed(() => {
-  const lockStartedAt = championLockStartedAt.value;
-
-  if (!lockStartedAt) {
-    return false;
-  }
-
-  const lockStartedAtMs = new Date(lockStartedAt).getTime();
-
-  if (!Number.isFinite(lockStartedAtMs)) {
-    return false;
-  }
-
-  return Date.now() >= lockStartedAtMs;
-});
-
-const championLockText = computed(() => {
-  if (!championSelectionLocked.value || !championLockStartedAt.value) {
-    return "";
-  }
-
-  return `El pick de campeon quedo bloqueado desde ${kickoffText(championLockStartedAt.value)} porque ya inicio el primer partido de eliminatorias.`;
 });
 
 const rankUpSubtitle = computed(() => {
@@ -197,25 +167,6 @@ const registeredTeamsMap = computed(() => {
 
   return map;
 });
-
-const championOptions = computed(() => {
-  const query = normalizeTeamKey(championInput.value.trim());
-
-  if (!query) {
-    return registeredTeams.value.slice(0, 12);
-  }
-
-  return registeredTeams.value
-    .filter((team) => {
-      const byName = normalizeTeamKey(team.name);
-      return byName.includes(query) || team.team_key.includes(query);
-    })
-    .slice(0, 12);
-});
-
-const selectedChampionInfo = computed(() =>
-  getChampionInfo(championInput.value.trim() || null),
-);
 
 const leaderRow = computed(() => rows.value[0] ?? null);
 const topTieCount = computed(() => {
@@ -327,6 +278,10 @@ const sourceLabelByHistory = (source: PointHistorySource) => {
     return "Manual";
   }
 
+  if (source === "custom_pick") {
+    return "Pick adicional";
+  }
+
   if (source === "champion_bonus") {
     return "Bonus campeon";
   }
@@ -343,6 +298,10 @@ const sourceBadgeClassByHistory = (source: PointHistorySource) => {
     return "badge-warning";
   }
 
+  if (source === "custom_pick") {
+    return "badge-accent";
+  }
+
   if (source === "champion_bonus") {
     return "badge-secondary";
   }
@@ -357,45 +316,6 @@ const sourceBadgeClassByHistory = (source: PointHistorySource) => {
 const flagIconClassFromCode = (code: string | null | undefined) => {
   const normalized = (code || "").trim().toLowerCase();
   return /^[a-z]{2}$/.test(normalized) ? `fi fi-${normalized}` : null;
-};
-
-const resolveChampionFromRegisteredTeams = (input: string) => {
-  const raw = input.trim();
-
-  if (!raw) {
-    return {
-      matched: true,
-      name: null as string | null,
-    };
-  }
-
-  const normalized = normalizeTeamKey(raw);
-  const exact = registeredTeamsMap.value.get(normalized);
-
-  if (exact) {
-    return {
-      matched: true,
-      name: exact.name,
-    };
-  }
-
-  const startsWith = registeredTeams.value.filter((team) =>
-    normalizeTeamKey(team.name).startsWith(normalized),
-  );
-
-  const firstMatch = startsWith.at(0);
-
-  if (startsWith.length === 1 && firstMatch) {
-    return {
-      matched: true,
-      name: firstMatch.name,
-    };
-  }
-
-  return {
-    matched: false,
-    name: raw,
-  };
 };
 
 const getChampionInfo = (value: string | null) => {
@@ -486,62 +406,6 @@ const matchTeamLogoUrl = (teamName: string | null | undefined) => {
 const matchTeamDisplayName = (teamName: string | null | undefined) => {
   const info = getMatchTeamInfo(teamName);
   return info.name;
-};
-
-const teamOptionFlag = (team: TeamProfileOption) =>
-  teamFlagEmojiFromCode(team.code || resolveTeamCode(team.name));
-
-const teamOptionFlagIconClass = (team: TeamProfileOption) =>
-  flagIconClassFromCode(team.code || resolveTeamCode(team.name));
-
-const selectChampionFromList = (team: TeamProfileOption) => {
-  if (championSelectionLocked.value) {
-    return;
-  }
-
-  championInput.value = team.name;
-  championPickerOpen.value = false;
-};
-
-const onChampionInputBlur = () => {
-  setTimeout(() => {
-    championPickerOpen.value = false;
-  }, 120);
-};
-
-const updateChampionDropdownPosition = () => {
-  if (!process.client || !championInputRef.value) {
-    return;
-  }
-
-  const rect = championInputRef.value.getBoundingClientRect();
-
-  championDropdownStyle.value = {
-    position: "fixed",
-    left: `${Math.max(8, rect.left)}px`,
-    top: `${rect.bottom + 8}px`,
-    width: `${rect.width}px`,
-    zIndex: "1400",
-  };
-};
-
-const onChampionDropdownViewportChange = () => {
-  if (championPickerOpen.value) {
-    updateChampionDropdownPosition();
-  }
-};
-
-const triggerChampionCelebration = () => {
-  if (championSaveTimer) {
-    clearTimeout(championSaveTimer);
-  }
-
-  championSaved.value = true;
-  emitChampionSaved();
-
-  championSaveTimer = setTimeout(() => {
-    championSaved.value = false;
-  }, 2300);
 };
 
 const triggerRankUpCelebration = (fromRank: number, toRank: number) => {
@@ -675,6 +539,7 @@ const closePointsHistoryModal = () => {
     pickOutcomePoints: 0,
     exactScorePoints: 0,
     manualPoints: 0,
+    customPickPoints: 0,
     championBonusPoints: 0,
     computedTotal: 0,
   };
@@ -912,6 +777,74 @@ const openPointsHistoryModal = async (row: PositionRow) => {
           }))
           .filter((entry) => entry.points !== 0);
 
+  const customPickAnswersResult = await client
+    .from("quiniela_custom_pick_answers")
+    .select(
+      "id, answer_text, answer_country, is_correct, created_at, custom_pick:quiniela_custom_picks(id, title, points)",
+    )
+    .eq("quiniela_id", activeQuinielaId.value)
+    .eq("user_id", row.user_id)
+    .eq("is_correct", true)
+    .order("created_at", { ascending: false });
+
+  const customPickTablesMissing =
+    customPickAnswersResult.error &&
+    (String(customPickAnswersResult.error.code || "") === "42P01" ||
+      String(customPickAnswersResult.error.message || "")
+        .toLowerCase()
+        .includes("quiniela_custom_pick"));
+
+  if (customPickAnswersResult.error && !customPickTablesMissing) {
+    pointsHistoryLoading.value = false;
+    pointsHistoryError.value =
+      customPickAnswersResult.error.message ||
+      "No se pudo cargar historial de picks adicionales.";
+    return;
+  }
+
+  const customPickEntries = customPickTablesMissing
+    ? []
+    : (
+        (customPickAnswersResult.data as Array<{
+          id: string;
+          answer_text: string | null;
+          answer_country: string | null;
+          created_at: string | null;
+          custom_pick:
+            | {
+                title?: string | null;
+                points?: number | null;
+              }
+            | Array<{
+                title?: string | null;
+                points?: number | null;
+              }>
+            | null;
+        }> | null) ?? []
+      )
+        .map((item) => {
+          const customPick = Array.isArray(item.custom_pick)
+            ? (item.custom_pick[0] ?? null)
+            : item.custom_pick;
+          const answerParts = [item.answer_text, item.answer_country]
+            .filter(Boolean)
+            .map((part) => String(part).trim())
+            .filter(Boolean);
+
+          return {
+            id: `custom-pick-${item.id}`,
+            source: "custom_pick" as const,
+            points: Number(customPick?.points ?? 0),
+            created_at: item.created_at || new Date().toISOString(),
+            title: customPick?.title?.trim() || "Pick adicional",
+            detail:
+              answerParts.length > 0
+                ? `Respuesta acertada: ${answerParts.join(" • ")}`
+                : "Respuesta acertada validada por admin",
+          };
+        })
+        .filter((entry) => entry.points !== 0);
+
   const matchPoints = predictionEntries.reduce(
     (acc, entry) => acc + entry.points,
     0,
@@ -926,8 +859,12 @@ const openPointsHistoryModal = async (row: PositionRow) => {
     (acc, entry) => acc + entry.points,
     0,
   );
+  const customPickPoints = customPickEntries.reduce(
+    (acc, entry) => acc + entry.points,
+    0,
+  );
   const memberTotalPoints = Number(memberStateResult.data?.total_points ?? 0);
-  const championBonusPoints = memberTotalPoints - matchPoints;
+  const championBonusPoints = memberTotalPoints - matchPoints - customPickPoints;
 
   const championBonusEntry: PointHistoryEntry[] =
     championBonusPoints === 0
@@ -948,6 +885,7 @@ const openPointsHistoryModal = async (row: PositionRow) => {
   const entries = [
     ...predictionEntries,
     ...manualEntries,
+    ...customPickEntries,
     ...championBonusEntry,
   ]
     .slice()
@@ -962,13 +900,14 @@ const openPointsHistoryModal = async (row: PositionRow) => {
     pickOutcomePoints,
     exactScorePoints,
     manualPoints,
+    customPickPoints,
     championBonusPoints,
     computedTotal: memberTotalPoints + manualPoints,
   };
 
   if (manualReadDenied) {
     pointsHistoryError.value =
-      "No tienes permisos para ver ajustes manuales; se muestran solo puntos por pick, exacto y bonus de campeon.";
+      "No tienes permisos para ver ajustes manuales; se muestran picks, exactos, picks adicionales y bonus de campeon.";
   }
 
   pointsHistoryLoading.value = false;
@@ -1098,44 +1037,12 @@ const appendGamificationMessage = (message: string) => {
   }
 };
 
-const loadChampionLockStartedAt = async () => {
-  if (!activeQuinielaId.value) {
-    championLockStartedAt.value = null;
-    return;
-  }
-
-  const firstKnockoutMatchResult = await client
-    .from("matches")
-    .select("match_time")
-    .in("stage", [
-      "round_32",
-      "round_16",
-      "quarter_final",
-      "semi_final",
-      "third_place",
-      "final",
-    ])
-    .order("match_time", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (firstKnockoutMatchResult.error) {
-    championLockStartedAt.value = null;
-    return;
-  }
-
-  championLockStartedAt.value =
-    (firstKnockoutMatchResult.data as { match_time?: string | null } | null)
-      ?.match_time ?? null;
-};
-
 const loadRanking = async () => {
   if (!activeQuinielaId.value) {
     rows.value = [];
     gamificationMessage.value = null;
     weeklyLeaders.value = [];
     canViewOtherQuinielas.value = false;
-    championLockStartedAt.value = null;
     closeUserQuinielaModal();
     return;
   }
@@ -1144,8 +1051,6 @@ const loadRanking = async () => {
   errorMessage.value = null;
   gamificationMessage.value = null;
   weeklyLeaders.value = [];
-
-  await loadChampionLockStartedAt();
 
   const visibilityResult = await client
     .from("quiniela_rules")
@@ -1572,7 +1477,6 @@ const loadRanking = async () => {
   }
 
   previousOwnRank.value = ownRow?.rank ?? null;
-  championInput.value = ownRow?.predicted_champion ?? "";
   const weekStartDate = getCurrentWeekStartDate();
   let weeklyLoadedFromMaterialized = false;
 
@@ -1697,85 +1601,12 @@ const loadRegisteredTeams = async () => {
     ) ?? [];
 };
 
-const saveChampion = async () => {
-  if (!activeQuinielaId.value || !user.value) {
-    return;
-  }
-
-  if (championSelectionLocked.value) {
-    championPickerOpen.value = false;
-    errorMessage.value =
-      "El pick de campeon ya esta bloqueado porque inicio el primer partido de eliminatorias.";
-    return;
-  }
-
-  savingChampion.value = true;
-  errorMessage.value = null;
-
-  const resolvedChampion = resolveChampionFromRegisteredTeams(
-    championInput.value,
-  );
-
-  if (!resolvedChampion.matched) {
-    savingChampion.value = false;
-    errorMessage.value =
-      "Selecciona un campeon de los equipos registrados para guardar tu pick.";
-    return;
-  }
-
-  championInput.value = resolvedChampion.name ?? "";
-
-  const { error } = await client
-    .from("quiniela_members")
-    .update({ predicted_champion: resolvedChampion.name })
-    .eq("user_id", user.value.id)
-    .eq("quiniela_id", activeQuinielaId.value);
-
-  savingChampion.value = false;
-
-  if (error) {
-    championSaved.value = false;
-    errorMessage.value = error.message;
-    return;
-  }
-
-  triggerChampionCelebration();
-  await loadRanking();
-};
-
 onMounted(() => {
   void (async () => {
     await loadActiveQuiniela();
     await loadRanking();
     await loadRegisteredTeams();
   })();
-});
-
-watch(championPickerOpen, (open) => {
-  if (!process.client) {
-    return;
-  }
-
-  if (open) {
-    nextTick(() => {
-      updateChampionDropdownPosition();
-    });
-
-    window.addEventListener("resize", onChampionDropdownViewportChange);
-    window.addEventListener("scroll", onChampionDropdownViewportChange, true);
-    return;
-  }
-
-  window.removeEventListener("resize", onChampionDropdownViewportChange);
-  window.removeEventListener("scroll", onChampionDropdownViewportChange, true);
-});
-
-watch(championSelectionLocked, (locked) => {
-  if (!locked) {
-    return;
-  }
-
-  championPickerOpen.value = false;
 });
 
 watch(
@@ -1791,21 +1622,8 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  if (championSaveTimer) {
-    clearTimeout(championSaveTimer);
-  }
-
   if (rankUpTimer) {
     clearTimeout(rankUpTimer);
-  }
-
-  if (process.client) {
-    window.removeEventListener("resize", onChampionDropdownViewportChange);
-    window.removeEventListener(
-      "scroll",
-      onChampionDropdownViewportChange,
-      true,
-    );
   }
 });
 </script>
@@ -1836,120 +1654,6 @@ onBeforeUnmount(() => {
       <NuxtLink to="/ingresar" class="link link-hover ml-2 font-semibold"
         >Ir a ingresar</NuxtLink
       >
-    </article>
-
-    <article
-      v-else
-      class="champion-picker-host pitch-panel card relative z-20 rounded-2xl border border-base-300 bg-base-200/70 p-5"
-    >
-      <h2 class="text-primary text-lg">Prediccion de campeon</h2>
-      <p class="text-base-content/70 mt-1 text-sm">
-        Puedes asignarlo hasta que inicie el primer partido de eliminatorias.
-        Si aciertas, sumas 10 puntos bonus.
-      </p>
-
-      <div class="mt-4 flex flex-wrap gap-3">
-        <div class="relative z-30 min-w-55 flex-1">
-          <input
-            ref="championInputRef"
-            v-model="championInput"
-            class="input input-bordered w-full"
-            :disabled="championSelectionLocked"
-            placeholder="Busca y selecciona campeon"
-            @focus="!championSelectionLocked && (championPickerOpen = true)"
-            @input="!championSelectionLocked && (championPickerOpen = true)"
-            @blur="onChampionInputBlur"
-          />
-
-          <Teleport to="body">
-            <div
-              v-if="championPickerOpen"
-              :style="championDropdownStyle"
-              class="bg-base-100/98 max-h-60 overflow-auto rounded-xl border border-base-300 shadow-2xl"
-            >
-              <button
-                v-for="team in championOptions"
-                :key="team.team_key"
-                type="button"
-                class="hover:bg-primary/10 flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
-                @mousedown.prevent="selectChampionFromList(team)"
-              >
-                <img
-                  v-if="team.logo_url"
-                  :src="team.logo_url"
-                  :alt="`Escudo de ${team.name}`"
-                  class="h-5 w-5 rounded-full border border-base-300 object-cover"
-                  loading="lazy"
-                />
-                <span
-                  v-else-if="teamOptionFlagIconClass(team)"
-                  :class="teamOptionFlagIconClass(team) || undefined"
-                  class="inline-block h-4 w-5 rounded-[999px]"
-                  :title="`Bandera de ${team.name}`"
-                  aria-hidden="true"
-                />
-                <span v-else>{{ teamOptionFlag(team) }}</span>
-                <span>{{ team.name }}</span>
-              </button>
-
-              <p
-                v-if="championOptions.length === 0"
-                class="text-base-content/70 px-3 py-3 text-xs"
-              >
-                Sin coincidencias en equipos registrados.
-              </p>
-            </div>
-          </Teleport>
-
-          <p
-            v-if="selectedChampionInfo"
-            class="text-base-content/70 mt-2 inline-flex items-center gap-2 text-xs"
-          >
-            <img
-              v-if="selectedChampionInfo.logoUrl"
-              :src="selectedChampionInfo.logoUrl"
-              :alt="`Escudo de ${selectedChampionInfo.name}`"
-              class="h-4 w-4 rounded-full border border-base-300 object-cover"
-              loading="lazy"
-            />
-            <span
-              v-else-if="championFlagIconClass(selectedChampionInfo.name)"
-              :class="
-                championFlagIconClass(selectedChampionInfo.name) || undefined
-              "
-              class="inline-block h-3.5 w-5 rounded-[999px]"
-              :title="`Bandera de ${selectedChampionInfo.name}`"
-              aria-hidden="true"
-            />
-            <span v-else>{{
-              teamFlagEmojiFromCode(selectedChampionInfo.code)
-            }}</span>
-            <span>Seleccionado: {{ selectedChampionInfo.name }}</span>
-          </p>
-
-          <p
-            v-if="championSelectionLocked"
-            class="alert alert-warning mt-2 rounded-lg px-3 py-2 text-xs"
-          >
-            {{ championLockText }}
-          </p>
-        </div>
-
-        <button
-          :disabled="savingChampion || championSelectionLocked"
-          class="btn btn-primary btn-bet-glow"
-          @click="saveChampion"
-        >
-          {{ savingChampion ? "Guardando..." : "Guardar campeon" }}
-        </button>
-      </div>
-
-      <WowSaveBurst
-        :visible="championSaved"
-        class="mt-3"
-        title="Campeon bloqueado"
-        subtitle="Bonus potencial de 10 puntos"
-      />
     </article>
 
     <article v-if="loading" class="alert rounded-2xl text-sm">
@@ -2305,7 +2009,7 @@ onBeforeUnmount(() => {
 
           <div
             v-if="!pointsHistoryLoading"
-            class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6"
+            class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-7"
           >
             <article
               class="card rounded-xl border border-base-300 bg-base-100/70 p-3"
@@ -2341,6 +2045,16 @@ onBeforeUnmount(() => {
               <p class="text-base-content/70 text-xs uppercase">Manuales</p>
               <p class="text-lg font-semibold">
                 {{ pointsHistorySummary.manualPoints }}
+              </p>
+            </article>
+            <article
+              class="card rounded-xl border border-base-300 bg-base-100/70 p-3"
+            >
+              <p class="text-base-content/70 text-xs uppercase">
+                Picks adicionales
+              </p>
+              <p class="text-lg font-semibold">
+                {{ pointsHistorySummary.customPickPoints }}
               </p>
             </article>
             <article

@@ -53,6 +53,32 @@ interface TicketRedemption {
   created_at: string;
 }
 
+interface CustomPickDefinition {
+  id: string;
+  quiniela_id: string;
+  title: string;
+  description: string | null;
+  requires_text: boolean;
+  requires_country: boolean;
+  points: number;
+  locks_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface CustomPickAnswerReview {
+  id: string;
+  custom_pick_id: string;
+  quiniela_id: string;
+  user_id: string;
+  username: string;
+  answer_text: string | null;
+  answer_country: string | null;
+  is_correct: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 const props = defineProps<{
   isGlobalAdmin: boolean;
   globalLoading: boolean;
@@ -143,6 +169,26 @@ const downloadingTicket = ref(false);
 const ticketLogoMode = ref<TicketLogoMode>("none");
 const ticketsByQuiniela = ref<Record<string, AccessTicket[]>>({});
 const redemptionsByQuiniela = ref<Record<string, TicketRedemption[]>>({});
+const additionalPickQuinielaId = ref("");
+const customPicksLoading = ref(false);
+const customPickSaving = ref(false);
+const customPickDeletingId = ref<string | null>(null);
+const customPickAnswerSavingId = ref<string | null>(null);
+const customPicksMessage = ref<string | null>(null);
+const customPicksError = ref<string | null>(null);
+const customPicksByQuiniela = ref<Record<string, CustomPickDefinition[]>>({});
+const customPickAnswersByQuiniela = ref<
+  Record<string, CustomPickAnswerReview[]>
+>({});
+const customPickValidationDraft = ref<Record<string, boolean>>({});
+const customPickForm = reactive({
+  title: "",
+  description: "",
+  requires_text: true,
+  requires_country: false,
+  points: 3,
+  locks_at: "",
+});
 
 const getAdminHeaders = async () => {
   const { data } = await client.auth.getSession();
@@ -161,6 +207,237 @@ const adminFetch = async <T,>(url: string, options: any = {}) => {
       ...authHeaders,
     },
   });
+};
+
+const customPickManagedQuinielaId = computed(() => {
+  if (additionalPickQuinielaId.value) {
+    return additionalPickQuinielaId.value;
+  }
+
+  if (props.quinielaForm.id) {
+    return props.quinielaForm.id;
+  }
+
+  if (props.manualPointsForm.quiniela_id) {
+    return props.manualPointsForm.quiniela_id;
+  }
+
+  return props.managedQuinielas[0]?.id || "";
+});
+
+const activeCustomPicks = computed(
+  () => customPicksByQuiniela.value[customPickManagedQuinielaId.value] || [],
+);
+
+const activeCustomPickAnswers = computed(
+  () =>
+    customPickAnswersByQuiniela.value[customPickManagedQuinielaId.value] || [],
+);
+
+const toInputDateTime = (isoDate: string | null) => {
+  if (!isoDate) {
+    return "";
+  }
+
+  const date = new Date(isoDate);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const pad = (value: number) => String(value).padStart(2, "0");
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate(),
+  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const customPickFormatLabel = (pick: CustomPickDefinition) => {
+  if (pick.requires_text && pick.requires_country) {
+    return "Texto + pais";
+  }
+
+  if (pick.requires_country) {
+    return "Pais";
+  }
+
+  return "Texto";
+};
+
+const customPickAnswerText = (answer: CustomPickAnswerReview) => {
+  const parts = [answer.answer_text?.trim() || null, answer.answer_country?.trim() || null]
+    .filter(Boolean)
+    .map((item) => String(item));
+
+  return parts.length > 0 ? parts.join(" · ") : "Sin respuesta";
+};
+
+const answersForCustomPick = (pickId: string) =>
+  activeCustomPickAnswers.value.filter((answer) => answer.custom_pick_id === pickId);
+
+const resetCustomPickMessages = () => {
+  customPicksMessage.value = null;
+  customPicksError.value = null;
+};
+
+const resetCustomPickForm = () => {
+  customPickForm.title = "";
+  customPickForm.description = "";
+  customPickForm.requires_text = true;
+  customPickForm.requires_country = false;
+  customPickForm.points = 3;
+  customPickForm.locks_at = "";
+};
+
+const syncCustomPickValidationDraft = (
+  answers: CustomPickAnswerReview[],
+) => {
+  const nextDraft: Record<string, boolean> = {
+    ...customPickValidationDraft.value,
+  };
+
+  for (const answer of answers) {
+    nextDraft[answer.id] = answer.is_correct;
+  }
+
+  customPickValidationDraft.value = nextDraft;
+};
+
+const loadCustomPicksForAdmin = async (quinielaId: string) => {
+  if (!quinielaId) {
+    return;
+  }
+
+  customPicksLoading.value = true;
+  resetCustomPickMessages();
+
+  try {
+    const result = await adminFetch<{
+      picks: CustomPickDefinition[];
+      answers: CustomPickAnswerReview[];
+    }>(`/api/admin/quinielas/${quinielaId}/custom-picks`);
+
+    customPicksByQuiniela.value = {
+      ...customPicksByQuiniela.value,
+      [quinielaId]: result.picks || [],
+    };
+    customPickAnswersByQuiniela.value = {
+      ...customPickAnswersByQuiniela.value,
+      [quinielaId]: result.answers || [],
+    };
+    syncCustomPickValidationDraft(result.answers || []);
+  } catch (error: any) {
+    customPicksError.value =
+      error?.data?.statusMessage || error?.message || "No se pudieron cargar los picks adicionales.";
+  } finally {
+    customPicksLoading.value = false;
+  }
+};
+
+const createCustomPick = async () => {
+  const quinielaId = customPickManagedQuinielaId.value;
+
+  resetCustomPickMessages();
+
+  if (!quinielaId) {
+    customPicksError.value = "Selecciona una quiniela para crear el pick.";
+    return;
+  }
+
+  if (!customPickForm.requires_text && !customPickForm.requires_country) {
+    customPicksError.value = "Debes requerir texto, pais o ambos.";
+    return;
+  }
+
+  customPickSaving.value = true;
+
+  try {
+    await adminFetch(`/api/admin/quinielas/${quinielaId}/custom-picks`, {
+      method: "POST",
+      body: {
+        title: customPickForm.title,
+        description: customPickForm.description,
+        requires_text: customPickForm.requires_text,
+        requires_country: customPickForm.requires_country,
+        points: Number(customPickForm.points || 0),
+        locks_at: customPickForm.locks_at || null,
+      },
+    });
+
+    customPicksMessage.value = "Pick adicional creado.";
+    resetCustomPickForm();
+    await loadCustomPicksForAdmin(quinielaId);
+  } catch (error: any) {
+    customPicksError.value =
+      error?.data?.statusMessage || error?.message || "No se pudo crear el pick adicional.";
+  } finally {
+    customPickSaving.value = false;
+  }
+};
+
+const deleteCustomPick = async (pickId: string) => {
+  const quinielaId = customPickManagedQuinielaId.value;
+
+  if (!quinielaId || !pickId) {
+    return;
+  }
+
+  resetCustomPickMessages();
+  customPickDeletingId.value = pickId;
+
+  try {
+    await adminFetch(`/api/admin/quinielas/${quinielaId}/custom-picks/${pickId}`, {
+      method: "DELETE",
+    });
+
+    customPicksMessage.value = "Pick adicional eliminado.";
+    await loadCustomPicksForAdmin(quinielaId);
+  } catch (error: any) {
+    customPicksError.value =
+      error?.data?.statusMessage || error?.message || "No se pudo eliminar el pick adicional.";
+  } finally {
+    customPickDeletingId.value = null;
+  }
+};
+
+const saveCustomPickAnswers = async (pickId: string) => {
+  const quinielaId = customPickManagedQuinielaId.value;
+
+  if (!quinielaId || !pickId) {
+    return;
+  }
+
+  const answers = answersForCustomPick(pickId);
+  const updates = answers
+    .filter((answer) => customPickValidationDraft.value[answer.id] !== answer.is_correct)
+    .map((answer) => ({
+      answer_id: answer.id,
+      is_correct: Boolean(customPickValidationDraft.value[answer.id]),
+    }));
+
+  resetCustomPickMessages();
+
+  if (updates.length === 0) {
+    customPicksMessage.value = "No hay cambios pendientes para este pick.";
+    return;
+  }
+
+  customPickAnswerSavingId.value = pickId;
+
+  try {
+    await adminFetch(`/api/admin/quinielas/${quinielaId}/custom-pick-answers`, {
+      method: "PATCH",
+      body: { updates },
+    });
+
+    customPicksMessage.value = "Respuestas actualizadas y puntos recalculados.";
+    await loadCustomPicksForAdmin(quinielaId);
+  } catch (error: any) {
+    customPicksError.value =
+      error?.data?.statusMessage || error?.message || "No se pudieron actualizar las respuestas.";
+  } finally {
+    customPickAnswerSavingId.value = null;
+  }
 };
 
 const formatTicketPrice = (value: number) => {
@@ -964,7 +1241,27 @@ watch(
     if (ticketPreviewQuiniela.value && !ids.includes(ticketPreviewQuiniela.value.id)) {
       closeTicketPreview();
     }
+
+    if (!additionalPickQuinielaId.value || !ids.includes(additionalPickQuinielaId.value)) {
+      additionalPickQuinielaId.value =
+        props.quinielaForm.id || props.manualPointsForm.quiniela_id || ids[0] || "";
+    }
   },
+  { immediate: true },
+);
+
+watch(
+  customPickManagedQuinielaId,
+  (quinielaId) => {
+    if (!quinielaId) {
+      return;
+    }
+
+    if (!customPicksByQuiniela.value[quinielaId]) {
+      void loadCustomPicksForAdmin(quinielaId);
+    }
+  },
+  { immediate: true },
 );
 </script>
 
@@ -1402,6 +1699,247 @@ watch(
         <p v-if="manualPointsError" class="alert alert-error mt-3 text-xs">
           {{ manualPointsError }}
         </p>
+      </div>
+
+      <div
+        class="card mt-6 rounded-xl border border-base-300 bg-base-100/70 p-4"
+      >
+        <h3 class="text-primary text-lg">Picks adicionales</h3>
+        <p class="text-base-content/70 mt-1 text-sm">
+          Crea picks personalizados por quiniela y valida manualmente las
+          respuestas correctas para sumar puntos automaticamente.
+        </p>
+
+        <div class="mt-4 grid gap-3 md:grid-cols-2">
+          <div class="space-y-1 md:col-span-2">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Quiniela objetivo
+            </label>
+            <select
+              v-model="additionalPickQuinielaId"
+              class="select select-bordered w-full"
+            >
+              <option value="">Selecciona quiniela</option>
+              <option
+                v-for="item in managedQuinielas"
+                :key="`custom-pick-${item.id}`"
+                :value="item.id"
+              >
+                {{ item.name }} ({{ item.access_code }})
+              </option>
+            </select>
+          </div>
+
+          <div class="space-y-1 md:col-span-2">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Titulo del pick
+            </label>
+            <input
+              v-model="customPickForm.title"
+              class="input input-bordered w-full"
+              placeholder="Ej: Goleador del torneo"
+            />
+          </div>
+
+          <div class="space-y-1 md:col-span-2">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Descripcion (opcional)
+            </label>
+            <textarea
+              v-model="customPickForm.description"
+              rows="2"
+              class="textarea textarea-bordered w-full"
+              placeholder="Instrucciones para los usuarios"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label class="label cursor-pointer justify-start gap-3">
+              <input
+                v-model="customPickForm.requires_text"
+                type="checkbox"
+                class="checkbox checkbox-primary"
+              />
+              <span class="text-sm">Respuesta en texto</span>
+            </label>
+          </div>
+
+          <div class="space-y-1">
+            <label class="label cursor-pointer justify-start gap-3">
+              <input
+                v-model="customPickForm.requires_country"
+                type="checkbox"
+                class="checkbox checkbox-primary"
+              />
+              <span class="text-sm">Seleccion de pais</span>
+            </label>
+          </div>
+
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Puntos
+            </label>
+            <input
+              v-model.number="customPickForm.points"
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Fecha de bloqueo
+            </label>
+            <input
+              v-model="customPickForm.locks_at"
+              type="datetime-local"
+              class="input input-bordered w-full"
+            />
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button
+            class="btn btn-primary btn-sm"
+            :disabled="customPickSaving"
+            @click="createCustomPick"
+          >
+            {{ customPickSaving ? "Creando..." : "Crear pick adicional" }}
+          </button>
+          <button class="btn btn-outline btn-sm" @click="resetCustomPickForm">
+            Limpiar
+          </button>
+          <button
+            class="btn btn-ghost btn-sm"
+            :disabled="customPicksLoading || !customPickManagedQuinielaId"
+            @click="loadCustomPicksForAdmin(customPickManagedQuinielaId)"
+          >
+            {{ customPicksLoading ? "Cargando..." : "Recargar picks" }}
+          </button>
+        </div>
+
+        <p v-if="customPicksMessage" class="alert alert-success mt-3 text-xs">
+          {{ customPicksMessage }}
+        </p>
+        <p v-if="customPicksError" class="alert alert-error mt-3 text-xs">
+          {{ customPicksError }}
+        </p>
+
+        <div
+          v-if="customPickManagedQuinielaId"
+          class="mt-5 space-y-4"
+        >
+          <article
+            v-for="pick in activeCustomPicks"
+            :key="pick.id"
+            class="rounded-2xl border border-base-300 bg-base-200/50 p-4"
+          >
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 class="font-semibold text-base-content">{{ pick.title }}</h4>
+                <p v-if="pick.description" class="text-base-content/70 mt-1 text-sm">
+                  {{ pick.description }}
+                </p>
+                <div class="mt-2 flex flex-wrap gap-2 text-xs">
+                  <span class="badge badge-outline">
+                    Formato: {{ customPickFormatLabel(pick) }}
+                  </span>
+                  <span class="badge badge-outline">+{{ pick.points }} pts</span>
+                  <span class="badge badge-outline">
+                    {{ pick.locks_at ? `Bloquea ${formatTicketDate(pick.locks_at)}` : 'Sin bloqueo' }}
+                  </span>
+                  <span class="badge badge-outline">
+                    {{ answersForCustomPick(pick.id).length }} respuestas
+                  </span>
+                </div>
+              </div>
+
+              <button
+                class="btn btn-outline btn-error btn-xs"
+                :disabled="customPickDeletingId === pick.id"
+                @click="deleteCustomPick(pick.id)"
+              >
+                {{ customPickDeletingId === pick.id ? "Eliminando..." : "Eliminar" }}
+              </button>
+            </div>
+
+            <div
+              v-if="answersForCustomPick(pick.id).length > 0"
+              class="mt-4 overflow-x-auto rounded-xl border border-base-300"
+            >
+              <table class="table table-sm min-w-full">
+                <thead class="bg-base-100 text-xs uppercase tracking-[0.12em] text-base-content/70">
+                  <tr>
+                    <th>Jugador</th>
+                    <th>Respuesta</th>
+                    <th>Correcto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="answer in answersForCustomPick(pick.id)"
+                    :key="answer.id"
+                    class="border-t border-base-300"
+                  >
+                    <td class="font-medium">{{ answer.username }}</td>
+                    <td>{{ customPickAnswerText(answer) }}</td>
+                    <td>
+                      <label class="label cursor-pointer justify-start gap-3">
+                        <input
+                          v-model="customPickValidationDraft[answer.id]"
+                          type="checkbox"
+                          class="checkbox checkbox-success checkbox-sm"
+                        />
+                        <span class="text-xs">Marcar acierto</span>
+                      </label>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p
+              v-else
+              class="text-base-content/60 mt-4 text-sm"
+            >
+              Aun no hay respuestas de usuarios para este pick.
+            </p>
+
+            <div class="mt-4">
+              <button
+                class="btn btn-secondary btn-sm"
+                :disabled="customPickAnswerSavingId === pick.id"
+                @click="saveCustomPickAnswers(pick.id)"
+              >
+                {{
+                  customPickAnswerSavingId === pick.id
+                    ? "Guardando validacion..."
+                    : "Guardar validacion"
+                }}
+              </button>
+            </div>
+          </article>
+
+          <p
+            v-if="!customPicksLoading && activeCustomPicks.length === 0"
+            class="text-base-content/60 text-sm"
+          >
+            Esta quiniela aun no tiene picks adicionales configurados.
+          </p>
+        </div>
       </div>
 
       <div

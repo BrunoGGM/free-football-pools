@@ -392,6 +392,121 @@ export type Database = {
           },
         ]
       }
+      quiniela_custom_pick_answers: {
+        Row: {
+          answer_country: string | null
+          answer_text: string | null
+          created_at: string
+          custom_pick_id: string
+          id: string
+          is_correct: boolean
+          quiniela_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          answer_country?: string | null
+          answer_text?: string | null
+          created_at?: string
+          custom_pick_id: string
+          id?: string
+          is_correct?: boolean
+          quiniela_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          answer_country?: string | null
+          answer_text?: string | null
+          created_at?: string
+          custom_pick_id?: string
+          id?: string
+          is_correct?: boolean
+          quiniela_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiniela_custom_pick_answers_custom_pick_id_fkey"
+            columns: ["custom_pick_id"]
+            isOneToOne: false
+            referencedRelation: "quiniela_custom_picks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiniela_custom_pick_answers_quiniela_id_fkey"
+            columns: ["quiniela_id"]
+            isOneToOne: false
+            referencedRelation: "quinielas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiniela_custom_pick_answers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiniela_custom_picks: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          locks_at: string | null
+          points: number
+          quiniela_id: string
+          requires_country: boolean
+          requires_text: boolean
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          locks_at?: string | null
+          points?: number
+          quiniela_id: string
+          requires_country?: boolean
+          requires_text?: boolean
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          locks_at?: string | null
+          points?: number
+          quiniela_id?: string
+          requires_country?: boolean
+          requires_text?: boolean
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiniela_custom_picks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiniela_custom_picks_quiniela_id_fkey"
+            columns: ["quiniela_id"]
+            isOneToOne: false
+            referencedRelation: "quinielas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quiniela_group_overrides: {
         Row: {
           created_at: string
