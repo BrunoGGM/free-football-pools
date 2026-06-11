@@ -60,6 +60,7 @@ const user = useSupabaseUser();
 const client = useSupabaseClient<any>();
 const { quiniela, activeQuinielaId, loadActiveQuiniela } = useActiveQuiniela();
 const { emitExactHit } = useGameUx();
+const { printQuiniela } = usePrintableQuiniela();
 const predictionsByQuinielaSupported = useState<boolean | null>(
   "predictions-by-quiniela-supported",
   () => null,
@@ -355,6 +356,29 @@ const goToPicks = () => {
       block: "start",
     });
   });
+};
+
+const printPopupBlocked = ref(false);
+
+const printMyQuiniela = (mode: "with-picks" | "blank") => {
+  printPopupBlocked.value = false;
+
+  const opened = printQuiniela({
+    quiniela: {
+      name: quiniela.value?.name || "Mi quiniela",
+      logoUrl: quiniela.value?.logo_url ?? null,
+      startDate: quiniela.value?.start_date ?? null,
+      accessCode: quiniela.value?.access_code ?? null,
+      predictedChampion: predictedChampion.value,
+    },
+    username: username.value || "Jugador",
+    predictions: predictions.value,
+    mode,
+  });
+
+  if (!opened) {
+    printPopupBlocked.value = true;
+  }
 };
 
 const goToStats = () => {
@@ -1815,10 +1839,53 @@ onBeforeUnmount(() => {
             </h2>
           </div>
 
-          <button class="btn btn-sm btn-ghost" @click="goToStats">
-            Volver a stats
-          </button>
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="dropdown dropdown-end">
+              <button tabindex="0" class="btn btn-sm btn-primary">
+                Exportar PDF
+              </button>
+              <ul
+                tabindex="0"
+                class="dropdown-content menu z-30 mt-2 w-60 rounded-2xl border border-base-300 bg-base-100 p-2 shadow-xl"
+              >
+                <li>
+                  <button @click="printMyQuiniela('with-picks')">
+                    <span>📄</span>
+                    <span class="flex flex-col text-left">
+                      <span class="font-semibold">Con mis picks</span>
+                      <span class="text-base-content/60 text-xs">
+                        Incluye marcadores y campeon
+                      </span>
+                    </span>
+                  </button>
+                </li>
+                <li>
+                  <button @click="printMyQuiniela('blank')">
+                    <span>🖊️</span>
+                    <span class="flex flex-col text-left">
+                      <span class="font-semibold">Plantilla en blanco</span>
+                      <span class="text-base-content/60 text-xs">
+                        Para llenar a mano
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            <button class="btn btn-sm btn-ghost" @click="goToStats">
+              Volver a stats
+            </button>
+          </div>
         </div>
+
+        <p
+          v-if="printPopupBlocked"
+          class="alert alert-warning mt-3 rounded-xl text-xs"
+        >
+          No se pudo abrir el dialogo de impresion. Intenta de nuevo en unos
+          segundos.
+        </p>
       </article>
 
       <article v-if="loading" class="alert rounded-2xl text-sm">
