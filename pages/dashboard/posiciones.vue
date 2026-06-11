@@ -293,6 +293,34 @@ const selectedUserAdditionalPickAnswerText = (
   return parts.length > 0 ? parts.join(" • ") : "Sin respuesta";
 };
 
+const selectedUserAdditionalPickStatus = (
+  pick: SelectedUserAdditionalPickRow,
+) => {
+  const hasAnswer = Boolean(
+    (pick.answer_text && pick.answer_text.trim()) ||
+      (pick.answer_country && pick.answer_country.trim()),
+  );
+
+  if (!hasAnswer) {
+    return {
+      label: "Sin respuesta",
+      badgeClass: "badge-ghost",
+    };
+  }
+
+  if (pick.is_correct) {
+    return {
+      label: `Ganador · +${pick.points} pts`,
+      badgeClass: "badge-success",
+    };
+  }
+
+  return {
+    label: "Pendiente de validar",
+    badgeClass: "badge-warning",
+  };
+};
+
 const pointsHistoryCountText = computed(() => {
   const total = pointsHistoryEntries.value.length;
   return `${total} movimiento${total === 1 ? "" : "s"}`;
@@ -2144,8 +2172,11 @@ onBeforeUnmount(() => {
                       {{ selectedUserAdditionalPickAnswerText(pick) }}
                     </p>
                   </div>
-                  <span class="badge" :class="pick.is_correct ? 'badge-success' : 'badge-ghost'">
-                    {{ pick.is_correct ? `+${pick.points} pts` : 'Pendiente' }}
+                  <span
+                    class="badge"
+                    :class="selectedUserAdditionalPickStatus(pick).badgeClass"
+                  >
+                    {{ selectedUserAdditionalPickStatus(pick).label }}
                   </span>
                 </div>
               </article>
