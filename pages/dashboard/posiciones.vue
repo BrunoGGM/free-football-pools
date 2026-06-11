@@ -102,6 +102,15 @@ interface RankedUserRawPredictionRow {
     | null;
 }
 
+interface SelectedUserAdditionalPickRow {
+  id: string;
+  title: string;
+  points: number;
+  answer_text: string | null;
+  answer_country: string | null;
+  is_correct: boolean;
+}
+
 const client = useSupabaseClient<any>();
 const user = useSupabaseUser();
 const { emitRankUp } = useGameUx();
@@ -131,8 +140,10 @@ const canViewOtherQuinielas = ref(false);
 const userQuinielaModalOpen = ref(false);
 const selectedUserForQuinielaModal = ref<PositionRow | null>(null);
 const selectedUserPredictions = ref<RankedUserPredictionRow[]>([]);
+const selectedUserAdditionalPicks = ref<SelectedUserAdditionalPickRow[]>([]);
 const loadingSelectedUserPredictions = ref(false);
 const selectedUserPredictionsError = ref<string | null>(null);
+const selectedUserAdditionalPicksError = ref<string | null>(null);
 const pointsHistoryModalOpen = ref(false);
 const pointsHistoryLoading = ref(false);
 const pointsHistoryError = ref<string | null>(null);
@@ -263,6 +274,24 @@ const selectedUserPredictionCountText = computed(() => {
   const total = selectedUserPredictions.value.length;
   return `${total} prediccion${total === 1 ? "" : "es"}`;
 });
+
+const selectedUserAdditionalPicksVisible = computed(() => {
+  return Boolean(
+    selectedUserForQuinielaModal.value?.predicted_champion ||
+      selectedUserAdditionalPicks.value.length > 0,
+  );
+});
+
+const selectedUserAdditionalPickAnswerText = (
+  pick: SelectedUserAdditionalPickRow,
+) => {
+  const parts = [pick.answer_text, pick.answer_country]
+    .filter(Boolean)
+    .map((part) => String(part).trim())
+    .filter(Boolean);
+
+  return parts.length > 0 ? parts.join(" • ") : "Sin respuesta";
+};
 
 const pointsHistoryCountText = computed(() => {
   const total = pointsHistoryEntries.value.length;
@@ -526,7 +555,9 @@ const closeUserQuinielaModal = () => {
   userQuinielaModalOpen.value = false;
   selectedUserForQuinielaModal.value = null;
   selectedUserPredictions.value = [];
+  selectedUserAdditionalPicks.value = [];
   selectedUserPredictionsError.value = null;
+  selectedUserAdditionalPicksError.value = null;
 };
 
 const closePointsHistoryModal = () => {
@@ -921,7 +952,9 @@ const openUserQuinielaModal = async (row: PositionRow) => {
   userQuinielaModalOpen.value = true;
   selectedUserForQuinielaModal.value = row;
   selectedUserPredictions.value = [];
+  selectedUserAdditionalPicks.value = [];
   selectedUserPredictionsError.value = null;
+  selectedUserAdditionalPicksError.value = null;
   loadingSelectedUserPredictions.value = true;
 
   const predictionsResult = await client
@@ -939,6 +972,18 @@ const openUserQuinielaModal = async (row: PositionRow) => {
       "id, stage, status, match_time, home_team, away_team, home_score, away_score",
     )
     .order("match_time", { ascending: true });
+
+  const customPicksResult = await client
+    .from("quiniela_custom_picks")
+    .select("id, title, points")
+    .eq("quiniela_id", activeQuinielaId.value)
+    .order("created_at", { ascending: true });
+
+  const customPickAnswersResult = await client
+    .from("quiniela_custom_pick_answers")
+    .select("custom_pick_id, answer_text, answer_country, is_correct")
+    .eq("quiniela_id", activeQuinielaId.value)
+    .eq("user_id", row.user_id);
 
   loadingSelectedUserPredictions.value = false;
 
@@ -960,6 +1005,73 @@ const openUserQuinielaModal = async (row: PositionRow) => {
       matchesResult.error.message ||
       "No se pudo cargar el listado de partidos.";
     return;
+  }
+
+  const customPickTablesMissing =
+    (customPicksResult.error &&
+      (String(customPicksResult.error.code || "") === "42P01" ||
+        String(customPicksResult.error.message || "")
+          .toLowerCase()
+          .includes("quiniela_custom_pick"))) ||
+    (customPickAnswersResult.error &&
+      (String(customPickAnswersResult.error.code || "") === "42P01" ||
+        String(customPickAnswersResult.error.message || "")
+          .toLowerCase()
+          .includes("quiniela_custom_pick")));
+
+  if (!customPickTablesMissing) {
+    if (customPicksResult.error) {
+      selectedUserAdditionalPicksError.value =
+        customPicksResult.error.message ||
+        "No se pudieron cargar los picks adicionales.";
+    } else if (customPickAnswersResult.error) {
+      selectedUserAdditionalPicksError.value =
+        customPickAnswersResult.error.message ||
+        "No se pudieron cargar las respuestas de picks adicionales.";
+    } else {
+      const answersByPickId = new Map<
+        string,
+        {
+          answer_text: string | null;
+          answer_country: string | null;
+          is_correct: boolean;
+        }
+      >();
+
+      for (const answer of (
+        (customPickAnswersResult.data as Array<{
+          custom_pick_id: string;
+          answer_text: string | null;
+          answer_country: string | null;
+          is_correct: boolean | null;
+        }> | null) ?? []
+      )) {
+        answersByPickId.set(answer.custom_pick_id, {
+          answer_text: answer.answer_text ?? null,
+          answer_country: answer.answer_country ?? null,
+          is_correct: Boolean(answer.is_correct),
+        });
+      }
+
+      selectedUserAdditionalPicks.value = (
+        (customPicksResult.data as Array<{
+          id: string;
+          title: string;
+          points: number | null;
+        }> | null) ?? []
+      ).map((pick) => {
+        const answer = answersByPickId.get(pick.id);
+
+        return {
+          id: pick.id,
+          title: pick.title,
+          points: Number(pick.points ?? 0),
+          answer_text: answer?.answer_text ?? null,
+          answer_country: answer?.answer_country ?? null,
+          is_correct: Boolean(answer?.is_correct),
+        };
+      });
+    }
   }
 
   const normalizedPredictions = (
@@ -1942,14 +2054,123 @@ onBeforeUnmount(() => {
             {{ selectedUserPredictionsError }}
           </p>
 
+          <div
+            v-if="
+              !loadingSelectedUserPredictions &&
+              !selectedUserPredictionsError &&
+              selectedUserAdditionalPicksVisible
+            "
+            class="mt-4 space-y-3"
+          >
+            <div>
+              <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
+                Picks adicionales
+              </p>
+            </div>
+
+            <p
+              v-if="selectedUserAdditionalPicksError"
+              class="alert alert-warning text-xs"
+            >
+              {{ selectedUserAdditionalPicksError }}
+            </p>
+
+            <div class="grid gap-3 sm:grid-cols-2">
+              <article
+                class="card rounded-xl border border-base-300 bg-base-100/70 p-4"
+              >
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <p class="text-base-content/70 text-xs uppercase">
+                      Campeon del mundo
+                    </p>
+                    <div
+                      v-if="selectedUserForQuinielaModal?.predicted_champion"
+                      class="mt-2 inline-flex items-center gap-2 text-sm font-medium"
+                    >
+                      <img
+                        v-if="championLogoUrl(selectedUserForQuinielaModal.predicted_champion)"
+                        :src="
+                          championLogoUrl(
+                            selectedUserForQuinielaModal.predicted_champion,
+                          ) || undefined
+                        "
+                        :alt="`Escudo de ${championDisplayName(selectedUserForQuinielaModal.predicted_champion)}`"
+                        class="h-5 w-5 rounded-full border border-base-300 object-cover"
+                        loading="lazy"
+                      />
+                      <span
+                        v-else-if="championFlagIconClass(selectedUserForQuinielaModal.predicted_champion)"
+                        :class="
+                          championFlagIconClass(
+                            selectedUserForQuinielaModal.predicted_champion,
+                          ) || undefined
+                        "
+                        class="inline-block h-4 w-5 rounded-[999px]"
+                        aria-hidden="true"
+                      />
+                      <span v-else>{{
+                        championFlag(
+                          selectedUserForQuinielaModal.predicted_champion,
+                        )
+                      }}</span>
+                      <span>
+                        {{
+                          championDisplayName(
+                            selectedUserForQuinielaModal.predicted_champion,
+                          )
+                        }}
+                      </span>
+                    </div>
+                    <p v-else class="mt-2 text-sm text-base-content/70">
+                      Sin pick
+                    </p>
+                  </div>
+                  <span class="badge badge-outline">Bonus</span>
+                </div>
+              </article>
+
+              <article
+                v-for="pick in selectedUserAdditionalPicks"
+                :key="pick.id"
+                class="card rounded-xl border border-base-300 bg-base-100/70 p-4"
+              >
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <p class="text-sm font-semibold text-base-content">
+                      {{ pick.title }}
+                    </p>
+                    <p class="mt-2 text-sm text-base-content/70">
+                      {{ selectedUserAdditionalPickAnswerText(pick) }}
+                    </p>
+                  </div>
+                  <span class="badge" :class="pick.is_correct ? 'badge-success' : 'badge-ghost'">
+                    {{ pick.is_correct ? `+${pick.points} pts` : 'Pendiente' }}
+                  </span>
+                </div>
+              </article>
+            </div>
+          </div>
+
           <p
-            v-else-if="selectedUserPredictions.length === 0"
+            v-if="
+              !loadingSelectedUserPredictions &&
+              !selectedUserPredictionsError &&
+              selectedUserPredictions.length === 0
+            "
             class="mt-4 text-sm text-base-content/70"
           >
             Este usuario aun no tiene predicciones guardadas.
           </p>
 
-          <div v-else class="mt-4 max-h-[60vh] overflow-auto">
+          <div
+            v-if="
+              !loadingSelectedUserPredictions &&
+              !selectedUserPredictionsError &&
+              selectedUserPredictions.length > 0
+            "
+            class="mt-4 max-h-[60vh] overflow-auto"
+          >
             <DashboardQuinielaPredictionsTable
               compact
               show-winner-column
