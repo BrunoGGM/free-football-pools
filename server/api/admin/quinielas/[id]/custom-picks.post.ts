@@ -9,6 +9,7 @@ type CustomPickBody = {
   requires_text?: boolean
   requires_country?: boolean
   points?: number | string
+  sort_order?: number | string
   locks_at?: string | null
 }
 
@@ -19,6 +20,19 @@ const parsePoints = (value: unknown) => {
     throw createError({
       statusCode: 400,
       statusMessage: 'points invalido (entero entre 0 y 100)',
+    })
+  }
+
+  return parsed
+}
+
+const parseSortOrder = (value: unknown) => {
+  const parsed = typeof value === 'number' ? value : Number(value)
+
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 9999) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'sort_order invalido (entero entre 0 y 9999)',
     })
   }
 
@@ -78,6 +92,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const points = parsePoints(body.points ?? 3)
+  const sortOrder = parseSortOrder(body.sort_order ?? 0)
   const locksAt = parseLocksAt(body.locks_at)
 
   const { data: pick, error: insertError } = await supabase
@@ -89,11 +104,12 @@ export default defineEventHandler(async (event) => {
       requires_text: requiresText,
       requires_country: requiresCountry,
       points,
+      sort_order: sortOrder,
       locks_at: locksAt,
       created_by: user.id,
     })
     .select(
-      'id, quiniela_id, title, description, requires_text, requires_country, points, locks_at, created_at, updated_at',
+      'id, quiniela_id, title, description, requires_text, requires_country, points, sort_order, locks_at, created_at, updated_at',
     )
     .single()
 

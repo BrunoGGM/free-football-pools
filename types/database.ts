@@ -461,6 +461,7 @@ export type Database = {
           quiniela_id: string
           requires_country: boolean
           requires_text: boolean
+          sort_order: number
           title: string
           updated_at: string
         }
@@ -474,6 +475,7 @@ export type Database = {
           quiniela_id: string
           requires_country?: boolean
           requires_text?: boolean
+          sort_order?: number
           title: string
           updated_at?: string
         }
@@ -487,6 +489,7 @@ export type Database = {
           quiniela_id?: string
           requires_country?: boolean
           requires_text?: boolean
+          sort_order?: number
           title?: string
           updated_at?: string
         }

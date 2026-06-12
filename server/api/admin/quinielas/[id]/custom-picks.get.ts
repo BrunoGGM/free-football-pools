@@ -21,9 +21,10 @@ export default defineEventHandler(async (event) => {
   const { data: picks, error: picksError } = await supabase
     .from('quiniela_custom_picks')
     .select(
-      'id, quiniela_id, title, description, requires_text, requires_country, points, locks_at, created_at, updated_at',
+      'id, quiniela_id, title, description, requires_text, requires_country, points, sort_order, locks_at, created_at, updated_at',
     )
     .eq('quiniela_id', quinielaId)
+    .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true })
 
   if (picksError) {
@@ -72,6 +73,7 @@ export default defineEventHandler(async (event) => {
       requires_text: Boolean(pick.requires_text),
       requires_country: Boolean(pick.requires_country),
       points: Number(pick.points || 0),
+      sort_order: Number(pick.sort_order || 0),
       locks_at: (pick.locks_at as string | null) || null,
       created_at: pick.created_at as string,
       updated_at: pick.updated_at as string,

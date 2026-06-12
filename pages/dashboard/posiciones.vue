@@ -106,6 +106,7 @@ interface SelectedUserAdditionalPickRow {
   id: string;
   title: string;
   points: number;
+  sort_order: number;
   answer_text: string | null;
   answer_country: string | null;
   is_correct: boolean;
@@ -281,6 +282,16 @@ const selectedUserAdditionalPicksVisible = computed(() => {
       selectedUserAdditionalPicks.value.length > 0,
   );
 });
+
+const selectedUserAdditionalPicksSorted = computed(() =>
+  selectedUserAdditionalPicks.value
+    .slice()
+    .sort(
+      (a, b) =>
+        Number(a.sort_order || 0) - Number(b.sort_order || 0) ||
+        a.title.localeCompare(b.title, "es", { sensitivity: "base" }),
+    ),
+);
 
 const selectedUserAdditionalPickAnswerText = (
   pick: SelectedUserAdditionalPickRow,
@@ -1003,8 +1014,9 @@ const openUserQuinielaModal = async (row: PositionRow) => {
 
   const customPicksResult = await client
     .from("quiniela_custom_picks")
-    .select("id, title, points")
+    .select("id, title, points, sort_order")
     .eq("quiniela_id", activeQuinielaId.value)
+    .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
   const customPickAnswersResult = await client
@@ -1086,6 +1098,7 @@ const openUserQuinielaModal = async (row: PositionRow) => {
           id: string;
           title: string;
           points: number | null;
+          sort_order: number | null;
         }> | null) ?? []
       ).map((pick) => {
         const answer = answersByPickId.get(pick.id);
@@ -1094,6 +1107,7 @@ const openUserQuinielaModal = async (row: PositionRow) => {
           id: pick.id,
           title: pick.title,
           points: Number(pick.points ?? 0),
+          sort_order: Number(pick.sort_order ?? 0),
           answer_text: answer?.answer_text ?? null,
           answer_country: answer?.answer_country ?? null,
           is_correct: Boolean(answer?.is_correct),
@@ -2159,7 +2173,7 @@ onBeforeUnmount(() => {
               </article>
 
               <article
-                v-for="pick in selectedUserAdditionalPicks"
+                v-for="pick in selectedUserAdditionalPicksSorted"
                 :key="pick.id"
                 class="card rounded-xl border border-base-300 bg-base-100/70 p-4"
               >

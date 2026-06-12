@@ -61,6 +61,7 @@ interface CustomPickDefinition {
   requires_text: boolean;
   requires_country: boolean;
   points: number;
+  sort_order: number;
   locks_at: string | null;
   created_at: string;
   updated_at: string;
@@ -174,6 +175,10 @@ const customPicksLoading = ref(false);
 const customPickSaving = ref(false);
 const customPickDeletingId = ref<string | null>(null);
 const customPickAnswerSavingId = ref<string | null>(null);
+const customPickOrderSavingId = ref<string | null>(null);
+const customPickDraggingId = ref<string | null>(null);
+const customPickDropTargetId = ref<string | null>(null);
+const editingCustomPickId = ref<string | null>(null);
 const customPicksMessage = ref<string | null>(null);
 const customPicksError = ref<string | null>(null);
 const customPicksByQuiniela = ref<Record<string, CustomPickDefinition[]>>({});
@@ -181,12 +186,14 @@ const customPickAnswersByQuiniela = ref<
   Record<string, CustomPickAnswerReview[]>
 >({});
 const customPickValidationDraft = ref<Record<string, boolean>>({});
+const customPickSortDraft = ref<Record<string, number>>({});
 const customPickForm = reactive({
   title: "",
   description: "",
   requires_text: true,
   requires_country: false,
   points: 3,
+  sort_order: 1,
   locks_at: "",
 });
 
@@ -226,13 +233,29 @@ const customPickManagedQuinielaId = computed(() => {
 });
 
 const activeCustomPicks = computed(
-  () => customPicksByQuiniela.value[customPickManagedQuinielaId.value] || [],
+  () =>
+    (customPicksByQuiniela.value[customPickManagedQuinielaId.value] || [])
+      .slice()
+      .sort(
+        (a, b) =>
+          Number(a.sort_order || 0) - Number(b.sort_order || 0) ||
+          a.title.localeCompare(b.title, "es", { sensitivity: "base" }),
+      ),
 );
 
 const activeCustomPickAnswers = computed(
   () =>
     customPickAnswersByQuiniela.value[customPickManagedQuinielaId.value] || [],
 );
+
+const nextCustomPickSortOrder = computed(() => {
+  const maxOrder = activeCustomPicks.value.reduce(
+    (currentMax, pick) => Math.max(currentMax, Number(pick.sort_order || 0)),
+    0,
+  );
+
+  return maxOrder + 1;
+});
 
 const toInputDateTime = (isoDate: string | null) => {
   if (!isoDate) {
@@ -281,12 +304,27 @@ const resetCustomPickMessages = () => {
 };
 
 const resetCustomPickForm = () => {
+  editingCustomPickId.value = null;
   customPickForm.title = "";
   customPickForm.description = "";
   customPickForm.requires_text = true;
   customPickForm.requires_country = false;
   customPickForm.points = 3;
+  customPickForm.sort_order = nextCustomPickSortOrder.value;
   customPickForm.locks_at = "";
+};
+
+const startEditingCustomPick = (pick: CustomPickDefinition) => {
+  editingCustomPickId.value = pick.id;
+  additionalPickQuinielaId.value = pick.quiniela_id;
+  customPickForm.title = pick.title;
+  customPickForm.description = pick.description || "";
+  customPickForm.requires_text = pick.requires_text;
+  customPickForm.requires_country = pick.requires_country;
+  customPickForm.points = Number(pick.points || 0);
+  customPickForm.sort_order = Number(pick.sort_order || 0);
+  customPickForm.locks_at = toInputDateTime(pick.locks_at);
+  resetCustomPickMessages();
 };
 
 const syncCustomPickValidationDraft = (
@@ -301,6 +339,18 @@ const syncCustomPickValidationDraft = (
   }
 
   customPickValidationDraft.value = nextDraft;
+};
+
+const syncCustomPickSortDraft = (picks: CustomPickDefinition[]) => {
+  const nextDraft: Record<string, number> = {
+    ...customPickSortDraft.value,
+  };
+
+  for (const pick of picks) {
+    nextDraft[pick.id] = Number(pick.sort_order || 0);
+  }
+
+  customPickSortDraft.value = nextDraft;
 };
 
 const loadCustomPicksForAdmin = async (quinielaId: string) => {
@@ -325,6 +375,7 @@ const loadCustomPicksForAdmin = async (quinielaId: string) => {
       ...customPickAnswersByQuiniela.value,
       [quinielaId]: result.answers || [],
     };
+    syncCustomPickSortDraft(result.picks || []);
     syncCustomPickValidationDraft(result.answers || []);
   } catch (error: any) {
     customPicksError.value =
@@ -334,8 +385,9 @@ const loadCustomPicksForAdmin = async (quinielaId: string) => {
   }
 };
 
-const createCustomPick = async () => {
+const saveCustomPick = async () => {
   const quinielaId = customPickManagedQuinielaId.value;
+  const editingPickId = editingCustomPickId.value;
 
   resetCustomPickMessages();
 
@@ -352,24 +404,42 @@ const createCustomPick = async () => {
   customPickSaving.value = true;
 
   try {
-    await adminFetch(`/api/admin/quinielas/${quinielaId}/custom-picks`, {
-      method: "POST",
-      body: {
-        title: customPickForm.title,
-        description: customPickForm.description,
-        requires_text: customPickForm.requires_text,
-        requires_country: customPickForm.requires_country,
-        points: Number(customPickForm.points || 0),
-        locks_at: customPickForm.locks_at || null,
-      },
-    });
+    const body = {
+      title: customPickForm.title,
+      description: customPickForm.description,
+      requires_text: customPickForm.requires_text,
+      requires_country: customPickForm.requires_country,
+      points: Number(customPickForm.points || 0),
+      sort_order: Number(customPickForm.sort_order || 0),
+      locks_at: customPickForm.locks_at || null,
+    };
 
-    customPicksMessage.value = "Pick adicional creado.";
+    if (editingPickId) {
+      await adminFetch(
+        `/api/admin/quinielas/${quinielaId}/custom-picks/${editingPickId}`,
+        {
+          method: "PATCH",
+          body,
+        },
+      );
+      customPicksMessage.value = "Pick adicional actualizado.";
+    } else {
+      await adminFetch(`/api/admin/quinielas/${quinielaId}/custom-picks`, {
+        method: "POST",
+        body,
+      });
+      customPicksMessage.value = "Pick adicional creado.";
+    }
+
     resetCustomPickForm();
     await loadCustomPicksForAdmin(quinielaId);
   } catch (error: any) {
     customPicksError.value =
-      error?.data?.statusMessage || error?.message || "No se pudo crear el pick adicional.";
+      error?.data?.statusMessage ||
+      error?.message ||
+      (editingPickId
+        ? "No se pudo actualizar el pick adicional."
+        : "No se pudo crear el pick adicional.");
   } finally {
     customPickSaving.value = false;
   }
@@ -398,6 +468,146 @@ const deleteCustomPick = async (pickId: string) => {
   } finally {
     customPickDeletingId.value = null;
   }
+};
+
+const saveCustomPickSortOrder = async (pickId: string) => {
+  const quinielaId = customPickManagedQuinielaId.value;
+  const sortOrder = Number(customPickSortDraft.value[pickId] ?? 0);
+
+  if (!quinielaId || !pickId) {
+    return;
+  }
+
+  resetCustomPickMessages();
+  customPickOrderSavingId.value = pickId;
+
+  try {
+    await adminFetch(`/api/admin/quinielas/${quinielaId}/custom-picks/${pickId}`, {
+      method: "PATCH",
+      body: {
+        sort_order: sortOrder,
+      },
+    });
+
+    customPicksMessage.value = "Orden de pick actualizado.";
+    await loadCustomPicksForAdmin(quinielaId);
+  } catch (error: any) {
+    customPicksError.value =
+      error?.data?.statusMessage || error?.message || "No se pudo actualizar el orden del pick.";
+  } finally {
+    customPickOrderSavingId.value = null;
+  }
+};
+
+const persistCustomPickOrder = async (nextPicks: CustomPickDefinition[]) => {
+  const quinielaId = customPickManagedQuinielaId.value;
+
+  if (!quinielaId) {
+    return;
+  }
+
+  const currentById = new Map(
+    activeCustomPicks.value.map((pick) => [pick.id, Number(pick.sort_order || 0)]),
+  );
+  const normalizedPicks = nextPicks.map((pick, index) => ({
+    ...pick,
+    sort_order: index + 1,
+  }));
+  const changedPicks = normalizedPicks.filter(
+    (pick) => currentById.get(pick.id) !== pick.sort_order,
+  );
+
+  if (changedPicks.length === 0) {
+    customPickDraggingId.value = null;
+    customPickDropTargetId.value = null;
+    return;
+  }
+
+  resetCustomPickMessages();
+  customPickOrderSavingId.value = "__drag__";
+  customPicksByQuiniela.value = {
+    ...customPicksByQuiniela.value,
+    [quinielaId]: normalizedPicks,
+  };
+  syncCustomPickSortDraft(normalizedPicks);
+
+  try {
+    for (const pick of changedPicks) {
+      await adminFetch(`/api/admin/quinielas/${quinielaId}/custom-picks/${pick.id}`, {
+        method: "PATCH",
+        body: {
+          sort_order: pick.sort_order,
+        },
+      });
+    }
+
+    customPicksMessage.value = "Orden actualizado.";
+    await loadCustomPicksForAdmin(quinielaId);
+  } catch (error: any) {
+    customPicksError.value =
+      error?.data?.statusMessage || error?.message || "No se pudo reordenar los picks.";
+    await loadCustomPicksForAdmin(quinielaId);
+  } finally {
+    customPickOrderSavingId.value = null;
+    customPickDraggingId.value = null;
+    customPickDropTargetId.value = null;
+  }
+};
+
+const onCustomPickDragStart = (pickId: string, event?: DragEvent) => {
+  if (customPickOrderSavingId.value === "__drag__") {
+    return;
+  }
+
+  customPickDraggingId.value = pickId;
+  customPickDropTargetId.value = pickId;
+
+  if (event?.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.dropEffect = "move";
+    event.dataTransfer.setData("text/plain", pickId);
+  }
+};
+
+const onCustomPickDragEnter = (pickId: string) => {
+  if (!customPickDraggingId.value || customPickDraggingId.value === pickId) {
+    return;
+  }
+
+  customPickDropTargetId.value = pickId;
+};
+
+const onCustomPickDragEnd = () => {
+  customPickDraggingId.value = null;
+  customPickDropTargetId.value = null;
+};
+
+const onCustomPickDrop = async (targetPickId: string, event?: DragEvent) => {
+  const draggedPickId =
+    customPickDraggingId.value || event?.dataTransfer?.getData("text/plain") || null;
+
+  if (
+    !draggedPickId ||
+    draggedPickId === targetPickId ||
+    customPickOrderSavingId.value === "__drag__"
+  ) {
+    onCustomPickDragEnd();
+    return;
+  }
+
+  const currentPicks = activeCustomPicks.value.slice();
+  const draggedIndex = currentPicks.findIndex((pick) => pick.id === draggedPickId);
+  const targetIndex = currentPicks.findIndex((pick) => pick.id === targetPickId);
+
+  if (draggedIndex === -1 || targetIndex === -1) {
+    onCustomPickDragEnd();
+    return;
+  }
+
+  const [draggedPick] = currentPicks.splice(draggedIndex, 1);
+  currentPicks.splice(targetIndex, 0, draggedPick);
+
+  await persistCustomPickOrder(currentPicks);
 };
 
 const saveCustomPickAnswers = async (pickId: string) => {
@@ -1704,11 +1914,21 @@ watch(
       <div
         class="card mt-6 rounded-xl border border-base-300 bg-base-100/70 p-4"
       >
-        <h3 class="text-primary text-lg">Picks adicionales</h3>
-        <p class="text-base-content/70 mt-1 text-sm">
-          Crea picks personalizados por quiniela y valida manualmente las
-          respuestas correctas para sumar puntos automaticamente.
-        </p>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-primary text-lg">Picks adicionales</h3>
+            <p class="text-base-content/70 mt-1 text-sm">
+              Crea picks personalizados por quiniela y valida manualmente las
+              respuestas correctas para sumar puntos automaticamente.
+            </p>
+          </div>
+          <span
+            v-if="editingCustomPickId"
+            class="badge badge-info badge-outline"
+          >
+            Editando pick
+          </span>
+        </div>
 
         <div class="mt-4 grid gap-3 md:grid-cols-2">
           <div class="space-y-1 md:col-span-2">
@@ -1801,6 +2021,22 @@ watch(
             <label
               class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
             >
+              Orden
+            </label>
+            <input
+              v-model.number="customPickForm.sort_order"
+              type="number"
+              min="0"
+              max="9999"
+              step="1"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
               Fecha de bloqueo
             </label>
             <input
@@ -1815,12 +2051,20 @@ watch(
           <button
             class="btn btn-primary btn-sm"
             :disabled="customPickSaving"
-            @click="createCustomPick"
+            @click="saveCustomPick"
           >
-            {{ customPickSaving ? "Creando..." : "Crear pick adicional" }}
+            {{
+              customPickSaving
+                ? editingCustomPickId
+                  ? "Guardando..."
+                  : "Creando..."
+                : editingCustomPickId
+                  ? "Guardar cambios"
+                  : "Crear pick adicional"
+            }}
           </button>
           <button class="btn btn-outline btn-sm" @click="resetCustomPickForm">
-            Limpiar
+            {{ editingCustomPickId ? "Cancelar edicion" : "Limpiar" }}
           </button>
           <button
             class="btn btn-ghost btn-sm"
@@ -1842,18 +2086,46 @@ watch(
           v-if="customPickManagedQuinielaId"
           class="mt-5 space-y-4"
         >
+          <p class="text-base-content/60 text-xs">
+            Arrastra las tarjetas para reordenarlas. El orden se guarda al soltar.
+          </p>
+
           <article
             v-for="pick in activeCustomPicks"
             :key="pick.id"
-            class="rounded-2xl border border-base-300 bg-base-200/50 p-4"
+            :class="[
+              'rounded-2xl border border-base-300 bg-base-200/50 p-4 transition',
+              customPickDraggingId === pick.id && 'opacity-60',
+              customPickDropTargetId === pick.id && customPickDraggingId !== pick.id &&
+                'border-primary bg-primary/5',
+            ]"
+            draggable="true"
+            @dragstart="onCustomPickDragStart(pick.id, $event)"
+            @dragend="onCustomPickDragEnd"
+            @dragover.prevent
+            @dragenter.prevent="onCustomPickDragEnter(pick.id)"
+            @drop.prevent="onCustomPickDrop(pick.id, $event)"
           >
             <div class="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h4 class="font-semibold text-base-content">{{ pick.title }}</h4>
+              <div class="flex items-start gap-3">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs cursor-grab active:cursor-grabbing"
+                  :disabled="true"
+                  title="Arrastra para reordenar"
+                >
+                  ↕
+                </button>
+
+                <div>
+                  <h4 class="font-semibold text-base-content">{{ pick.title }}</h4>
                 <p v-if="pick.description" class="text-base-content/70 mt-1 text-sm">
                   {{ pick.description }}
                 </p>
                 <div class="mt-2 flex flex-wrap gap-2 text-xs">
+                  <span class="badge badge-outline">
+                    Orden: {{ pick.sort_order }}
+                  </span>
                   <span class="badge badge-outline">
                     Formato: {{ customPickFormatLabel(pick) }}
                   </span>
@@ -1866,6 +2138,15 @@ watch(
                   </span>
                 </div>
               </div>
+              </div>
+
+              <button
+                class="btn btn-outline btn-xs"
+                :disabled="customPickOrderSavingId === '__drag__'"
+                @click="startEditingCustomPick(pick)"
+              >
+                Editar
+              </button>
 
               <button
                 class="btn btn-outline btn-error btn-xs"
@@ -1873,6 +2154,36 @@ watch(
                 @click="deleteCustomPick(pick.id)"
               >
                 {{ customPickDeletingId === pick.id ? "Eliminando..." : "Eliminar" }}
+              </button>
+            </div>
+
+            <div class="mt-4 flex flex-wrap items-end gap-3">
+              <div class="space-y-1">
+                <label
+                  class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+                >
+                  Orden visual
+                </label>
+                <input
+                  v-model.number="customPickSortDraft[pick.id]"
+                  type="number"
+                  min="0"
+                  max="9999"
+                  step="1"
+                  class="input input-bordered input-sm w-28"
+                />
+              </div>
+
+              <button
+                class="btn btn-outline btn-sm"
+                :disabled="customPickOrderSavingId === pick.id"
+                @click="saveCustomPickSortOrder(pick.id)"
+              >
+                {{
+                  customPickOrderSavingId === pick.id
+                    ? "Guardando orden..."
+                    : "Guardar orden"
+                }}
               </button>
             </div>
 

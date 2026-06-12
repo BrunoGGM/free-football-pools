@@ -9,6 +9,7 @@ type CustomPickPatchBody = {
   requires_text?: boolean
   requires_country?: boolean
   points?: number | string
+  sort_order?: number | string
   locks_at?: string | null
 }
 
@@ -19,6 +20,19 @@ const parsePoints = (value: unknown) => {
     throw createError({
       statusCode: 400,
       statusMessage: 'points invalido (entero entre 0 y 100)',
+    })
+  }
+
+  return parsed
+}
+
+const parseSortOrder = (value: unknown) => {
+  const parsed = typeof value === 'number' ? value : Number(value)
+
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 9999) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'sort_order invalido (entero entre 0 y 9999)',
     })
   }
 
@@ -97,6 +111,10 @@ export default defineEventHandler(async (event) => {
     payload.points = parsePoints(body.points)
   }
 
+  if (body.sort_order !== undefined) {
+    payload.sort_order = parseSortOrder(body.sort_order)
+  }
+
   if (body.locks_at !== undefined) {
     payload.locks_at = parseLocksAt(body.locks_at)
   }
@@ -138,7 +156,7 @@ export default defineEventHandler(async (event) => {
     .eq('id', pickId)
     .eq('quiniela_id', quinielaId)
     .select(
-      'id, quiniela_id, title, description, requires_text, requires_country, points, locks_at, created_at, updated_at',
+      'id, quiniela_id, title, description, requires_text, requires_country, points, sort_order, locks_at, created_at, updated_at',
     )
     .single()
 

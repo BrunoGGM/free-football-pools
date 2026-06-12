@@ -24,6 +24,7 @@ interface CustomPickRow {
   requires_text: boolean;
   requires_country: boolean;
   points: number;
+  sort_order: number;
   locks_at: string | null;
 }
 
@@ -240,22 +241,67 @@ const pickStatusLabel = (pick: CustomPickRow) => {
   const answer = customAnswers.value[pick.id];
 
   if (answer?.is_correct) {
-    return { label: `Acertado · +${pick.points} pts`, tone: "badge-success" };
-  }
-
-  if (pickLocked(pick)) {
-    return { label: "Bloqueado", tone: "badge-ghost" };
+    return { label: `Ganador · +${pick.points} pts`, tone: "badge-success" };
   }
 
   if (answer) {
-    return { label: "Pick guardado", tone: "badge-info" };
+    return {
+      label: "Pendiente de validar",
+      tone: "badge-warning",
+    };
+  }
+
+  if (pickLocked(pick)) {
+    return { label: "Cerrado sin respuesta", tone: "badge-ghost" };
   }
 
   return { label: "Sin responder", tone: "badge-ghost" };
 };
 
+const sortedCustomPicks = computed(() =>
+  customPicks.value
+    .slice()
+    .sort(
+      (a, b) =>
+        Number(a.sort_order || 0) - Number(b.sort_order || 0) ||
+        a.title.localeCompare(b.title, "es", { sensitivity: "base" }),
+    ),
+);
+
+const totalAdditionalPickPotentialPoints = computed(() =>
+  sortedCustomPicks.value.reduce((total, pick) => total + Number(pick.points || 0), 0),
+);
+
+const answeredAdditionalPickCount = computed(() =>
+  sortedCustomPicks.value.filter((pick) => {
+    const answer = customAnswers.value[pick.id];
+    return Boolean(
+      (answer?.answer_text && answer.answer_text.trim()) ||
+        (answer?.answer_country && answer.answer_country.trim()),
+    );
+  }).length,
+);
+
+const pendingAdditionalPickCount = computed(() =>
+  Math.max(0, sortedCustomPicks.value.length - answeredAdditionalPickCount.value),
+);
+
+const pickCardClass = (pick: CustomPickRow) => {
+  const tone = pickStatusLabel(pick).tone;
+
+  if (tone === "badge-success") {
+    return "border-success/30 bg-success/5";
+  }
+
+  if (tone === "badge-warning") {
+    return "border-warning/30 bg-warning/5";
+  }
+
+  return "border-base-300 bg-base-100/70";
+};
+
 const customPickCards = computed(() =>
-  customPicks.value.map((pick) => ({
+  sortedCustomPicks.value.map((pick) => ({
     pick,
     draft: customDrafts.value[pick.id] ?? buildDraft(pick),
   })),
@@ -389,9 +435,10 @@ const loadCustomPicks = async () => {
   const picksResult = await client
     .from("quiniela_custom_picks")
     .select(
-      "id, title, description, requires_text, requires_country, points, locks_at",
+      "id, title, description, requires_text, requires_country, points, sort_order, locks_at",
     )
     .eq("quiniela_id", activeQuinielaId.value)
+    .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
   if (picksResult.error) {
@@ -634,9 +681,56 @@ onBeforeUnmount(() => {
         {{ errorMessage }}
       </article>
 
+      <article
+        class="rounded-3xl border border-primary/20 bg-linear-to-br from-primary/10 via-base-100/80 to-warning/10 p-5 shadow-sm"
+      >
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p class="text-primary text-xs uppercase tracking-[0.16em]">
+              Resumen de picks
+            </p>
+            <h2 class="mt-1 text-2xl font-semibold text-base-content">
+              Puedes ganar hasta {{ totalAdditionalPickPotentialPoints }} pts
+            </h2>
+            <p class="mt-2 text-sm text-base-content/70">
+              Si aciertas todos los picks adicionales sumas
+              {{ totalAdditionalPickPotentialPoints }} puntos. El campeon del
+              mundo agrega {{ championBonusPoints }} puntos extra.
+            </p>
+          </div>
+
+          <div class="grid gap-2 sm:grid-cols-3">
+            <article class="rounded-2xl border border-base-300 bg-base-100/80 px-4 py-3 text-center">
+              <p class="text-xs uppercase tracking-[0.12em] text-base-content/60">
+                Respondidos
+              </p>
+              <p class="mt-1 text-xl font-semibold text-base-content">
+                {{ answeredAdditionalPickCount }}
+              </p>
+            </article>
+            <article class="rounded-2xl border border-base-300 bg-base-100/80 px-4 py-3 text-center">
+              <p class="text-xs uppercase tracking-[0.12em] text-base-content/60">
+                Pendientes
+              </p>
+              <p class="mt-1 text-xl font-semibold text-base-content">
+                {{ pendingAdditionalPickCount }}
+              </p>
+            </article>
+            <article class="rounded-2xl border border-base-300 bg-base-100/80 px-4 py-3 text-center">
+              <p class="text-xs uppercase tracking-[0.12em] text-base-content/60">
+                Picks activos
+              </p>
+              <p class="mt-1 text-xl font-semibold text-base-content">
+                {{ sortedCustomPicks.length }}
+              </p>
+            </article>
+          </div>
+        </div>
+      </article>
+
       <!-- Champion pick -->
       <article
-        class="champion-picker-host pitch-panel card relative z-20 rounded-2xl border border-base-300 bg-base-200/70 p-5"
+        class="champion-picker-host pitch-panel card relative z-20 rounded-3xl border border-warning/30 bg-linear-to-br from-warning/10 via-base-100/80 to-base-200/70 p-5"
       >
         <div class="flex items-center justify-between gap-3">
           <h2 class="text-primary text-lg">Prediccion de campeon</h2>
@@ -769,11 +863,17 @@ onBeforeUnmount(() => {
         <article
           v-for="card in customPickCards"
           :key="card.pick.id"
-          class="card rounded-2xl border border-base-300 bg-base-100/70 p-5"
+          :class="[
+            'card rounded-3xl border p-5 shadow-sm transition',
+            pickCardClass(card.pick),
+          ]"
         >
           <div class="flex items-start justify-between gap-3">
             <div>
-              <h3 class="text-base-content text-lg font-semibold">
+              <p class="text-primary text-xs uppercase tracking-[0.14em]">
+                Pick {{ card.pick.sort_order }}
+              </p>
+              <h3 class="text-base-content mt-1 text-lg font-semibold">
                 {{ card.pick.title }}
               </h3>
               <p
@@ -792,6 +892,9 @@ onBeforeUnmount(() => {
             <span class="badge badge-outline">+{{ card.pick.points }} pts</span>
             <span v-if="card.pick.locks_at" class="badge badge-outline">
               Cierra {{ kickoffText(card.pick.locks_at) }}
+            </span>
+            <span class="badge badge-outline">
+              {{ card.pick.requires_text && card.pick.requires_country ? 'Texto + pais' : card.pick.requires_country ? 'Pais' : 'Texto' }}
             </span>
           </div>
 
