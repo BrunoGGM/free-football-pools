@@ -1,4 +1,4 @@
-import { normalizeTeamKey, resolveTeamCode } from "~/utils/teamMeta";
+import { resolveTeamCode } from "~/utils/teamMeta";
 
 export interface RegisteredTeamCatalogItem {
   name: string;
@@ -12,58 +12,23 @@ type RegisteredTeamsCachePayload = {
   teams: RegisteredTeamCatalogItem[];
 };
 
-const REGISTERED_TEAMS_CACHE_KEY = "registered-teams-catalog:v2";
+const REGISTERED_TEAMS_CACHE_KEY = "registered-teams-catalog:v4";
 const REGISTERED_TEAMS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const isFreshCache = (cachedAt: number) =>
   Number.isFinite(cachedAt) && Date.now() - cachedAt < REGISTERED_TEAMS_CACHE_TTL_MS;
 
-const isPlaceholderTeamName = (value: string) => {
-  const normalized = value.trim().toUpperCase();
-
-  if (!normalized) {
-    return true;
-  }
-
-  return (
-    /^\d+[A-Z]$/.test(normalized) ||
-    /^W\d+$/.test(normalized) ||
-    /^L\d+$/.test(normalized) ||
-    /^3RD\(.+\)$/.test(normalized) ||
-    normalized.includes("WINNER") ||
-    normalized.includes("LOSER")
-  );
-};
-
-const upsertRegisteredTeamOption = (
-  map: Map<string, RegisteredTeamCatalogItem>,
-  payload: {
-    name: string | null | undefined;
-    code?: string | null;
-    logo_url?: string | null;
-    team_key?: string | null;
-  },
+const normalizeCountryCode = (
+  code: string | null | undefined,
+  teamName: string,
 ) => {
-  const name = String(payload.name || "").trim();
+  const normalized = String(code || "").trim().toUpperCase();
 
-  if (!name || isPlaceholderTeamName(name)) {
-    return;
+  if (/^[A-Z]{2}$/.test(normalized)) {
+    return normalized;
   }
 
-  const teamKey = payload.team_key?.trim() || normalizeTeamKey(name);
-
-  if (!teamKey) {
-    return;
-  }
-
-  const current = map.get(teamKey);
-
-  map.set(teamKey, {
-    name: current?.name || name,
-    code: current?.code || payload.code || resolveTeamCode(name),
-    logo_url: current?.logo_url || payload.logo_url || null,
-    team_key: teamKey,
-  });
+  return resolveTeamCode(teamName)?.toUpperCase() ?? null;
 };
 
 export function useRegisteredTeamsCatalog() {
@@ -122,55 +87,22 @@ export function useRegisteredTeamsCatalog() {
   };
 
   const fetchRegisteredTeamsCatalog = async () => {
-    const [profilesResult, matchesResult] = await Promise.all([
-      client
-        .from("team_profiles")
-        .select("name, code, logo_url, team_key")
-        .order("name", { ascending: true }),
-      client
-        .from("matches")
-        .select(
-          "home_team, away_team, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url",
-        ),
-    ]);
+    const { data, error } = await client
+      .from("team_profiles")
+      .select("name, code, logo_url, team_key")
+      .order("name", { ascending: true });
 
-    if (profilesResult.error && matchesResult.error) {
+    if (error) {
       return teamsState.value ?? [];
     }
 
-    const teamMap = new Map<string, RegisteredTeamCatalogItem>();
-
-    for (const team of (
-      (profilesResult.data as RegisteredTeamCatalogItem[] | null) ?? []
-    )) {
-      upsertRegisteredTeamOption(teamMap, team);
-    }
-
-    for (const match of (
-      (matchesResult.data as Array<{
-        home_team: string | null;
-        away_team: string | null;
-        home_team_code: string | null;
-        away_team_code: string | null;
-        home_team_logo_url: string | null;
-        away_team_logo_url: string | null;
-      }> | null) ?? []
-    )) {
-      upsertRegisteredTeamOption(teamMap, {
-        name: match.home_team,
-        code: match.home_team_code,
-        logo_url: match.home_team_logo_url,
-      });
-      upsertRegisteredTeamOption(teamMap, {
-        name: match.away_team,
-        code: match.away_team_code,
-        logo_url: match.away_team_logo_url,
-      });
-    }
-
-    const teams = [...teamMap.values()].sort((a, b) =>
-      a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
-    );
+    const teams =
+      (((data as RegisteredTeamCatalogItem[] | null) ?? [])
+        .filter((team) => Boolean(team.name && team.team_key))
+        .map((team) => ({
+          ...team,
+          code: normalizeCountryCode(team.code, team.name),
+        })));
 
     teamsState.value = teams;
     cachedAtState.value = Date.now();
