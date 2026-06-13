@@ -4,18 +4,17 @@ import {
   resolveTeamCode,
   teamFlagEmojiFromCode,
 } from "~/utils/teamMeta";
+import {
+  useRegisteredTeamsCatalog,
+  type RegisteredTeamCatalogItem,
+} from "~/composables/useRegisteredTeamsCatalog";
 import "flag-icons/css/flag-icons.min.css";
 
 definePageMeta({
   middleware: ["auth"],
 });
 
-interface TeamProfileOption {
-  name: string;
-  code: string | null;
-  logo_url: string | null;
-  team_key: string;
-}
+type TeamProfileOption = RegisteredTeamCatalogItem;
 
 interface CustomPickRow {
   id: string;
@@ -48,6 +47,7 @@ const client = useSupabaseClient<any>();
 const user = useSupabaseUser();
 const { quiniela, activeQuinielaId, loadActiveQuiniela } = useActiveQuiniela();
 const { emitChampionSaved } = useGameUx();
+const { loadRegisteredTeamsCatalog } = useRegisteredTeamsCatalog();
 
 const loading = ref(false);
 const errorMessage = ref<string | null>(null);
@@ -339,19 +339,7 @@ const loadChampionLockStartedAt = async () => {
 };
 
 const loadRegisteredTeams = async () => {
-  const { data, error } = await client
-    .from("team_profiles")
-    .select("name, code, logo_url, team_key")
-    .order("name", { ascending: true });
-
-  if (error) {
-    return;
-  }
-
-  registeredTeams.value =
-    (data as TeamProfileOption[] | null)?.filter((item) =>
-      Boolean(item.name),
-    ) ?? [];
+  registeredTeams.value = await loadRegisteredTeamsCatalog();
 };
 
 const loadChampionPick = async () => {

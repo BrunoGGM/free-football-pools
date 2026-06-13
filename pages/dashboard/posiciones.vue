@@ -4,6 +4,10 @@ import {
   resolveTeamCode,
   teamFlagEmojiFromCode,
 } from "~/utils/teamMeta";
+import {
+  useRegisteredTeamsCatalog,
+  type RegisteredTeamCatalogItem,
+} from "~/composables/useRegisteredTeamsCatalog";
 import "flag-icons/css/flag-icons.min.css";
 
 definePageMeta({
@@ -21,12 +25,7 @@ interface PositionRow {
   badge_icons: string[];
 }
 
-interface TeamProfileOption {
-  name: string;
-  code: string | null;
-  logo_url: string | null;
-  team_key: string;
-}
+type TeamProfileOption = RegisteredTeamCatalogItem;
 
 interface WeeklyLeaderRow {
   user_id: string;
@@ -117,6 +116,7 @@ const user = useSupabaseUser();
 const { emitRankUp } = useGameUx();
 const activeQuinielaId = useCookie<string | null>("active_quiniela_id");
 const { quiniela, loadActiveQuiniela } = useActiveQuiniela();
+const { loadRegisteredTeamsCatalog } = useRegisteredTeamsCatalog();
 const gamificationSupported = useState<boolean | null>(
   "gamification-supported",
   () => null,
@@ -1740,19 +1740,7 @@ const loadRanking = async () => {
 };
 
 const loadRegisteredTeams = async () => {
-  const { data, error } = await client
-    .from("team_profiles")
-    .select("name, code, logo_url, team_key")
-    .order("name", { ascending: true });
-
-  if (error) {
-    return;
-  }
-
-  registeredTeams.value =
-    (data as TeamProfileOption[] | null)?.filter((item) =>
-      Boolean(item.name),
-    ) ?? [];
+  registeredTeams.value = await loadRegisteredTeamsCatalog();
 };
 
 onMounted(() => {
