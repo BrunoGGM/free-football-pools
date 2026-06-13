@@ -921,7 +921,7 @@ onBeforeUnmount(() => {
                     :key="team.team_key"
                     :value="team.name"
                   >
-                    {{ team.name }}
+                    {{ teamOptionFlag(team) }} {{ team.name }}
                   </option>
                 </select>
               </div>
