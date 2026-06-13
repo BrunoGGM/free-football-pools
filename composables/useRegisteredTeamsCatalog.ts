@@ -12,11 +12,28 @@ type RegisteredTeamsCachePayload = {
   teams: RegisteredTeamCatalogItem[];
 };
 
-const REGISTERED_TEAMS_CACHE_KEY = "registered-teams-catalog:v1";
+const REGISTERED_TEAMS_CACHE_KEY = "registered-teams-catalog:v2";
 const REGISTERED_TEAMS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const isFreshCache = (cachedAt: number) =>
   Number.isFinite(cachedAt) && Date.now() - cachedAt < REGISTERED_TEAMS_CACHE_TTL_MS;
+
+const isPlaceholderTeamName = (value: string) => {
+  const normalized = value.trim().toUpperCase();
+
+  if (!normalized) {
+    return true;
+  }
+
+  return (
+    /^\d+[A-Z]$/.test(normalized) ||
+    /^W\d+$/.test(normalized) ||
+    /^L\d+$/.test(normalized) ||
+    /^3RD\(.+\)$/.test(normalized) ||
+    normalized.includes("WINNER") ||
+    normalized.includes("LOSER")
+  );
+};
 
 const upsertRegisteredTeamOption = (
   map: Map<string, RegisteredTeamCatalogItem>,
@@ -29,7 +46,7 @@ const upsertRegisteredTeamOption = (
 ) => {
   const name = String(payload.name || "").trim();
 
-  if (!name) {
+  if (!name || isPlaceholderTeamName(name)) {
     return;
   }
 
