@@ -194,6 +194,7 @@ const matchScoreDraftById = ref<
   Record<
     string,
     {
+      match_time: string;
       home_score: string;
       away_score: string;
       home_penalty_score: string;
@@ -1024,6 +1025,7 @@ const loadIngestionLogs = async () => {
     const previous = matchScoreDraftById.value[item.id];
 
     nextDrafts[item.id] = {
+      match_time: previous?.match_time ?? toInputDateTime(item.match_time_iso),
       home_score:
         previous?.home_score ??
         (item.home_score === null ? "" : String(item.home_score)),
@@ -1060,6 +1062,7 @@ watch(matchesTotalPages, (value) => {
 const updateMatchScoreDraft = (payload: {
   id: string;
   field:
+    | "match_time"
     | "home_score"
     | "away_score"
     | "home_penalty_score"
@@ -1070,6 +1073,7 @@ const updateMatchScoreDraft = (payload: {
   const current =
     matchScoreDraftById.value[payload.id] ||
     ({
+      match_time: "",
       home_score: "",
       away_score: "",
       home_penalty_score: "",
@@ -1142,6 +1146,13 @@ const saveMatchScore = async (matchId: string) => {
     return parsed;
   };
 
+  const nextMatchTimeIso = toIsoOrNull(draft.match_time);
+
+  if (!nextMatchTimeIso) {
+    matchScoreError.value = "Fecha/hora invalida para el partido.";
+    return;
+  }
+
   let homeScore: number | null;
   let awayScore: number | null;
   let homePenaltyScore: number | null;
@@ -1208,6 +1219,7 @@ const saveMatchScore = async (matchId: string) => {
 
   try {
     const payload: Record<string, unknown> = {
+      match_time: nextMatchTimeIso,
       home_score: homeScore,
       away_score: awayScore,
       status: draft.status,
@@ -1223,13 +1235,13 @@ const saveMatchScore = async (matchId: string) => {
       body: payload,
     });
 
-    matchScoreMessage.value = "Marcador actualizado correctamente.";
+    matchScoreMessage.value = "Partido actualizado correctamente.";
     await loadIngestionLogs();
   } catch (error: any) {
     matchScoreError.value =
       error?.data?.message ||
       error?.message ||
-      "No se pudo actualizar el marcador";
+      "No se pudo actualizar el partido";
   } finally {
     savingMatchScoreId.value = null;
   }

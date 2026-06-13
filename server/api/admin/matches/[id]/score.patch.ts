@@ -10,6 +10,7 @@ type MatchUpdateBody = {
   home_penalty_score?: number | null
   away_penalty_score?: number | null
   status?: MatchStatus
+  match_time?: string | null
 }
 
 const VALID_STATUS = new Set<MatchStatus>(['pending', 'in_progress', 'finished'])
@@ -39,6 +40,28 @@ const parseScore = (value: unknown, label = 'Marcador'): number | null => {
   return parsed
 }
 
+const parseMatchTime = (value: unknown): string => {
+  const raw = String(value || '').trim()
+
+  if (!raw) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'match_time invalido',
+    })
+  }
+
+  const parsed = new Date(raw)
+
+  if (Number.isNaN(parsed.getTime())) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'match_time invalido',
+    })
+  }
+
+  return parsed.toISOString()
+}
+
 export default defineEventHandler(async (event) => {
   const supabase = serverSupabaseServiceRole<any>(event)
   await requireAdminAccess(event, supabase)
@@ -56,8 +79,9 @@ export default defineEventHandler(async (event) => {
   const hasHomePenalty = Object.prototype.hasOwnProperty.call(body, 'home_penalty_score')
   const hasAwayPenalty = Object.prototype.hasOwnProperty.call(body, 'away_penalty_score')
   const hasStatus = Object.prototype.hasOwnProperty.call(body, 'status')
+  const hasMatchTime = Object.prototype.hasOwnProperty.call(body, 'match_time')
 
-  if (!hasHome && !hasAway && !hasHomePenalty && !hasAwayPenalty && !hasStatus) {
+  if (!hasHome && !hasAway && !hasHomePenalty && !hasAwayPenalty && !hasStatus && !hasMatchTime) {
     throw createError({ statusCode: 400, statusMessage: 'No hay campos para actualizar' })
   }
 
@@ -135,6 +159,10 @@ export default defineEventHandler(async (event) => {
     }
 
     patch.status = status
+  }
+
+  if (hasMatchTime) {
+    patch.match_time = parseMatchTime(body.match_time)
   }
 
   const nextStatus = (patch.status as MatchStatus | undefined) || (existing.status as MatchStatus)

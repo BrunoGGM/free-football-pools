@@ -19,6 +19,7 @@ const desktopPartidosDetails = ref<HTMLDetailsElement | null>(null);
 const mobilePartidosDetails = ref<HTMLDetailsElement | null>(null);
 const isPartidosActive = computed(() => {
   return (
+    isActive("/dashboard/calendario") ||
     isActive("/dashboard/grupos") ||
     isActive("/dashboard/eliminatorias") ||
     isActive("/dashboard/picks-adicionales")
@@ -749,6 +750,15 @@ onBeforeUnmount(() => {
                 >
                   <li>
                     <NuxtLink
+                      to="/dashboard/calendario"
+                      :class="[isActive('/dashboard/calendario') ? 'active' : '']"
+                      @click="closePartidosMenus"
+                    >
+                      Calendario
+                    </NuxtLink>
+                  </li>
+                  <li>
+                    <NuxtLink
                       to="/dashboard/grupos"
                       :class="[isActive('/dashboard/grupos') ? 'active' : '']"
                       @click="closePartidosMenus"
@@ -855,6 +865,13 @@ onBeforeUnmount(() => {
                 <details ref="mobilePartidosDetails">
                   <summary>Partidos</summary>
                   <ul class="bg-base-100 rounded-t-none p-2">
+                    <li>
+                      <NuxtLink
+                        to="/dashboard/calendario"
+                        @click="closePartidosMenus"
+                        >Calendario</NuxtLink
+                      >
+                    </li>
                     <li>
                       <NuxtLink
                         to="/dashboard/grupos"

@@ -9,12 +9,8 @@ interface SignUpPayload {
   username: string
 }
 
-interface ResetPasswordPayload {
-  email: string
-  redirectTo?: string
-}
-
 export function useSupabaseAuth() {
+  const config = useRuntimeConfig()
   const client = useSupabaseClient<any>()
   const user = useSupabaseUser()
   const loading = useState<boolean>('auth-loading', () => false)
@@ -22,6 +18,14 @@ export function useSupabaseAuth() {
 
   const resetError = () => {
     errorMessage.value = null
+  }
+
+  const getEmailRedirectTo = () => {
+    const configuredSiteUrl = String(config.public.siteUrl || '').trim()
+    const browserOrigin = process.client ? window.location.origin : ''
+    const baseUrl = (configuredSiteUrl || browserOrigin).replace(/\/+$/, '')
+
+    return baseUrl ? `${baseUrl}/auth` : undefined
   }
 
   const signInWithPassword = async (payload: SignInPayload) => {
@@ -91,6 +95,7 @@ export function useSupabaseAuth() {
   const signUpWithPassword = async (payload: SignUpPayload) => {
     loading.value = true
     errorMessage.value = null
+    const emailRedirectTo = getEmailRedirectTo()
 
     const { error } = await client.auth.signUp({
       email: payload.email,
@@ -99,6 +104,7 @@ export function useSupabaseAuth() {
         data: {
           username: payload.username,
         },
+        ...(emailRedirectTo ? { emailRedirectTo } : {}),
       },
     })
 
@@ -109,40 +115,6 @@ export function useSupabaseAuth() {
     }
 
     loading.value = false
-    return true
-  }
-
-  const resetPasswordForEmail = async (payload: ResetPasswordPayload) => {
-    loading.value = true
-    errorMessage.value = null
-
-    const { error } = await client.auth.resetPasswordForEmail(payload.email, {
-      redirectTo: payload.redirectTo,
-    })
-
-    loading.value = false
-
-    if (error) {
-      errorMessage.value = error.message
-      return false
-    }
-
-    return true
-  }
-
-  const updatePassword = async (password: string) => {
-    loading.value = true
-    errorMessage.value = null
-
-    const { error } = await client.auth.updateUser({ password })
-
-    loading.value = false
-
-    if (error) {
-      errorMessage.value = error.message
-      return false
-    }
-
     return true
   }
 
@@ -169,8 +141,6 @@ export function useSupabaseAuth() {
     resetError,
     signInWithPassword,
     signUpWithPassword,
-    resetPasswordForEmail,
-    updatePassword,
     signOut,
   }
 }

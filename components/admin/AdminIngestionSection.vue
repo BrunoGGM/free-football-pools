@@ -47,6 +47,7 @@ defineProps<{
   matchScoreDraftById: Record<
     string,
     {
+      match_time: string;
       home_score: string;
       away_score: string;
       home_penalty_score: string;
@@ -69,6 +70,7 @@ const emit = defineEmits<{
     payload: {
       id: string;
       field:
+        | "match_time"
         | "home_score"
         | "away_score"
         | "home_penalty_score"
@@ -88,7 +90,7 @@ const emit = defineEmits<{
   >
     <h2 class="text-base-content text-xl">Monitoreo de ingesta de API</h2>
     <p class="text-base-content/70 mt-2 text-sm">
-      Este bloque muestra partidos recientes y permite ajustar marcador/estado
+      Este bloque muestra partidos recientes y permite ajustar fecha, marcador y estado
       manualmente.
     </p>
 
@@ -291,7 +293,21 @@ const emit = defineEmits<{
                 {{ entry.stage.replaceAll("_", " ") }}
               </td>
               <td class="text-base-content/70 px-4 py-3 text-xs">
-                {{ entry.match_time }}
+                <div class="space-y-2">
+                  <p>{{ entry.match_time }}</p>
+                  <input
+                    :value="matchScoreDraftById[entry.id]?.match_time ?? ''"
+                    type="datetime-local"
+                    class="input input-bordered input-xs w-52"
+                    @input="
+                      emit('updateMatchScoreDraft', {
+                        id: entry.id,
+                        field: 'match_time',
+                        value: ($event.target as HTMLInputElement).value,
+                      })
+                    "
+                  />
+                </div>
               </td>
               <td class="px-4 py-3">
                 <div class="flex flex-col gap-1">

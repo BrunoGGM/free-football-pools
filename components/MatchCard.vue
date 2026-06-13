@@ -7,9 +7,11 @@ const props = withDefaults(
   defineProps<{
     match: MatchItem;
     editable?: boolean;
+    compact?: boolean;
   }>(),
   {
     editable: true,
+    compact: false,
   },
 );
 
@@ -269,6 +271,50 @@ const predictionSummary = computed(() => {
   return `Empate (${home}-${away})`;
 });
 
+const compactHomeOutcomeLabel = computed(() => {
+  return homeTeamCode.value ? `Gana ${homeTeamCode.value}` : "Gana local";
+});
+
+const compactAwayOutcomeLabel = computed(() => {
+  return awayTeamCode.value ? `Gana ${awayTeamCode.value}` : "Gana visita";
+});
+
+const predictionResultStatus = computed(() => {
+  if (props.match.status !== "finished") {
+    return null;
+  }
+
+  if (!predictionSummary.value) {
+    return {
+      label: "Sin pick",
+      badgeClass: "badge-ghost",
+    };
+  }
+
+  if (pointsEarned.value === null) {
+    return {
+      label: "Pendiente",
+      badgeClass: "badge-ghost",
+    };
+  }
+
+  if (pointsEarned.value > 0) {
+    return {
+      label: `Atinaste · +${pointsEarned.value} pts`,
+      badgeClass: "badge-success",
+    };
+  }
+
+  return {
+    label: "No atinaste",
+    badgeClass: "badge-error",
+  };
+});
+
+const predictionDisplayText = computed(() => {
+  return predictionSummary.value || "Sin pick registrado";
+});
+
 const triggerSaveCelebration = () => {
   if (celebrationTimer) {
     clearTimeout(celebrationTimer);
@@ -490,11 +536,12 @@ onBeforeUnmount(() => {
 <template>
   <article
     :class="[
-      'pitch-panel card sweep-in overflow-hidden rounded-2xl border border-base-300 bg-base-200/70 p-4 md:p-5',
+      'pitch-panel card sweep-in overflow-hidden rounded-2xl border border-base-300 bg-base-200/70',
+      props.compact ? 'p-3 md:p-3.5' : 'p-4 md:p-5',
       showSaveCelebration && 'bet-card-hit',
     ]"
   >
-    <div class="flex flex-wrap items-center justify-between gap-3">
+    <div class="flex flex-wrap items-center justify-between gap-2">
       <div class="flex items-center gap-3">
         <div v-if="isLive" class="live-signal" />
         <p class="text-primary/85 text-xs font-semibold tracking-[0.18em]">
@@ -513,46 +560,71 @@ onBeforeUnmount(() => {
       </span>
     </div>
 
-    <div class="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-      <div class="card rounded-xl bg-base-100/70 p-3 text-center">
+    <div
+      :class="[
+        'mt-3 grid gap-3',
+        props.compact
+          ? 'grid-cols-[minmax(0,1fr)_104px_minmax(0,1fr)] items-center gap-2'
+          : 'sm:grid-cols-[1fr_auto_1fr] sm:items-center',
+      ]"
+    >
+      <div
+        :class="[
+          'bg-base-100/70 text-center min-w-0',
+          props.compact ? 'rounded-lg px-2 py-2' : 'card rounded-xl p-3',
+        ]"
+      >
         <img
           v-if="homeLogoUrl"
           :src="homeLogoUrl"
           :alt="`Escudo de ${props.match.home_team}`"
-          class="bg-base-200 mx-auto mb-1 h-10 w-10 rounded-full object-contain"
+          :class="[
+            'bg-base-200 mx-auto mb-1 rounded-full object-contain',
+            props.compact ? 'h-8 w-8' : 'h-10 w-10',
+          ]"
           loading="lazy"
         />
         <span
           v-else-if="homeTeamFlagIconClass"
           :class="homeTeamFlagIconClass"
           class="mx-auto mb-1 block rounded-[999px]"
-          style="width: 2rem; height: 2rem"
+          :style="props.compact ? 'width: 1.75rem; height: 1.75rem' : 'width: 2rem; height: 2rem'"
           :title="`Bandera de ${props.match.home_team}`"
           aria-hidden="true"
         />
-        <p v-else class="text-2xl leading-none">{{ homeTeamFlagEmoji }}</p>
-        <p class="text-base-content text-base font-semibold">
+        <p v-else :class="props.compact ? 'text-xl leading-none' : 'text-2xl leading-none'">{{ homeTeamFlagEmoji }}</p>
+        <p
+          :class="
+            props.compact
+              ? 'text-base-content truncate text-sm font-semibold leading-tight'
+              : 'text-base-content text-base font-semibold'
+          "
+          :title="props.match.home_team"
+        >
           {{ props.match.home_team }}
         </p>
         <p class="text-base-content/70 text-xs">{{ homeTeamCode || "--" }}</p>
       </div>
 
       <div class="text-center">
-        <p class="text-base-content/70 text-sm">Kickoff</p>
-        <p class="text-sm font-semibold">{{ kickoffText }}</p>
+        <p :class="props.compact ? 'text-base-content/70 text-xs' : 'text-base-content/70 text-sm'">Kickoff</p>
+        <p :class="props.compact ? 'text-[11px] font-semibold leading-tight' : 'text-sm font-semibold'">{{ kickoffText }}</p>
         <p v-if="sourceTimeLabel" class="text-base-content/70 text-xs">
           ET {{ sourceTimeLabel }}
         </p>
-        <p v-if="props.match.venue" class="text-base-content/70 mt-1 text-xs">
+        <p v-if="props.match.venue && !props.compact" class="text-base-content/70 mt-1 text-xs">
           {{ props.match.venue }}
         </p>
         <div
-          class="bg-info/10 border-info/30 mt-2 rounded-lg border px-3 py-1.5"
+          :class="[
+            'bg-info/10 border-info/30 mt-2 rounded-lg border',
+            props.compact ? 'px-2 py-1' : 'px-3 py-1.5',
+          ]"
         >
           <p class="text-info/90 text-[10px] font-semibold tracking-[0.16em]">
             GOLES
           </p>
-          <p class="text-primary text-xl font-bold">
+          <p :class="props.compact ? 'text-primary text-lg font-bold' : 'text-primary text-xl font-bold'">
             {{ props.match.home_score ?? "-" }} :
             {{ props.match.away_score ?? "-" }}
           </p>
@@ -573,128 +645,186 @@ onBeforeUnmount(() => {
         </div>
         <p
           v-if="qualifiedTeamLabel"
-          class="mt-1 text-xs font-semibold"
-          :class="
+          :class="[
+            'mt-1 font-semibold',
+            props.compact ? 'text-[11px]' : 'text-xs',
             qualifiedTeamLabel.includes('Sin clasificado')
               ? 'text-warning'
               : qualifiedTeamLabel.includes('(penales)')
                 ? 'text-info'
-                : 'text-success'
-          "
+                : 'text-success',
+          ]"
         >
           {{ qualifiedTeamLabel }}
         </p>
       </div>
 
-      <div class="card rounded-xl bg-base-100/70 p-3 text-center">
+      <div
+        :class="[
+          'bg-base-100/70 text-center min-w-0',
+          props.compact ? 'rounded-lg px-2 py-2' : 'card rounded-xl p-3',
+        ]"
+      >
         <img
           v-if="awayLogoUrl"
           :src="awayLogoUrl"
           :alt="`Escudo de ${props.match.away_team}`"
-          class="bg-base-200 mx-auto mb-1 h-10 w-10 rounded-full object-contain"
+          :class="[
+            'bg-base-200 mx-auto mb-1 rounded-full object-contain',
+            props.compact ? 'h-8 w-8' : 'h-10 w-10',
+          ]"
           loading="lazy"
         />
         <span
           v-else-if="awayTeamFlagIconClass"
           :class="awayTeamFlagIconClass"
           class="mx-auto mb-1 block rounded-[999px]"
-          style="width: 2rem; height: 2rem"
+          :style="props.compact ? 'width: 1.75rem; height: 1.75rem' : 'width: 2rem; height: 2rem'"
           :title="`Bandera de ${props.match.away_team}`"
           aria-hidden="true"
         />
-        <p v-else class="text-2xl leading-none">{{ awayTeamFlagEmoji }}</p>
-        <p class="text-base-content text-base font-semibold">
+        <p v-else :class="props.compact ? 'text-xl leading-none' : 'text-2xl leading-none'">{{ awayTeamFlagEmoji }}</p>
+        <p
+          :class="
+            props.compact
+              ? 'text-base-content truncate text-sm font-semibold leading-tight'
+              : 'text-base-content text-base font-semibold'
+          "
+          :title="props.match.away_team"
+        >
           {{ props.match.away_team }}
         </p>
         <p class="text-base-content/70 text-xs">{{ awayTeamCode || "--" }}</p>
       </div>
     </div>
 
-    <div class="card mt-5 rounded-xl border border-base-300 bg-base-100/70 p-4">
+    <div
+      :class="[
+        'card mt-3 rounded-xl border border-base-300 bg-base-100/70',
+        props.compact ? 'p-3' : 'p-4',
+      ]"
+    >
       <p class="text-base-content/70 text-xs uppercase tracking-[0.14em]">
         Tu prediccion
       </p>
 
-      <div class="mt-3 grid gap-2 sm:grid-cols-3">
-        <button
-          :disabled="!canEdit || loading"
-          class="btn btn-sm"
-          :class="[selectedOutcome === 'home' ? 'btn-primary' : 'btn-outline']"
-          @click="setOutcome('home')"
-        >
-          Gana {{ props.match.home_team }}
-        </button>
-        <button
-          :disabled="!canEdit || loading"
-          class="btn btn-sm"
-          :class="[selectedOutcome === 'draw' ? 'btn-primary' : 'btn-outline']"
-          @click="setOutcome('draw')"
-        >
-          Empate
-        </button>
-        <button
-          :disabled="!canEdit || loading"
-          class="btn btn-sm"
-          :class="[selectedOutcome === 'away' ? 'btn-primary' : 'btn-outline']"
-          @click="setOutcome('away')"
-        >
-          Gana {{ props.match.away_team }}
-        </button>
+      <div v-if="predictionResultStatus" class="mt-2">
+        <span class="badge badge-sm" :class="predictionResultStatus.badgeClass">
+          {{ predictionResultStatus.label }}
+        </span>
       </div>
 
-      <div class="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-        <input
-          v-model="homePrediction"
-          :disabled="!canEdit || loading"
-          inputmode="numeric"
-          class="input input-bordered w-full text-center text-lg"
-          placeholder="0"
-        />
-        <span class="text-base-content/70 text-sm">vs</span>
-        <input
-          v-model="awayPrediction"
-          :disabled="!canEdit || loading"
-          inputmode="numeric"
-          class="input input-bordered w-full text-center text-lg"
-          placeholder="0"
-        />
-      </div>
+      <template v-if="canEdit">
+        <div :class="props.compact ? 'mt-2 grid grid-cols-3 gap-2' : 'mt-3 grid gap-2 sm:grid-cols-3'">
+          <button
+            :disabled="loading"
+            class="btn btn-sm"
+            :class="[selectedOutcome === 'home' ? 'btn-primary' : 'btn-outline']"
+            @click="setOutcome('home')"
+          >
+            {{ props.compact ? compactHomeOutcomeLabel : `Gana ${props.match.home_team}` }}
+          </button>
+          <button
+            :disabled="loading"
+            class="btn btn-sm"
+            :class="[selectedOutcome === 'draw' ? 'btn-primary' : 'btn-outline']"
+            @click="setOutcome('draw')"
+          >
+            Empate
+          </button>
+          <button
+            :disabled="loading"
+            class="btn btn-sm"
+            :class="[selectedOutcome === 'away' ? 'btn-primary' : 'btn-outline']"
+            @click="setOutcome('away')"
+          >
+            {{ props.compact ? compactAwayOutcomeLabel : `Gana ${props.match.away_team}` }}
+          </button>
+        </div>
 
-      <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <p class="text-base-content/70 text-xs">
-          {{
-            canEdit
-              ? "+1 por resultado y +3 por marcador exacto. Editas hasta antes del kickoff."
-              : "Prediccion bloqueada para este partido."
-          }}
+        <div :class="props.compact ? 'mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2' : 'mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3'">
+          <input
+            v-model="homePrediction"
+            :disabled="loading"
+            inputmode="numeric"
+            :class="[
+              'input input-bordered w-full text-center',
+              props.compact ? 'text-base' : 'text-lg',
+            ]"
+            placeholder="0"
+          />
+          <span class="text-base-content/70 text-sm">vs</span>
+          <input
+            v-model="awayPrediction"
+            :disabled="loading"
+            inputmode="numeric"
+            :class="[
+              'input input-bordered w-full text-center',
+              props.compact ? 'text-base' : 'text-lg',
+            ]"
+            placeholder="0"
+          />
+        </div>
+
+        <div :class="props.compact ? 'mt-3 flex flex-wrap items-center justify-between gap-2' : 'mt-4 flex flex-wrap items-center justify-between gap-3'">
+          <p :class="props.compact ? 'text-base-content/70 max-w-56 text-[11px] leading-snug' : 'text-base-content/70 text-xs'">
+            +1 por resultado y +3 por marcador exacto. Editas hasta antes del kickoff.
+          </p>
+
+          <button
+            :disabled="loading"
+            class="btn btn-primary btn-sm btn-bet-glow"
+            @click="savePrediction"
+          >
+            {{ loading ? "Guardando..." : "Guardar prediccion" }}
+          </button>
+        </div>
+
+        <WowSaveBurst
+          :visible="showSaveCelebration"
+          :class="props.compact ? 'mt-2' : 'mt-3'"
+          title="Ticket confirmado"
+          subtitle="Tu pick ya esta en juego"
+        />
+
+        <p v-if="savedOnce" :class="props.compact ? 'text-success mt-2 text-xs' : 'text-success mt-3 text-sm'">
+          Prediccion guardada.
         </p>
+        <p v-if="predictionSummary" :class="props.compact ? 'text-base-content/70 mt-1 truncate text-[11px]' : 'text-base-content/70 mt-1 text-xs'" :title="predictionSummary">
+          Tu pronostico: {{ predictionSummary }}
+        </p>
+        <p v-if="pointsEarned !== null && !predictionResultStatus" :class="props.compact ? 'text-warning mt-1 text-xs' : 'text-warning mt-1 text-sm'">
+          Puntos de este partido: {{ pointsEarned }}
+        </p>
+        <p v-if="saveError" :class="props.compact ? 'text-error mt-2 text-xs' : 'text-error mt-3 text-sm'">{{ saveError }}</p>
+      </template>
 
-        <button
-          :disabled="!canEdit || loading"
-          class="btn btn-primary btn-sm btn-bet-glow"
-          @click="savePrediction"
-        >
-          {{ loading ? "Guardando..." : "Guardar prediccion" }}
-        </button>
-      </div>
+      <template v-else>
+        <div class="mt-3 space-y-2">
+          <div class="rounded-lg bg-base-200/60 px-3 py-2">
+            <p class="text-base-content/60 text-[10px] uppercase tracking-[0.14em]">
+              Tu pronostico
+            </p>
+            <p
+              :class="
+                props.compact
+                  ? 'text-base-content mt-1 truncate text-sm font-medium'
+                  : 'text-base-content mt-1 text-sm font-medium'
+              "
+              :title="predictionDisplayText"
+            >
+              {{ predictionDisplayText }}
+            </p>
+          </div>
 
-      <WowSaveBurst
-        :visible="showSaveCelebration"
-        class="mt-3"
-        title="Ticket confirmado"
-        subtitle="Tu pick ya esta en juego"
-      />
-
-      <p v-if="savedOnce" class="text-success mt-3 text-sm">
-        Prediccion guardada.
-      </p>
-      <p v-if="predictionSummary" class="text-base-content/70 mt-1 text-xs">
-        Tu pronostico: {{ predictionSummary }}
-      </p>
-      <p v-if="pointsEarned !== null" class="text-warning mt-1 text-sm">
-        Puntos de este partido: {{ pointsEarned }}
-      </p>
-      <p v-if="saveError" class="text-error mt-3 text-sm">{{ saveError }}</p>
+          <p
+            v-if="pointsEarned !== null && !predictionResultStatus"
+            :class="props.compact ? 'text-warning text-xs' : 'text-warning text-sm'"
+          >
+            Puntos de este partido: {{ pointsEarned }}
+          </p>
+        </div>
+      </template>
     </div>
   </article>
 </template>
