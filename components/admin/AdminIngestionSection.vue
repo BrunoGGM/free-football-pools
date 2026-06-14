@@ -265,7 +265,7 @@ const emit = defineEmits<{
         </p>
       </div>
 
-      <div class="overflow-hidden rounded-xl border border-base-300">
+      <div class="table-shell rounded-xl border border-base-300">
         <table class="table min-w-full text-sm">
           <thead
             class="bg-base-200 text-base-content/70 text-left text-xs uppercase tracking-[0.12em]"

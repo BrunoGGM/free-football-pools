@@ -267,6 +267,35 @@ h3,
   background: color-mix(in oklab, var(--color-primary) 8%, transparent);
 }
 
+.table-shell {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.table-shell > .table {
+  min-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .table-shell {
+    scrollbar-width: thin;
+  }
+
+  .table-shell > .table {
+    width: max-content;
+    min-width: 100%;
+  }
+
+  .table-shell > .table :where(th, td) {
+    white-space: nowrap;
+  }
+
+  .table-shell > .table tbody tr:hover {
+    transform: none;
+  }
+}
+
 .leader-podium {
   position: relative;
   overflow: hidden;

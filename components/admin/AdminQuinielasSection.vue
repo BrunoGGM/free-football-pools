@@ -2189,7 +2189,7 @@ watch(
 
             <div
               v-if="answersForCustomPick(pick.id).length > 0"
-              class="mt-4 overflow-x-auto rounded-xl border border-base-300"
+              class="table-shell mt-4 rounded-xl border border-base-300"
             >
               <table class="table table-sm min-w-full">
                 <thead class="bg-base-100 text-xs uppercase tracking-[0.12em] text-base-content/70">
@@ -2405,7 +2405,7 @@ watch(
         </p>
       </div>
 
-      <div class="mt-6 overflow-hidden rounded-xl border border-base-300">
+      <div class="table-shell mt-6 rounded-xl border border-base-300">
         <table class="table min-w-full text-sm">
           <thead
             class="bg-base-200 text-base-content/70 text-left text-xs uppercase tracking-[0.12em]"
@@ -2665,7 +2665,7 @@ watch(
             >
               Cargando boletos...
             </div>
-            <div v-else class="mt-3 max-h-72 overflow-auto">
+            <div v-else class="table-shell mt-3 max-h-72 overflow-auto">
               <table class="table table-xs min-w-full">
                 <thead>
                   <tr>
@@ -2728,7 +2728,7 @@ watch(
                 {{ redemptionsForPreview.length }} eventos
               </span>
             </div>
-            <div class="mt-3 max-h-72 overflow-auto">
+            <div class="table-shell mt-3 max-h-72 overflow-auto">
               <table class="table table-xs min-w-full">
                 <thead>
                   <tr>

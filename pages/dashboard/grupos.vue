@@ -408,7 +408,7 @@ watch(
         </div>
 
         <article
-          class="overflow-x-auto rounded-2xl border border-base-300 bg-base-100/70"
+          class="table-shell rounded-2xl border border-base-300 bg-base-100/70"
         >
           <table class="table min-w-full text-sm">
             <thead

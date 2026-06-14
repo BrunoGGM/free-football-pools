@@ -1908,29 +1908,30 @@ onBeforeUnmount(() => {
         </p>
       </div>
 
-      <table class="table min-w-full text-sm">
-        <thead
-          class="bg-base-200 text-base-content/70 text-left text-xs uppercase tracking-[0.12em]"
-        >
-          <tr>
-            <th class="px-4 py-3">#</th>
-            <th class="px-4 py-3">Jugador</th>
-            <th class="px-4 py-3">Puntos</th>
-            <th class="px-4 py-3">Racha</th>
-            <th class="px-4 py-3">Campeon</th>
-            <th class="px-4 py-3">Historial</th>
-            <th v-if="canViewOtherQuinielas" class="px-4 py-3">Quiniela</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="row in rows"
-            :key="row.user_id"
-            :class="[
-              'border-t border-base-300',
-              row.rank === 1 && 'leader-row',
-            ]"
+      <div class="table-shell">
+        <table class="table min-w-full text-sm">
+          <thead
+            class="bg-base-200 text-base-content/70 text-left text-xs uppercase tracking-[0.12em]"
           >
+            <tr>
+              <th class="px-4 py-3">#</th>
+              <th class="px-4 py-3">Jugador</th>
+              <th class="px-4 py-3">Puntos</th>
+              <th class="px-4 py-3">Racha</th>
+              <th class="px-4 py-3">Campeon</th>
+              <th class="px-4 py-3">Historial</th>
+              <th v-if="canViewOtherQuinielas" class="px-4 py-3">Quiniela</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in rows"
+              :key="row.user_id"
+              :class="[
+                'border-t border-base-300',
+                row.rank === 1 && 'leader-row',
+              ]"
+            >
             <td class="text-primary px-4 py-3 font-semibold">
               <div class="flex items-center gap-2">
                 <span
@@ -2032,9 +2033,10 @@ onBeforeUnmount(() => {
                 Ver quiniela
               </button>
             </td>
-          </tr>
-        </tbody>
-      </table>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       <div class="border-t border-base-300 bg-base-200/60 px-4 py-3 sm:px-5">
         <p
@@ -2342,7 +2344,7 @@ onBeforeUnmount(() => {
 
           <div
             v-else-if="!pointsHistoryLoading"
-            class="mt-4 max-h-[55vh] overflow-auto rounded-xl border border-base-300"
+            class="table-shell mt-4 max-h-[55vh] overflow-auto rounded-xl border border-base-300"
           >
             <table class="table min-w-full text-sm">
               <thead
