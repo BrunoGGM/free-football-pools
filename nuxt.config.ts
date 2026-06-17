@@ -16,7 +16,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-11-01',
   devtools: { enabled: true },
   css: ['~/assets/css/main.css'],
-  modules: ['@nuxtjs/supabase', '@vercel/speed-insights/nuxt'],
+  modules: ['@nuxtjs/supabase', '@vercel/speed-insights/nuxt', '@vercel/analytics'],
   vite: {
     plugins: [tailwindcss()],
   },
