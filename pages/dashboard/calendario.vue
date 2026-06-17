@@ -119,6 +119,23 @@ const totalLive = computed(
 const totalFinished = computed(
   () => visibleMatches.value.filter((match) => match.status === "finished").length,
 );
+
+const todayKey = computed(() => {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+});
+
+const hasMatchesToday = computed(() =>
+  groupedMatches.value.some((group) => group.key === todayKey.value),
+);
+
+const jumpToToday = () => {
+  const element = document.getElementById(`day-${todayKey.value}`);
+  if (element) {
+    element.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+};
 </script>
 
 <template>
@@ -135,7 +152,18 @@ const totalFinished = computed(
         </p>
       </div>
 
-      <button class="btn btn-outline btn-sm" @click="refresh">Refrescar</button>
+      <div class="flex items-center gap-2">
+        <button
+          v-if="hasMatchesToday"
+          class="btn btn-primary btn-sm"
+          @click="jumpToToday"
+        >
+          Ir a hoy
+        </button>
+        <button class="btn btn-outline btn-sm" @click="refresh">
+          Refrescar
+        </button>
+      </div>
     </header>
 
     <article v-if="!activeQuinielaId" class="alert alert-warning rounded-2xl">
@@ -196,8 +224,13 @@ const totalFinished = computed(
     <div v-else class="space-y-6">
       <section
         v-for="group in groupedMatches"
+        :id="`day-${group.key}`"
         :key="group.key"
-        class="space-y-3"
+        class="scroll-mt-24 space-y-3"
+        :class="{
+          'rounded-3xl border-2 border-primary/30 bg-primary/5 p-4':
+            group.key === todayKey,
+        }"
       >
         <div class="flex items-center gap-3">
           <span class="badge badge-primary badge-outline">{{ group.matches.length }} partidos</span>
