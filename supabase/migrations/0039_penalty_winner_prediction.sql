@@ -257,3 +257,11 @@ begin
     );
 end;
 $$;
+
+-- 6. Actualizar trigger para incluir went_to_extra_time
+drop trigger if exists tr_matches_apply_match_scoring on public.matches;
+create trigger tr_matches_apply_match_scoring
+after insert or update of home_score, away_score, home_penalty_score, away_penalty_score, status, went_to_extra_time
+on public.matches
+for each row
+execute function public.apply_match_scoring();

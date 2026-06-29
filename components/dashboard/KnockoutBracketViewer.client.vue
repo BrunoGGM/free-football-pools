@@ -28,12 +28,12 @@ interface ViewerMatch {
   status: ViewerStatus;
   opponent1: {
     id: number | null;
-    score?: number;
+    score?: number | string;
     result?: ViewerResult;
   } | null;
   opponent2: {
     id: number | null;
-    score?: number;
+    score?: number | string;
     result?: ViewerResult;
   } | null;
 }
@@ -215,6 +215,8 @@ const getOpponentResult = (
   status: MatchItem["status"],
   score: number | null,
   otherScore: number | null,
+  penaltyScore: number | null = null,
+  otherPenaltyScore: number | null = null,
 ): ViewerResult | undefined => {
   if (status !== "finished") {
     return undefined;
@@ -230,6 +232,15 @@ const getOpponentResult = (
 
   if (score < otherScore) {
     return "loss";
+  }
+
+  if (penaltyScore !== null && otherPenaltyScore !== null) {
+    if (penaltyScore > otherPenaltyScore) {
+      return "win";
+    }
+    if (penaltyScore < otherPenaltyScore) {
+      return "loss";
+    }
   }
 
   return "draw";
@@ -682,22 +693,34 @@ const viewerData = computed(() => {
         opponent1: homeParticipant
           ? {
               id: homeParticipant.id,
-              score: match.home_score ?? undefined,
+              score: match.home_penalty_score !== null 
+                ? `${match.home_score} (${match.home_penalty_score})` 
+                : match.went_to_extra_time 
+                  ? `${match.home_score} (TE)` 
+                  : match.home_score ?? undefined,
               result: getOpponentResult(
                 match.status,
                 match.home_score,
                 match.away_score,
+                match.home_penalty_score,
+                match.away_penalty_score,
               ),
             }
           : null,
         opponent2: awayParticipant
           ? {
               id: awayParticipant.id,
-              score: match.away_score ?? undefined,
+              score: match.away_penalty_score !== null 
+                ? `${match.away_score} (${match.away_penalty_score})` 
+                : match.went_to_extra_time 
+                  ? `${match.away_score} (TE)` 
+                  : match.away_score ?? undefined,
               result: getOpponentResult(
                 match.status,
                 match.away_score,
                 match.home_score,
+                match.away_penalty_score,
+                match.home_penalty_score,
               ),
             }
           : null,

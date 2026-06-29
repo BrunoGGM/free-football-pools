@@ -191,20 +191,20 @@ const qualifiedTeamLabel = computed(() => {
   }
 
   if (props.match.stage === "final") {
-    return winnerByPenalties
-      ? `Campeon: ${winner} (penales)`
-      : `Campeon: ${winner}`;
+    if (winnerByPenalties) return `Campeon: ${winner} (penales)`;
+    if (props.match.went_to_extra_time) return `Campeon: ${winner} (tiempo extra)`;
+    return `Campeon: ${winner}`;
   }
 
   if (props.match.stage === "third_place") {
-    return winnerByPenalties
-      ? `Tercer lugar: ${winner} (penales)`
-      : `Tercer lugar: ${winner}`;
+    if (winnerByPenalties) return `Tercer lugar: ${winner} (penales)`;
+    if (props.match.went_to_extra_time) return `Tercer lugar: ${winner} (tiempo extra)`;
+    return `Tercer lugar: ${winner}`;
   }
 
-  return winnerByPenalties
-    ? `Clasifica: ${winner} (penales)`
-    : `Clasifica: ${winner}`;
+  if (winnerByPenalties) return `Clasifica: ${winner} (penales)`;
+  if (props.match.went_to_extra_time) return `Clasifica: ${winner} (tiempo extra)`;
+  return `Clasifica: ${winner}`;
 });
 
 const isMissingQuinielaColumnError = (error: any) => {

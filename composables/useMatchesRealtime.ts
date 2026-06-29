@@ -12,6 +12,7 @@ export interface MatchItem {
   away_score: number | null
   home_penalty_score: number | null
   away_penalty_score: number | null
+  went_to_extra_time?: boolean
   status: 'pending' | 'in_progress' | 'finished'
   match_time: string
   source_time: string | null
