@@ -35,8 +35,7 @@ const awayPrediction = ref<string>("");
 const selectedOutcome = ref<PredictionOutcome | null>(null);
 const predictsExtraTime = ref(false);
 const predictsPenalties = ref(false);
-const homePenaltyPrediction = ref<string>("");
-const awayPenaltyPrediction = ref<string>("");
+const predictsPenaltyWinner = ref<'home' | 'away' | null>(null);
 const loading = ref(false);
 const saveError = ref<string | null>(null);
 const savedOnce = ref(false);
@@ -272,17 +271,16 @@ const predictionSummary = computed(() => {
     return `Gana ${props.match.away_team} (${home}-${away})`;
   }
 
-  if (home === away && isKnockoutMatch.value) {
-    if (predictsPenalties.value) {
-      const hp = Number.parseInt(homePenaltyPrediction.value, 10);
-      const ap = Number.parseInt(awayPenaltyPrediction.value, 10);
-      if (!Number.isNaN(hp) && !Number.isNaN(ap)) {
-         const winner = hp > ap ? props.match.home_team : props.match.away_team;
-         return `Empate (${home}-${away}), gana ${winner} en penales (${hp}-${ap})`;
-      }
+  if (isKnockoutMatch.value) {
+    if (predictsPenalties.value && predictsPenaltyWinner.value) {
+       const winner = predictsPenaltyWinner.value === 'home' ? props.match.home_team : props.match.away_team;
+       return `${home === away ? `Empate (${home}-${away}), g` : 'G'}ana ${winner} en penales`;
     }
     if (predictsExtraTime.value) {
-      return `Empate (${home}-${away}) y se define en T. Extra`;
+      if (home === away) {
+        return `Empate (${home}-${away}) y se define en T. Extra`;
+      }
+      return `Gana ${home > away ? props.match.home_team : props.match.away_team} (${home}-${away}) en T. Extra`;
     }
   }
 
@@ -359,7 +357,7 @@ const loadPrediction = async () => {
   if (predictionsByQuinielaSupported.value === false) {
     const legacyResult = await client
       .from("predictions")
-      .select("home_score, away_score, predicts_extra_time, predicts_penalties, home_penalty_score, away_penalty_score, points_earned")
+      .select("home_score, away_score, predicts_extra_time, predicts_penalties, predicts_penalty_winner, points_earned")
       .eq("user_id", user.value.id)
       .eq("match_id", props.match.id)
       .maybeSingle();
@@ -373,7 +371,7 @@ const loadPrediction = async () => {
   } else {
     const scopedResult = await client
       .from("predictions")
-      .select("home_score, away_score, predicts_extra_time, predicts_penalties, home_penalty_score, away_penalty_score, points_earned")
+      .select("home_score, away_score, predicts_extra_time, predicts_penalties, predicts_penalty_winner, points_earned")
       .eq("user_id", user.value.id)
       .eq("quiniela_id", activeQuinielaId.value)
       .eq("match_id", props.match.id)
@@ -387,7 +385,7 @@ const loadPrediction = async () => {
 
       const legacyResult = await client
         .from("predictions")
-        .select("home_score, away_score, predicts_extra_time, predicts_penalties, home_penalty_score, away_penalty_score, points_earned")
+        .select("home_score, away_score, predicts_extra_time, predicts_penalties, predicts_penalty_winner, points_earned")
         .eq("user_id", user.value.id)
         .eq("match_id", props.match.id)
         .maybeSingle();
@@ -411,8 +409,7 @@ const loadPrediction = async () => {
   awayPrediction.value = data?.away_score?.toString() ?? "";
   predictsExtraTime.value = data?.predicts_extra_time ?? false;
   predictsPenalties.value = data?.predicts_penalties ?? false;
-  homePenaltyPrediction.value = data?.home_penalty_score?.toString() ?? "";
-  awayPenaltyPrediction.value = data?.away_penalty_score?.toString() ?? "";
+  predictsPenaltyWinner.value = data?.predicts_penalty_winner ?? null;
   if (
     typeof data?.home_score === "number" &&
     typeof data?.away_score === "number"
@@ -451,25 +448,9 @@ const savePrediction = async () => {
     return;
   }
 
-  let savingExtraTime = false;
-  let savingPenalties = false;
-  let finalHomePen: number | null = null;
-  let finalAwayPen: number | null = null;
-
-  if (isKnockoutMatch.value && selectedOutcome.value === 'draw') {
-    savingExtraTime = predictsExtraTime.value;
-    savingPenalties = predictsPenalties.value;
-
-    if (savingPenalties) {
-      const homePen = Number.parseInt(homePenaltyPrediction.value, 10);
-      const awayPen = Number.parseInt(awayPenaltyPrediction.value, 10);
-      if (Number.isNaN(homePen) || Number.isNaN(awayPen) || homePen < 0 || awayPen < 0 || homePen === awayPen) {
-        saveError.value = "Para penales, ingresa un marcador valido sin empates.";
-        return;
-      }
-      finalHomePen = homePen;
-      finalAwayPen = awayPen;
-    }
+  if (isKnockoutMatch.value && predictsPenalties.value && !predictsPenaltyWinner.value) {
+      saveError.value = "Selecciona que equipo ganara en penales.";
+      return;
   }
 
   loading.value = true;
@@ -483,10 +464,9 @@ const savePrediction = async () => {
     match_id: props.match.id,
     home_score: home,
     away_score: away,
-    predicts_extra_time: savingExtraTime,
-    predicts_penalties: savingPenalties,
-    home_penalty_score: finalHomePen,
-    away_penalty_score: finalAwayPen,
+    predicts_extra_time: predictsExtraTime.value,
+    predicts_penalties: predictsPenalties.value,
+    predicts_penalty_winner: predictsPenalties.value ? predictsPenaltyWinner.value : null,
   };
 
   if (predictionsByQuinielaSupported.value === false) {
@@ -807,39 +787,66 @@ onBeforeUnmount(() => {
           />
         </div>
 
-        <div v-if="isKnockoutMatch && selectedOutcome === 'draw'" class="mt-4 rounded-xl border border-secondary/30 bg-secondary/10 p-3">
-          <p class="mb-2 text-xs font-semibold text-secondary">Desempate (Opcional)</p>
+        <div v-if="isKnockoutMatch" class="mt-4 rounded-xl border border-secondary/30 bg-secondary/10 p-3">
+          <label class="cursor-pointer flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="text-secondary bg-secondary/20 rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide">
+                TIEMPO EXTRA
+              </span>
+              <span class="text-base-content/50 text-[10px] hidden sm:inline">(+1 pt)</span>
+            </div>
+            <input
+              v-model="predictsExtraTime"
+              type="checkbox"
+              class="toggle toggle-secondary toggle-xs"
+              :disabled="loading"
+              @change="
+                if (!predictsExtraTime) { predictsPenalties = false; predictsPenaltyWinner = null; }
+                savePrediction();
+              "
+            />
+          </label>
+
+          <div class="divider my-2 border-secondary/10 opacity-30"></div>
+
           <div class="space-y-3">
-            <label class="flex cursor-pointer items-center justify-between">
-              <span class="text-sm">Predigo que habra Tiempo Extra</span>
-              <input v-model="predictsExtraTime" type="checkbox" class="toggle toggle-secondary toggle-sm" />
-            </label>
-            <label class="flex cursor-pointer items-center justify-between">
-              <span class="text-sm">Predigo que habra Penales</span>
-              <input v-model="predictsPenalties" type="checkbox" class="toggle toggle-secondary toggle-sm" />
-            </label>
-            <div v-if="predictsPenalties" class="mt-2 flex items-center justify-center gap-3">
-              <div class="text-center">
-                <p class="text-xs text-base-content/70">Local</p>
-                <input
-                  v-model="homePenaltyPrediction"
-                  :disabled="loading"
-                  inputmode="numeric"
-                  class="input input-bordered input-sm w-16 text-center text-sm border-secondary/50"
-                  placeholder="0"
-                />
+            <label class="cursor-pointer flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-warning bg-warning/20 rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide">
+                  PENALES
+                </span>
+                <span class="text-base-content/50 text-[10px] hidden sm:inline">(+5 pts ganador)</span>
               </div>
-              <span class="text-base-content/70 text-sm mt-4">-</span>
-              <div class="text-center">
-                <p class="text-xs text-base-content/70">Visita</p>
-                <input
-                  v-model="awayPenaltyPrediction"
-                  :disabled="loading"
-                  inputmode="numeric"
-                  class="input input-bordered input-sm w-16 text-center text-sm border-secondary/50"
-                  placeholder="0"
-                />
-              </div>
+              <input
+                v-model="predictsPenalties"
+                type="checkbox"
+                class="toggle toggle-warning toggle-xs"
+                :disabled="loading"
+                @change="
+                  if (predictsPenalties) predictsExtraTime = true;
+                  if (!predictsPenalties) predictsPenaltyWinner = null;
+                  savePrediction();
+                "
+              />
+            </label>
+
+            <div v-if="predictsPenalties" class="flex gap-2">
+              <button
+                class="btn btn-xs flex-1"
+                :class="predictsPenaltyWinner === 'home' ? 'btn-warning' : 'btn-outline border-warning/50 text-warning/70 hover:bg-warning/20'"
+                :disabled="loading"
+                @click="predictsPenaltyWinner = 'home'; savePrediction();"
+              >
+                Gana {{ props.match.home_team_code || props.match.home_team }}
+              </button>
+              <button
+                class="btn btn-xs flex-1"
+                :class="predictsPenaltyWinner === 'away' ? 'btn-warning' : 'btn-outline border-warning/50 text-warning/70 hover:bg-warning/20'"
+                :disabled="loading"
+                @click="predictsPenaltyWinner = 'away'; savePrediction();"
+              >
+                Gana {{ props.match.away_team_code || props.match.away_team }}
+              </button>
             </div>
           </div>
         </div>

@@ -195,6 +195,7 @@ export type Database = {
           points_earned: number
           predicts_extra_time: boolean
           predicts_penalties: boolean
+          predicts_penalty_winner: string | null
           quiniela_id: string
           updated_at: string
           user_id: string
@@ -211,6 +212,7 @@ export type Database = {
           points_earned?: number
           predicts_extra_time?: boolean
           predicts_penalties?: boolean
+          predicts_penalty_winner?: string | null
           quiniela_id: string
           updated_at?: string
           user_id: string
@@ -227,6 +229,7 @@ export type Database = {
           points_earned?: number
           predicts_extra_time?: boolean
           predicts_penalties?: boolean
+          predicts_penalty_winner?: string | null
           quiniela_id?: string
           updated_at?: string
           user_id?: string
@@ -774,6 +777,7 @@ export type Database = {
           extra_time_prediction_points: number
           penalty_exact_score_points: number
           penalty_prediction_points: number
+          penalty_winner_points: number
           quiniela_id: string
           streak_bonus_3_points: number
           streak_bonus_5_points: number
@@ -790,6 +794,7 @@ export type Database = {
           extra_time_prediction_points?: number
           penalty_exact_score_points?: number
           penalty_prediction_points?: number
+          penalty_winner_points?: number
           quiniela_id: string
           streak_bonus_3_points?: number
           streak_bonus_5_points?: number
@@ -806,6 +811,7 @@ export type Database = {
           extra_time_prediction_points?: number
           penalty_exact_score_points?: number
           penalty_prediction_points?: number
+          penalty_winner_points?: number
           quiniela_id?: string
           streak_bonus_3_points?: number
           streak_bonus_5_points?: number
@@ -1128,10 +1134,9 @@ export type Database = {
           actual_home_penalty: number
           actual_went_to_extra_time: boolean
           p_quiniela_id: string
-          pred_away_penalty: number
-          pred_home_penalty: number
           pred_predicts_extra_time: boolean
           pred_predicts_penalties: boolean
+          pred_predicts_penalty_winner: string
           predicted_away: number
           predicted_home: number
         }
@@ -1146,8 +1151,8 @@ export type Database = {
           exact_hit_min_points: number
           exact_score_points: number
           extra_time_prediction_points: number
-          penalty_exact_score_points: number
           penalty_prediction_points: number
+          penalty_winner_points: number
           streak_bonus_3_points: number
           streak_bonus_5_points: number
           streak_hit_min_points: number
