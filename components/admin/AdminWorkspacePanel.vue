@@ -1575,6 +1575,11 @@ const refreshCurrentSection = async () => {
     return;
   }
 
+  // Load team profiles for the catalog datalist, for any admin
+  if (teamProfiles.value.length === 0) {
+    await loadTeamProfiles();
+  }
+
   if (canRunIngestionSync.value) {
     await Promise.all([loadSyncStatus(), loadIngestionLogs()]);
     return;
@@ -1593,6 +1598,11 @@ onMounted(async () => {
     await loadIngestionLogs();
     await loadTeamProfiles(true);
     return;
+  }
+
+  // If local admin, wait until they click ingestion, but since they might be there initially:
+  if (adminSection.value === "ingestion") {
+    await loadTeamProfiles(true);
   }
 
   await loadIngestionLogs();
@@ -1821,6 +1831,7 @@ watch(
       :saving-match-score-id="savingMatchScoreId"
       :match-score-message="matchScoreMessage"
       :match-score-error="matchScoreError"
+      :team-catalog="teamProfiles"
       @run-fixtures-sync="runFixturesSync"
       @run-teams-sync="runTeamsSync"
       @update:match-search="matchesSearch = $event"

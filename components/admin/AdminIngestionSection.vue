@@ -60,6 +60,7 @@ defineProps<{
   savingMatchScoreId: string | null;
   matchScoreMessage: string | null;
   matchScoreError: string | null;
+  teamCatalog?: { name: string }[];
 }>();
 
 const emit = defineEmits<{
@@ -292,9 +293,17 @@ const emit = defineEmits<{
             >
               <td class="px-4 py-3">
                 <div class="space-y-1">
+                  <datalist id="team-catalog-datalist">
+                    <option
+                      v-for="team in teamCatalog || []"
+                      :key="team.name"
+                      :value="team.name"
+                    />
+                  </datalist>
                   <input
                     :value="matchScoreDraftById[entry.id]?.home_team ?? entry.home_team"
                     type="text"
+                    list="team-catalog-datalist"
                     class="input input-bordered input-xs w-full max-w-[120px]"
                     @input="
                       emit('updateMatchScoreDraft', {
@@ -308,6 +317,7 @@ const emit = defineEmits<{
                   <input
                     :value="matchScoreDraftById[entry.id]?.away_team ?? entry.away_team"
                     type="text"
+                    list="team-catalog-datalist"
                     class="input input-bordered input-xs w-full max-w-[120px]"
                     @input="
                       emit('updateMatchScoreDraft', {
