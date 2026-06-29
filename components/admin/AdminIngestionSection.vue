@@ -30,6 +30,7 @@ defineProps<{
     away_score: number | null;
     home_penalty_score: number | null;
     away_penalty_score: number | null;
+    went_to_extra_time: boolean;
     status: string;
     updated_at: string;
   }>;
@@ -55,6 +56,7 @@ defineProps<{
       status: "pending" | "in_progress" | "finished";
       home_team: string;
       away_team: string;
+      went_to_extra_time: boolean | null;
     }
   >;
   savingMatchScoreId: string | null;
@@ -80,8 +82,9 @@ const emit = defineEmits<{
         | "away_penalty_score"
         | "status"
         | "home_team"
-        | "away_team";
-      value: string;
+        | "away_team"
+        | "went_to_extra_time";
+      value: string | boolean;
     },
   ];
   saveMatchScore: [id: string];
@@ -416,8 +419,36 @@ const emit = defineEmits<{
                         'final',
                       ].includes(entry.stage)
                     "
-                    class="bg-warning/10 border-warning/30 rounded-lg border border-dashed px-2 py-1"
+                    class="space-y-2"
                   >
+                    <div class="bg-secondary/10 border-secondary/30 rounded-lg border border-dashed px-2 py-2">
+                      <label class="cursor-pointer flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                          <span class="text-secondary bg-secondary/20 rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide">
+                            TIEMPO EXTRA
+                          </span>
+                        </div>
+                        <input
+                          :checked="
+                            matchScoreDraftById[entry.id]?.went_to_extra_time ??
+                            entry.went_to_extra_time
+                          "
+                          type="checkbox"
+                          class="toggle toggle-secondary toggle-xs"
+                          @change="
+                            emit('updateMatchScoreDraft', {
+                              id: entry.id,
+                              field: 'went_to_extra_time',
+                              value: ($event.target as HTMLInputElement).checked,
+                            })
+                          "
+                        />
+                      </label>
+                    </div>
+
+                    <div
+                      class="bg-warning/10 border-warning/30 rounded-lg border border-dashed px-2 py-1"
+                    >
                     <div class="mb-1 flex items-center gap-2">
                       <span
                         class="text-warning bg-warning/20 rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide"
@@ -466,9 +497,9 @@ const emit = defineEmits<{
                           })
                         "
                       />
+                      </div>
                     </div>
                   </div>
-                </div>
               </td>
               <td class="px-4 py-3">
                 <select

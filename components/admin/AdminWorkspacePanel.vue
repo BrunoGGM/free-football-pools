@@ -179,6 +179,7 @@ const latestMatches = ref<
     away_score: number | null;
     home_penalty_score: number | null;
     away_penalty_score: number | null;
+    went_to_extra_time: boolean;
     status: string;
     updated_at: string;
   }[]
@@ -202,6 +203,7 @@ const matchScoreDraftById = ref<
       status: MatchStatus;
       home_team: string;
       away_team: string;
+      went_to_extra_time: boolean | null;
     }
   >
 >({});
@@ -247,6 +249,9 @@ const quinielaForm = reactive({
   exact_score_points: 3,
   correct_outcome_points: 1,
   champion_bonus_points: 10,
+  extra_time_prediction_points: 1,
+  penalty_prediction_points: 1,
+  penalty_exact_score_points: 3,
   allow_member_predictions_view: false,
 });
 
@@ -507,6 +512,9 @@ const resetQuinielaForm = () => {
   quinielaForm.exact_score_points = 3;
   quinielaForm.correct_outcome_points = 1;
   quinielaForm.champion_bonus_points = 10;
+  quinielaForm.extra_time_prediction_points = 1;
+  quinielaForm.penalty_prediction_points = 1;
+  quinielaForm.penalty_exact_score_points = 3;
   quinielaForm.allow_member_predictions_view = false;
 };
 
@@ -526,6 +534,15 @@ const editQuiniela = (item: ManagedQuiniela) => {
   );
   quinielaForm.champion_bonus_points = Number(
     item.rules?.champion_bonus_points ?? 10,
+  );
+  quinielaForm.extra_time_prediction_points = Number(
+    item.rules?.extra_time_prediction_points ?? 1,
+  );
+  quinielaForm.penalty_prediction_points = Number(
+    item.rules?.penalty_prediction_points ?? 1,
+  );
+  quinielaForm.penalty_exact_score_points = Number(
+    item.rules?.penalty_exact_score_points ?? 3,
   );
   quinielaForm.allow_member_predictions_view = Boolean(
     item.rules?.allow_member_predictions_view ?? false,
@@ -1073,8 +1090,9 @@ const updateMatchScoreDraft = (payload: {
     | "away_penalty_score"
     | "status"
     | "home_team"
-    | "away_team";
-  value: string;
+    | "away_team"
+    | "went_to_extra_time";
+  value: string | boolean;
 }) => {
   const current =
     matchScoreDraftById.value[payload.id] ||
@@ -1085,6 +1103,7 @@ const updateMatchScoreDraft = (payload: {
       home_penalty_score: "",
       away_penalty_score: "",
       status: "pending",
+      went_to_extra_time: null,
     } as {
       home_score: string;
       away_score: string;
@@ -1093,6 +1112,7 @@ const updateMatchScoreDraft = (payload: {
       status: MatchStatus;
       home_team: string;
       away_team: string;
+      went_to_extra_time: boolean | null;
     });
 
   if (payload.field === "status") {
@@ -1238,6 +1258,10 @@ const saveMatchScore = async (matchId: string) => {
     }
     if (draft.away_team !== targetMatch.away_team) {
       payload.away_team = draft.away_team;
+    }
+
+    if (draft.went_to_extra_time !== null && draft.went_to_extra_time !== targetMatch.went_to_extra_time) {
+      payload.went_to_extra_time = draft.went_to_extra_time;
     }
 
     if (homePenaltyScore !== null && awayPenaltyScore !== null) {

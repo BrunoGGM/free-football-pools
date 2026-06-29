@@ -8,6 +8,9 @@ export const DEFAULT_QUINIELA_RULES = {
   streak_hit_min_points: 1,
   streak_bonus_3_points: 1,
   streak_bonus_5_points: 2,
+  extra_time_prediction_points: 1,
+  penalty_prediction_points: 1,
+  penalty_exact_score_points: 3,
   allow_member_predictions_view: false,
 } as const
 
@@ -19,6 +22,9 @@ const RULE_BOUNDS = {
   streak_hit_min_points: { min: 1, max: 20 },
   streak_bonus_3_points: { min: 0, max: 20 },
   streak_bonus_5_points: { min: 0, max: 20 },
+  extra_time_prediction_points: { min: 0, max: 20 },
+  penalty_prediction_points: { min: 0, max: 20 },
+  penalty_exact_score_points: { min: 0, max: 20 },
 } as const
 
 type NumericRuleField = keyof typeof RULE_BOUNDS
@@ -31,6 +37,9 @@ export type QuinielaRulesPayload = {
   streak_hit_min_points: number
   streak_bonus_3_points: number
   streak_bonus_5_points: number
+  extra_time_prediction_points: number
+  penalty_prediction_points: number
+  penalty_exact_score_points: number
   allow_member_predictions_view: boolean
 }
 
@@ -155,6 +164,9 @@ export const parseQuinielaRulesInput = (
     streak_hit_min_points: parseRuleInt('streak_hit_min_points', source.streak_hit_min_points, requireAll),
     streak_bonus_3_points: parseRuleInt('streak_bonus_3_points', source.streak_bonus_3_points, requireAll),
     streak_bonus_5_points: parseRuleInt('streak_bonus_5_points', source.streak_bonus_5_points, requireAll),
+    extra_time_prediction_points: parseRuleInt('extra_time_prediction_points', source.extra_time_prediction_points, requireAll),
+    penalty_prediction_points: parseRuleInt('penalty_prediction_points', source.penalty_prediction_points, requireAll),
+    penalty_exact_score_points: parseRuleInt('penalty_exact_score_points', source.penalty_exact_score_points, requireAll),
     allow_member_predictions_view: parseRuleBoolean(
       'allow_member_predictions_view',
       source.allow_member_predictions_view,
@@ -173,6 +185,9 @@ export const parseQuinielaRulesInput = (
     streak_hit_min_points: cleanedParsed.streak_hit_min_points ?? base.streak_hit_min_points,
     streak_bonus_3_points: cleanedParsed.streak_bonus_3_points ?? base.streak_bonus_3_points,
     streak_bonus_5_points: cleanedParsed.streak_bonus_5_points ?? base.streak_bonus_5_points,
+    extra_time_prediction_points: cleanedParsed.extra_time_prediction_points ?? base.extra_time_prediction_points,
+    penalty_prediction_points: cleanedParsed.penalty_prediction_points ?? base.penalty_prediction_points,
+    penalty_exact_score_points: cleanedParsed.penalty_exact_score_points ?? base.penalty_exact_score_points,
     allow_member_predictions_view:
       cleanedParsed.allow_member_predictions_view ?? base.allow_member_predictions_view,
   }

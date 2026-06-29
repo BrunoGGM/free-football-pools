@@ -24,6 +24,9 @@ interface ManagedQuiniela {
     exact_score_points: number;
     correct_outcome_points: number;
     champion_bonus_points: number;
+    extra_time_prediction_points: number;
+    penalty_prediction_points: number;
+    penalty_exact_score_points: number;
     allow_member_predictions_view: boolean;
   };
 }
@@ -115,6 +118,9 @@ const props = defineProps<{
     exact_score_points: number;
     correct_outcome_points: number;
     champion_bonus_points: number;
+    extra_time_prediction_points: number;
+    penalty_prediction_points: number;
+    penalty_exact_score_points: number;
     allow_member_predictions_view: boolean;
   };
   savingQuiniela: boolean;
@@ -1796,9 +1802,51 @@ watch(
             />
           </div>
 
+          <div class="space-y-1">
+            <label class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
+              Pts. predecir T. Extra
+            </label>
+            <input
+              v-model.number="quinielaForm.extra_time_prediction_points"
+              type="number"
+              min="0"
+              max="20"
+              step="1"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
+              Pts. predecir Penales
+            </label>
+            <input
+              v-model.number="quinielaForm.penalty_prediction_points"
+              type="number"
+              min="0"
+              max="20"
+              step="1"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <div class="space-y-1">
+            <label class="text-base-content/70 text-xs uppercase tracking-[0.12em]">
+              Pts. exactos Penales
+            </label>
+            <input
+              v-model.number="quinielaForm.penalty_exact_score_points"
+              type="number"
+              min="0"
+              max="20"
+              step="1"
+              class="input input-bordered w-full"
+            />
+          </div>
+
           <div class="space-y-1 md:col-span-2">
             <p class="text-base-content/60 text-xs">
-              Solo se configuran puntos por signo, marcador exacto y campeon.
+              Configura los puntos por aciertos y bonos adicionales.
             </p>
           </div>
 

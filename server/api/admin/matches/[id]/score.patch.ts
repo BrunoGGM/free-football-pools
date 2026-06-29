@@ -13,6 +13,7 @@ type MatchUpdateBody = {
   match_time?: string | null
   home_team?: string
   away_team?: string
+  went_to_extra_time?: boolean
 }
 
 const VALID_STATUS = new Set<MatchStatus>(['pending', 'in_progress', 'finished'])
@@ -84,8 +85,9 @@ export default defineEventHandler(async (event) => {
   const hasMatchTime = Object.prototype.hasOwnProperty.call(body, 'match_time')
   const hasHomeTeam = Object.prototype.hasOwnProperty.call(body, 'home_team')
   const hasAwayTeam = Object.prototype.hasOwnProperty.call(body, 'away_team')
+  const hasWentToExtraTime = Object.prototype.hasOwnProperty.call(body, 'went_to_extra_time')
 
-  if (!hasHome && !hasAway && !hasHomePenalty && !hasAwayPenalty && !hasStatus && !hasMatchTime && !hasHomeTeam && !hasAwayTeam) {
+  if (!hasHome && !hasAway && !hasHomePenalty && !hasAwayPenalty && !hasStatus && !hasMatchTime && !hasHomeTeam && !hasAwayTeam && !hasWentToExtraTime) {
     throw createError({ statusCode: 400, statusMessage: 'No hay campos para actualizar' })
   }
 
@@ -151,8 +153,15 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    patch.home_penalty_score = parseScore(body.home_penalty_score, 'Penales local')
-    patch.away_penalty_score = parseScore(body.away_penalty_score, 'Penales visitante')
+    const homePenaltyScore = parseScore(body.home_penalty_score, 'Penales local')
+    const awayPenaltyScore = parseScore(body.away_penalty_score, 'Penales visitante')
+
+    patch.home_penalty_score = homePenaltyScore
+    patch.away_penalty_score = awayPenaltyScore
+  }
+
+  if (hasWentToExtraTime) {
+    patch.went_to_extra_time = Boolean(body.went_to_extra_time)
   }
 
   if (hasStatus) {

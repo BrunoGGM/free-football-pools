@@ -33,6 +33,10 @@ type ApiFootballFixture = {
     away?: number | null
   }
   score?: {
+    extratime?: {
+      home?: number | null
+      away?: number | null
+    }
     penalty?: {
       home?: number | null
       away?: number | null
@@ -177,6 +181,7 @@ export default defineEventHandler(async (event) => {
     venue: string | null
     source_time: string | null
     source_timezone: string
+    went_to_extra_time: boolean
   }> = []
 
   const teamProfilesMap = new Map<
@@ -229,6 +234,7 @@ export default defineEventHandler(async (event) => {
       venue,
       source_time: sourceTime,
       source_timezone: 'America/New_York',
+      went_to_extra_time: fixture.score?.extratime?.home !== null && fixture.score?.extratime?.home !== undefined,
     })
 
     const homeTeamKey = normalizeTeamKey(homeTeam)

@@ -126,6 +126,7 @@ export type Database = {
           status: Database["public"]["Enums"]["match_status"]
           updated_at: string
           venue: string | null
+          went_to_extra_time: boolean
         }
         Insert: {
           api_fixture_id: number
@@ -151,6 +152,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["match_status"]
           updated_at?: string
           venue?: string | null
+          went_to_extra_time?: boolean
         }
         Update: {
           api_fixture_id?: number
@@ -176,6 +178,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["match_status"]
           updated_at?: string
           venue?: string | null
+          went_to_extra_time?: boolean
         }
         Relationships: []
       }
@@ -188,6 +191,10 @@ export type Database = {
           is_test_record: boolean
           match_id: string
           points_earned: number
+          predicts_extra_time: boolean
+          predicts_penalties: boolean
+          home_penalty_score: number | null
+          away_penalty_score: number | null
           quiniela_id: string
           updated_at: string
           user_id: string
@@ -200,6 +207,10 @@ export type Database = {
           is_test_record?: boolean
           match_id: string
           points_earned?: number
+          predicts_extra_time?: boolean
+          predicts_penalties?: boolean
+          home_penalty_score?: number | null
+          away_penalty_score?: number | null
           quiniela_id: string
           updated_at?: string
           user_id: string
@@ -212,6 +223,10 @@ export type Database = {
           is_test_record?: boolean
           match_id?: string
           points_earned?: number
+          predicts_extra_time?: boolean
+          predicts_penalties?: boolean
+          home_penalty_score?: number | null
+          away_penalty_score?: number | null
           quiniela_id?: string
           updated_at?: string
           user_id?: string
@@ -756,6 +771,9 @@ export type Database = {
           created_at: string
           exact_hit_min_points: number
           exact_score_points: number
+          extra_time_prediction_points: number
+          penalty_exact_score_points: number
+          penalty_prediction_points: number
           quiniela_id: string
           streak_bonus_3_points: number
           streak_bonus_5_points: number
@@ -769,6 +787,9 @@ export type Database = {
           created_at?: string
           exact_hit_min_points?: number
           exact_score_points?: number
+          extra_time_prediction_points?: number
+          penalty_exact_score_points?: number
+          penalty_prediction_points?: number
           quiniela_id: string
           streak_bonus_3_points?: number
           streak_bonus_5_points?: number
@@ -782,6 +803,9 @@ export type Database = {
           created_at?: string
           exact_hit_min_points?: number
           exact_score_points?: number
+          extra_time_prediction_points?: number
+          penalty_exact_score_points?: number
+          penalty_prediction_points?: number
           quiniela_id?: string
           streak_bonus_3_points?: number
           streak_bonus_5_points?: number
@@ -918,6 +942,7 @@ export type Database = {
           match_id: string
           quiniela_id: string
           status: Database["public"]["Enums"]["match_status"]
+          went_to_extra_time: boolean
         }
         Insert: {
           away_penalty_score?: number | null
@@ -937,6 +962,7 @@ export type Database = {
           match_id: string
           quiniela_id: string
           status: Database["public"]["Enums"]["match_status"]
+          went_to_extra_time?: boolean
         }
         Update: {
           away_penalty_score?: number | null
@@ -956,6 +982,7 @@ export type Database = {
           match_id?: string
           quiniela_id?: string
           status?: Database["public"]["Enums"]["match_status"]
+          went_to_extra_time?: boolean
         }
         Relationships: [
           {
@@ -1093,6 +1120,23 @@ export type Database = {
         }
         Returns: number
       }
+      calculate_prediction_points_for_quiniela_v2: {
+        Args: {
+          actual_away: number
+          actual_home: number
+          p_quiniela_id: string
+          predicted_away: number
+          predicted_home: number
+          pred_predicts_extra_time: boolean
+          pred_predicts_penalties: boolean
+          pred_home_penalty: number
+          pred_away_penalty: number
+          actual_went_to_extra_time: boolean
+          actual_home_penalty: number
+          actual_away_penalty: number
+        }
+        Returns: number
+      }
       champion_pick_lock_time: { Args: never; Returns: string }
       get_quiniela_rules: {
         Args: { p_quiniela_id: string }
@@ -1104,6 +1148,9 @@ export type Database = {
           streak_bonus_3_points: number
           streak_bonus_5_points: number
           streak_hit_min_points: number
+          extra_time_prediction_points: number
+          penalty_prediction_points: number
+          penalty_exact_score_points: number
         }[]
       }
       get_quiniela_rules_with_visibility: {
@@ -1117,6 +1164,9 @@ export type Database = {
           streak_bonus_3_points: number
           streak_bonus_5_points: number
           streak_hit_min_points: number
+          extra_time_prediction_points: number
+          penalty_prediction_points: number
+          penalty_exact_score_points: number
         }[]
       }
       get_week_start_date: { Args: { p_timestamp: string }; Returns: string }
