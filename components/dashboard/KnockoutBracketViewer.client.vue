@@ -163,7 +163,7 @@ const stageLabelByKey: Record<BracketStage, string> = {
 
 const bracketMatchOrderByStage: Record<string, number[]> = {
   // Este orden alinea el viewer con los seeds W/L definidos en M73-M104.
-  round_32: [74, 77, 73, 75, 83, 84, 81, 82, 76, 78, 79, 80, 86, 88, 85, 87],
+  round_32: [75, 78, 73, 76, 84, 83, 82, 81, 74, 77, 79, 80, 86, 87, 85, 88],
   round_16: [89, 90, 93, 94, 91, 92, 95, 96],
   quarter_final: [97, 98, 99, 100],
   semi_final: [101, 102],
