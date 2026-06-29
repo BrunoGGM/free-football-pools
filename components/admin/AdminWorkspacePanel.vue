@@ -200,6 +200,8 @@ const matchScoreDraftById = ref<
       home_penalty_score: string;
       away_penalty_score: string;
       status: MatchStatus;
+      home_team: string;
+      away_team: string;
     }
   >
 >({});
@@ -1043,6 +1045,8 @@ const loadIngestionLogs = async () => {
           ? ""
           : String(item.away_penalty_score)),
       status: previous?.status ?? ((item.status as MatchStatus) || "pending"),
+      home_team: previous?.home_team ?? item.home_team,
+      away_team: previous?.away_team ?? item.away_team,
     };
   }
 
@@ -1067,7 +1071,9 @@ const updateMatchScoreDraft = (payload: {
     | "away_score"
     | "home_penalty_score"
     | "away_penalty_score"
-    | "status";
+    | "status"
+    | "home_team"
+    | "away_team";
   value: string;
 }) => {
   const current =
@@ -1085,6 +1091,8 @@ const updateMatchScoreDraft = (payload: {
       home_penalty_score: string;
       away_penalty_score: string;
       status: MatchStatus;
+      home_team: string;
+      away_team: string;
     });
 
   if (payload.field === "status") {
@@ -1224,6 +1232,13 @@ const saveMatchScore = async (matchId: string) => {
       away_score: awayScore,
       status: draft.status,
     };
+
+    if (draft.home_team !== targetMatch.home_team) {
+      payload.home_team = draft.home_team;
+    }
+    if (draft.away_team !== targetMatch.away_team) {
+      payload.away_team = draft.away_team;
+    }
 
     if (homePenaltyScore !== null && awayPenaltyScore !== null) {
       payload.home_penalty_score = homePenaltyScore;

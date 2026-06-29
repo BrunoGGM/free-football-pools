@@ -44,7 +44,7 @@ defineProps<{
   totalMatches: number;
   showingStart: number;
   showingEnd: number;
-  matchScoreDraftById: Record<
+    matchScoreDraftById: Record<
     string,
     {
       match_time: string;
@@ -53,6 +53,8 @@ defineProps<{
       home_penalty_score: string;
       away_penalty_score: string;
       status: "pending" | "in_progress" | "finished";
+      home_team: string;
+      away_team: string;
     }
   >;
   savingMatchScoreId: string | null;
@@ -75,7 +77,9 @@ const emit = defineEmits<{
         | "away_score"
         | "home_penalty_score"
         | "away_penalty_score"
-        | "status";
+        | "status"
+        | "home_team"
+        | "away_team";
       value: string;
     },
   ];
@@ -287,7 +291,33 @@ const emit = defineEmits<{
               class="border-t border-base-300"
             >
               <td class="px-4 py-3">
-                {{ entry.home_team }} vs {{ entry.away_team }}
+                <div class="space-y-1">
+                  <input
+                    :value="matchScoreDraftById[entry.id]?.home_team ?? entry.home_team"
+                    type="text"
+                    class="input input-bordered input-xs w-full max-w-[120px]"
+                    @input="
+                      emit('updateMatchScoreDraft', {
+                        id: entry.id,
+                        field: 'home_team',
+                        value: ($event.target as HTMLInputElement).value,
+                      })
+                    "
+                  />
+                  <div class="text-center text-xs text-base-content/50">vs</div>
+                  <input
+                    :value="matchScoreDraftById[entry.id]?.away_team ?? entry.away_team"
+                    type="text"
+                    class="input input-bordered input-xs w-full max-w-[120px]"
+                    @input="
+                      emit('updateMatchScoreDraft', {
+                        id: entry.id,
+                        field: 'away_team',
+                        value: ($event.target as HTMLInputElement).value,
+                      })
+                    "
+                  />
+                </div>
               </td>
               <td class="text-base-content/70 px-4 py-3 text-xs uppercase">
                 {{ entry.stage.replaceAll("_", " ") }}

@@ -80,6 +80,12 @@ interface CustomPickAnswerReview {
   updated_at: string;
 }
 
+interface QuinielaMemberInfo {
+  id: string;
+  username: string;
+  email: string;
+}
+
 const props = defineProps<{
   isGlobalAdmin: boolean;
   globalLoading: boolean;
@@ -170,6 +176,10 @@ const downloadingTicket = ref(false);
 const ticketLogoMode = ref<TicketLogoMode>("none");
 const ticketsByQuiniela = ref<Record<string, AccessTicket[]>>({});
 const redemptionsByQuiniela = ref<Record<string, TicketRedemption[]>>({});
+const membersLoading = ref(false);
+const membersError = ref<string | null>(null);
+const membersByQuiniela = ref<Record<string, QuinielaMemberInfo[]>>({});
+const membersManagedQuinielaId = ref("");
 const additionalPickQuinielaId = ref("");
 const customPicksLoading = ref(false);
 const customPickSaving = ref(false);
@@ -382,6 +392,28 @@ const loadCustomPicksForAdmin = async (quinielaId: string) => {
       error?.data?.statusMessage || error?.message || "No se pudieron cargar los picks adicionales.";
   } finally {
     customPicksLoading.value = false;
+  }
+};
+
+const loadMembersForAdmin = async (quinielaId: string) => {
+  if (!quinielaId) {
+    return;
+  }
+
+  membersLoading.value = true;
+  membersError.value = null;
+
+  try {
+    const result = await adminFetch<{ members: QuinielaMemberInfo[] }>(`/api/admin/quinielas/${quinielaId}/members`);
+    membersByQuiniela.value = {
+      ...membersByQuiniela.value,
+      [quinielaId]: result.members || [],
+    };
+  } catch (error: any) {
+    membersError.value =
+      error?.data?.statusMessage || error?.message || "No se pudieron cargar los miembros.";
+  } finally {
+    membersLoading.value = false;
   }
 };
 
@@ -1456,6 +1488,22 @@ watch(
       additionalPickQuinielaId.value =
         props.quinielaForm.id || props.manualPointsForm.quiniela_id || ids[0] || "";
     }
+
+    if (!membersManagedQuinielaId.value || !ids.includes(membersManagedQuinielaId.value)) {
+      membersManagedQuinielaId.value =
+        props.quinielaForm.id || props.manualPointsForm.quiniela_id || ids[0] || "";
+    }
+  },
+  { immediate: true },
+);
+
+watch(
+  membersManagedQuinielaId,
+  (quinielaId) => {
+    if (!quinielaId) return;
+    if (!membersByQuiniela.value[quinielaId]) {
+      void loadMembersForAdmin(quinielaId);
+    }
   },
   { immediate: true },
 );
@@ -1908,6 +1956,88 @@ watch(
         </p>
         <p v-if="manualPointsError" class="alert alert-error mt-3 text-xs">
           {{ manualPointsError }}
+        </p>
+      </div>
+
+      <div
+        class="card mt-6 rounded-xl border border-base-300 bg-base-100/70 p-4"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-primary text-lg">Directorio de miembros</h3>
+            <p class="text-base-content/70 mt-1 text-sm">
+              Listado de usuarios inscritos en la quiniela.
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-4 grid gap-3 md:grid-cols-2">
+          <div class="space-y-1 md:col-span-2">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Quiniela objetivo
+            </label>
+            <select
+              v-model="membersManagedQuinielaId"
+              class="select select-bordered w-full"
+            >
+              <option value="">Selecciona quiniela</option>
+              <option
+                v-for="item in managedQuinielas"
+                :key="`members-${item.id}`"
+                :value="item.id"
+              >
+                {{ item.name }} ({{ item.access_code }})
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <button
+            class="btn btn-ghost btn-sm"
+            :disabled="membersLoading || !membersManagedQuinielaId"
+            @click="loadMembersForAdmin(membersManagedQuinielaId)"
+          >
+            {{ membersLoading ? "Cargando..." : "Recargar miembros" }}
+          </button>
+        </div>
+        
+        <p v-if="membersError" class="alert alert-error mt-3 text-xs">
+          {{ membersError }}
+        </p>
+
+        <div
+          v-if="membersManagedQuinielaId && membersByQuiniela[membersManagedQuinielaId]?.length"
+          class="table-shell mt-4 rounded-xl border border-base-300 overflow-x-auto"
+        >
+          <table class="table table-sm min-w-full">
+            <thead class="bg-base-100 text-xs uppercase tracking-[0.12em] text-base-content/70">
+              <tr>
+                <th>Usuario</th>
+                <th>Email</th>
+                <th>UUID</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="member in membersByQuiniela[membersManagedQuinielaId]"
+                :key="member.id"
+                class="border-t border-base-300"
+              >
+                <td class="font-medium">{{ member.username }}</td>
+                <td>{{ member.email }}</td>
+                <td class="text-base-content/50 font-mono text-xs">{{ member.id }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p
+          v-else-if="membersManagedQuinielaId && !membersLoading"
+          class="text-base-content/60 mt-4 text-sm"
+        >
+          No hay miembros en esta quiniela.
         </p>
       </div>
 
