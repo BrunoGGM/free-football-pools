@@ -500,6 +500,7 @@ const emit = defineEmits<{
                       </div>
                     </div>
                   </div>
+                </div>
               </td>
               <td class="px-4 py-3">
                 <select
