@@ -184,8 +184,10 @@ export type Database = {
       }
       predictions: {
         Row: {
+          away_penalty_score: number | null
           away_score: number
           created_at: string
+          home_penalty_score: number | null
           home_score: number
           id: string
           is_test_record: boolean
@@ -193,15 +195,15 @@ export type Database = {
           points_earned: number
           predicts_extra_time: boolean
           predicts_penalties: boolean
-          home_penalty_score: number | null
-          away_penalty_score: number | null
           quiniela_id: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          away_penalty_score?: number | null
           away_score: number
           created_at?: string
+          home_penalty_score?: number | null
           home_score: number
           id?: string
           is_test_record?: boolean
@@ -209,15 +211,15 @@ export type Database = {
           points_earned?: number
           predicts_extra_time?: boolean
           predicts_penalties?: boolean
-          home_penalty_score?: number | null
-          away_penalty_score?: number | null
           quiniela_id: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          away_penalty_score?: number | null
           away_score?: number
           created_at?: string
+          home_penalty_score?: number | null
           home_score?: number
           id?: string
           is_test_record?: boolean
@@ -225,8 +227,6 @@ export type Database = {
           points_earned?: number
           predicts_extra_time?: boolean
           predicts_penalties?: boolean
-          home_penalty_score?: number | null
-          away_penalty_score?: number | null
           quiniela_id?: string
           updated_at?: string
           user_id?: string
@@ -1123,17 +1123,17 @@ export type Database = {
       calculate_prediction_points_for_quiniela_v2: {
         Args: {
           actual_away: number
+          actual_away_penalty: number
           actual_home: number
+          actual_home_penalty: number
+          actual_went_to_extra_time: boolean
           p_quiniela_id: string
-          predicted_away: number
-          predicted_home: number
+          pred_away_penalty: number
+          pred_home_penalty: number
           pred_predicts_extra_time: boolean
           pred_predicts_penalties: boolean
-          pred_home_penalty: number
-          pred_away_penalty: number
-          actual_went_to_extra_time: boolean
-          actual_home_penalty: number
-          actual_away_penalty: number
+          predicted_away: number
+          predicted_home: number
         }
         Returns: number
       }
@@ -1145,12 +1145,12 @@ export type Database = {
           correct_outcome_points: number
           exact_hit_min_points: number
           exact_score_points: number
+          extra_time_prediction_points: number
+          penalty_exact_score_points: number
+          penalty_prediction_points: number
           streak_bonus_3_points: number
           streak_bonus_5_points: number
           streak_hit_min_points: number
-          extra_time_prediction_points: number
-          penalty_prediction_points: number
-          penalty_exact_score_points: number
         }[]
       }
       get_quiniela_rules_with_visibility: {
@@ -1164,9 +1164,6 @@ export type Database = {
           streak_bonus_3_points: number
           streak_bonus_5_points: number
           streak_hit_min_points: number
-          extra_time_prediction_points: number
-          penalty_prediction_points: number
-          penalty_exact_score_points: number
         }[]
       }
       get_week_start_date: { Args: { p_timestamp: string }; Returns: string }
