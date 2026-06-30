@@ -1162,6 +1162,7 @@ export type Database = {
           p_predicts_qualifier: string
           p_quiniela_id: string
           p_stage: Database["public"]["Enums"]["match_stage"]
+          p_went_to_extra_time: boolean
         }
         Returns: number
       }
