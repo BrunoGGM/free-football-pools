@@ -628,7 +628,7 @@ const openPointsHistoryModal = async (row: PositionRow) => {
 
   const rulesResult = await client
     .from("quiniela_rules")
-    .select("correct_outcome_points, exact_score_points")
+    .select("correct_outcome_points, exact_score_points, extra_time_prediction_points, penalty_prediction_points, qualifier_prediction_points")
     .eq("quiniela_id", activeQuinielaId.value)
     .maybeSingle();
 
@@ -647,11 +647,27 @@ const openPointsHistoryModal = async (row: PositionRow) => {
     0,
     Number(rulesResult.data?.correct_outcome_points ?? 1),
   );
+  const configuredExactPoints = Math.max(
+    0,
+    Number(rulesResult.data?.exact_score_points ?? 3),
+  );
+  const configuredETPoints = Math.max(
+    0,
+    Number(rulesResult.data?.extra_time_prediction_points ?? 1),
+  );
+  const configuredPenPoints = Math.max(
+    0,
+    Number(rulesResult.data?.penalty_prediction_points ?? 2),
+  );
+  const configuredQualPoints = Math.max(
+    0,
+    Number(rulesResult.data?.qualifier_prediction_points ?? 1),
+  );
 
   const predictionsResult = await client
     .from("predictions")
     .select(
-      "id, home_score, away_score, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score)",
+      "id, home_score, away_score, points_earned, predicts_extra_time, predicts_penalties, predicts_qualifier, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, went_to_extra_time, home_penalty_score, away_penalty_score)",
     )
     .eq("quiniela_id", activeQuinielaId.value)
     .eq("user_id", row.user_id)
@@ -778,36 +794,86 @@ const openPointsHistoryModal = async (row: PositionRow) => {
 
       const rows: PointHistoryEntry[] = [];
 
-      if (isOutcomeHit) {
-        const outcomePoints = isExact
-          ? Math.min(points, configuredOutcomePoints)
-          : points;
+      const KNOCKOUT_STAGES = ['round_32', 'round_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
+      const isKnockout = match ? KNOCKOUT_STAGES.includes(match.stage) : false;
+      const matchWentToET = Boolean((match as any)?.went_to_extra_time);
+      const matchHadPenalties = (match as any)?.home_penalty_score != null;
 
-        if (outcomePoints > 0) {
-          rows.push({
-            id: `${item.id}-pick`,
-            source: "pick_outcome",
-            points: outcomePoints,
-            created_at: createdAt,
-            title,
-            detail: `${baseDetail} • Punto por resultado`,
-          });
-        }
+      // 1. Outcome hit (+1)
+      if (isOutcomeHit) {
+        rows.push({
+          id: `${item.id}-pick`,
+          source: "pick_outcome",
+          points: configuredOutcomePoints,
+          created_at: createdAt,
+          title,
+          detail: `${baseDetail} • Punto por resultado`,
+        });
       }
 
+      // 2. Exact score bonus (+3 - outcome = +2, o el total configurado)
       if (isExact) {
-        const outcomePortion = Math.min(points, configuredOutcomePoints);
-        const exactPoints = Math.max(0, points - outcomePortion);
-
-        if (exactPoints > 0) {
+        const exactBonus = configuredExactPoints - configuredOutcomePoints;
+        if (exactBonus > 0) {
           rows.push({
             id: `${item.id}-exact`,
             source: "exact_score",
-            points: exactPoints,
+            points: exactBonus,
             created_at: createdAt,
             title,
             detail: `${baseDetail} • Bonus por marcador exacto`,
           });
+        }
+      }
+
+      // 3. Knockout bonuses
+      if (isKnockout) {
+        // Extra time bonus
+        if (Boolean(item.predicts_extra_time) && matchWentToET) {
+          rows.push({
+            id: `${item.id}-et`,
+            source: "pick_outcome",
+            points: configuredETPoints,
+            created_at: createdAt,
+            title,
+            detail: `${baseDetail} • Acerto tiempo extra`,
+          });
+        }
+
+        // Penalties bonus
+        if (Boolean(item.predicts_penalties) && matchHadPenalties) {
+          rows.push({
+            id: `${item.id}-pen`,
+            source: "pick_outcome",
+            points: configuredPenPoints,
+            created_at: createdAt,
+            title,
+            detail: `${baseDetail} • Acerto penales`,
+          });
+        }
+
+        // Qualifier bonus
+        if (item.predicts_qualifier) {
+          let actualQualifier: string | null = null;
+          if (actualHome !== null && actualAway !== null) {
+            if (actualHome > actualAway) actualQualifier = 'home';
+            else if (actualHome < actualAway) actualQualifier = 'away';
+            else if (matchHadPenalties) {
+              const hp = Number((match as any)?.home_penalty_score ?? 0);
+              const ap = Number((match as any)?.away_penalty_score ?? 0);
+              actualQualifier = hp > ap ? 'home' : 'away';
+            }
+          }
+          if (actualQualifier && item.predicts_qualifier === actualQualifier) {
+            rows.push({
+              id: `${item.id}-qual`,
+              source: "pick_outcome",
+              points: configuredQualPoints,
+              created_at: createdAt,
+              title,
+              detail: `${baseDetail} • Acerto equipo clasificado`,
+            });
+          }
         }
       }
 
