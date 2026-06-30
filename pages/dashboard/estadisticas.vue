@@ -23,6 +23,9 @@ interface PredictionStatsRow {
   home_score: number;
   away_score: number;
   points_earned: number | null;
+  predicts_extra_time?: boolean | null;
+  predicts_penalties?: boolean | null;
+  predicts_qualifier?: string | null;
   created_at: string;
   match:
     | {
@@ -84,6 +87,9 @@ interface NormalizedPredictionRow {
   home_score: number;
   away_score: number;
   points_earned: number;
+  predicts_extra_time: boolean;
+  predicts_penalties: boolean;
+  predicts_qualifier: string | null;
   created_at: string;
   match: {
     id: string;
@@ -143,6 +149,24 @@ const distributionOthers = ref(0);
 const evolutionLabels = ref<string[]>([]);
 const evolutionDailyValues = ref<number[]>([]);
 const evolutionCumulativeValues = ref<number[]>([]);
+
+const radarValues = ref<number[]>([]);
+const stagePointsLabels = ref<string[]>([]);
+const stagePointsValues = ref<number[]>([]);
+const knockoutBonusesValues = ref<number[]>([0, 0, 0, 0]);
+
+interface CommunityPulseItem {
+  match_id: string;
+  home_team: string;
+  away_team: string;
+  stage: string;
+  match_time: string;
+  home_pct: number;
+  draw_pct: number;
+  away_pct: number;
+  total_votes: number;
+}
+const communityPulseMatches = ref<CommunityPulseItem[]>([]);
 
 const memberCount = ref(0);
 const myRank = ref<number | null>(null);
@@ -426,6 +450,11 @@ const clearStats = () => {
   evolutionLabels.value = [];
   evolutionDailyValues.value = [];
   evolutionCumulativeValues.value = [];
+  radarValues.value = [];
+  stagePointsLabels.value = [];
+  stagePointsValues.value = [];
+  knockoutBonusesValues.value = [0, 0, 0, 0];
+  communityPulseMatches.value = [];
   memberCount.value = 0;
   myRank.value = null;
   gapToLeader.value = 0;
@@ -678,7 +707,7 @@ const loadPredictionDerivedStats = async () => {
   const predictionsResult = await client
     .from("predictions")
     .select(
-      "user_id, home_score, away_score, points_earned, created_at, match:matches(id, status, match_time, stage, home_team, away_team, home_score, away_score)",
+      "user_id, home_score, away_score, points_earned, predicts_extra_time, predicts_penalties, predicts_qualifier, created_at, match:matches(id, status, match_time, stage, home_team, away_team, home_score, away_score)",
     )
     .eq("quiniela_id", activeQuinielaId.value);
 
@@ -693,6 +722,9 @@ const loadPredictionDerivedStats = async () => {
     home_score: Number(item.home_score ?? 0),
     away_score: Number(item.away_score ?? 0),
     points_earned: Number(item.points_earned ?? 0),
+    predicts_extra_time: Boolean(item.predicts_extra_time),
+    predicts_penalties: Boolean(item.predicts_penalties),
+    predicts_qualifier: item.predicts_qualifier ?? null,
     created_at: item.created_at,
     match: Array.isArray(item.match) ? (item.match[0] ?? null) : item.match,
   }));
@@ -790,6 +822,121 @@ const loadPredictionDerivedStats = async () => {
     cumulative += points;
     evolutionCumulativeValues.value.push(cumulative);
   }
+
+  // --- NUEVOS CALCULOS ---
+
+  // Puntos por etapa
+  const pointsByStage = new Map<string, number>();
+  for (const row of ownRows) {
+    const stage = row.match?.stage || "desconocido";
+    pointsByStage.set(stage, (pointsByStage.get(stage) ?? 0) + row.points_earned);
+  }
+  const orderedStages = ["group_stage", "round_32", "round_16", "quarter_final", "semi_final", "third_place", "final"];
+  stagePointsLabels.value = [];
+  stagePointsValues.value = [];
+  for (const stage of orderedStages) {
+    if (pointsByStage.has(stage)) {
+      stagePointsLabels.value.push(stageLabel(stage));
+      stagePointsValues.value.push(pointsByStage.get(stage)!);
+    }
+  }
+
+  // Pulso de la quiniela (Comunidad)
+  const pulseMatchesMap = new Map<string, CommunityPulseItem>();
+  for (const row of normalizedRows) {
+    if (row.match?.status === "pending") {
+      const matchId = row.match.id;
+      let pulse = pulseMatchesMap.get(matchId);
+      if (!pulse) {
+        pulse = {
+          match_id: matchId,
+          home_team: row.match.home_team,
+          away_team: row.match.away_team,
+          stage: row.match.stage,
+          match_time: row.match.match_time,
+          home_pct: 0,
+          draw_pct: 0,
+          away_pct: 0,
+          total_votes: 0,
+        };
+        pulseMatchesMap.set(matchId, pulse);
+      }
+      pulse.total_votes++;
+      if (row.home_score > row.away_score) pulse.home_pct++;
+      else if (row.home_score < row.away_score) pulse.away_pct++;
+      else pulse.draw_pct++;
+    }
+  }
+  
+  const upcomingPulse = Array.from(pulseMatchesMap.values())
+    .sort((a, b) => new Date(a.match_time).getTime() - new Date(b.match_time).getTime())
+    .slice(0, 3);
+
+  for (const pulse of upcomingPulse) {
+    if (pulse.total_votes > 0) {
+      pulse.home_pct = Math.round((pulse.home_pct / pulse.total_votes) * 100);
+      pulse.draw_pct = Math.round((pulse.draw_pct / pulse.total_votes) * 100);
+      pulse.away_pct = Math.round((pulse.away_pct / pulse.total_votes) * 100);
+    }
+  }
+  communityPulseMatches.value = upcomingPulse;
+
+  // Radar y Bonos de Eliminatorias
+  let ownExact = 0;
+  let ownOutcome = 0;
+  let ownTotal = 0;
+
+  let ownTEHits = 0;
+  let ownPenHits = 0;
+  let ownQualHits = 0;
+  let ownBonusMisses = 0;
+  let ownKnockoutTotal = 0;
+
+  for (const row of ownRows) {
+    if (!row.match) continue;
+    ownTotal++;
+
+    const homeActual = row.match.home_score ?? 0;
+    const awayActual = row.match.away_score ?? 0;
+    
+    if (row.home_score === homeActual && row.away_score === awayActual) {
+      ownExact++;
+    } else if (resolveOutcome(row.home_score, row.away_score) === resolveOutcome(homeActual, awayActual)) {
+      ownOutcome++;
+    }
+
+    const isKnockout = ['round_32', 'round_16', 'quarter_final', 'semi_final', 'third_place', 'final'].includes(row.match.stage);
+    if (isKnockout) {
+      ownKnockoutTotal++;
+      
+      const wasDraw = homeActual === awayActual;
+      // TE es acierto si adivino empate o si la logica lo dice, asumiremos para simplicidad que si saco mas de 4 puntos pego bonos
+      const outcomePts = row.home_score === homeActual && row.away_score === awayActual ? exactScoreMaxPoints.value : (resolveOutcome(row.home_score, row.away_score) === resolveOutcome(homeActual, awayActual) ? correctOutcomePoints.value : 0);
+      const bonusPts = Math.max(0, row.points_earned - outcomePts);
+
+      if (row.predicts_extra_time && wasDraw) {
+        ownTEHits++;
+      } else if (row.predicts_extra_time) {
+        ownBonusMisses++;
+      }
+
+      // Simplificaremos los aciertos asumiendo que si gano bono y predijo TE/Pen, entonces acerto
+      if (row.predicts_penalties && wasDraw) ownPenHits++; // Aproximacion simple para visualizacion
+      else if (row.predicts_penalties) ownBonusMisses++;
+
+      if (row.predicts_qualifier && bonusPts > 0) ownQualHits++; // Aproximacion simple
+    }
+  }
+
+  knockoutBonusesValues.value = [ownQualHits, ownTEHits, ownPenHits, ownBonusMisses];
+  
+  const pctExact = ownTotal > 0 ? Math.round((ownExact / ownTotal) * 100) : 0;
+  const pctOutcome = ownTotal > 0 ? Math.round(((ownOutcome + ownExact) / ownTotal) * 100) : 0;
+  const pctTE = ownKnockoutTotal > 0 ? Math.round((ownTEHits / ownKnockoutTotal) * 100) : 0;
+  const pctPen = ownKnockoutTotal > 0 ? Math.round((ownPenHits / ownKnockoutTotal) * 100) : 0;
+  const pctQual = ownKnockoutTotal > 0 ? Math.round((ownQualHits / ownKnockoutTotal) * 100) : 0;
+
+  radarValues.value = [pctOutcome, pctExact, pctTE, pctPen, pctQual];
 
   return finishedRows;
 };
@@ -2258,6 +2405,73 @@ watch(
             </p>
           </article>
         </ClientOnly>
+      </div>
+
+      <div class="grid gap-4 xl:grid-cols-2">
+        <ClientOnly>
+          <StatsRadarChart
+            v-if="hasDistributionData"
+            title="Tu Perfil de Prediccion"
+            :labels="['Resultado Base', 'Marcador Exacto', 'Tiempo Extra', 'Penales', 'Clasificado']"
+            :values="radarValues"
+            color="#3b82f6"
+          />
+          <article v-else class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
+             <h3 class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]">Tu Perfil de Prediccion</h3>
+             <p class="text-base-content/70 mt-3 text-sm">Sin datos para perfil.</p>
+          </article>
+        </ClientOnly>
+
+        <ClientOnly>
+          <StatsDoughnutChart
+            v-if="hasDistributionData && knockoutBonusesValues.some(v => v > 0)"
+            title="Bonos de Eliminatorias"
+            :labels="['Clasificado', 'Tiempo Extra', 'Penales', 'Fallos en bonos']"
+            :values="knockoutBonusesValues"
+            :colors="['#8b5cf6', '#f59e0b', '#ec4899', '#ef4444']"
+          />
+          <article v-else class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
+             <h3 class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]">Bonos de Eliminatorias</h3>
+             <p class="text-base-content/70 mt-3 text-sm">No has obtenido bonos en eliminatorias o no hay partidos finalizados.</p>
+          </article>
+        </ClientOnly>
+      </div>
+
+      <div class="grid gap-4 xl:grid-cols-2">
+        <ClientOnly>
+          <StatsBarChart
+            v-if="stagePointsValues.length > 0"
+            title="Puntos Totales por Fase"
+            :labels="stagePointsLabels"
+            :values="stagePointsValues"
+            color="#10b981"
+          />
+          <article v-else class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
+             <h3 class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]">Puntos Totales por Fase</h3>
+             <p class="text-base-content/70 mt-3 text-sm">Sin datos por fase.</p>
+          </article>
+        </ClientOnly>
+
+        <article class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
+          <h3 class="text-base-content text-sm font-semibold uppercase tracking-[0.12em]">El Pulso de la Comunidad</h3>
+          <div v-if="communityPulseMatches.length > 0" class="mt-3 space-y-4">
+             <div v-for="pulse in communityPulseMatches" :key="`pulse-${pulse.match_id}`" class="rounded-xl border border-base-300 bg-base-200/55 p-3">
+                <p class="text-xs font-semibold text-base-content">{{ pulse.home_team }} vs {{ pulse.away_team }}</p>
+                <p class="text-[11px] text-base-content/70 mb-2">{{ stageLabel(pulse.stage) }} · {{ pulse.total_votes }} predicciones</p>
+                <div class="w-full h-3 flex rounded-full overflow-hidden">
+                   <div :style="`width: ${pulse.home_pct}%`" class="bg-primary h-full" :title="`Local: ${pulse.home_pct}%`"></div>
+                   <div :style="`width: ${pulse.draw_pct}%`" class="bg-base-300 h-full" :title="`Empate: ${pulse.draw_pct}%`"></div>
+                   <div :style="`width: ${pulse.away_pct}%`" class="bg-secondary h-full" :title="`Visita: ${pulse.away_pct}%`"></div>
+                </div>
+                <div class="flex justify-between text-[10px] mt-1 font-bold">
+                   <span class="text-primary">{{ pulse.home_pct }}% L</span>
+                   <span class="text-base-content/50">{{ pulse.draw_pct }}% E</span>
+                   <span class="text-secondary">{{ pulse.away_pct }}% V</span>
+                </div>
+             </div>
+          </div>
+          <p v-else class="text-base-content/70 mt-3 text-sm">No hay partidos pendientes para analizar el pulso.</p>
+        </article>
       </div>
 
       <article class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
