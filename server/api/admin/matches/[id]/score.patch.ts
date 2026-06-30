@@ -120,15 +120,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const patch: Record<string, unknown> = {}
-  const supportsPenalties =
-    Object.prototype.hasOwnProperty.call(existing, 'home_penalty_score') &&
-    Object.prototype.hasOwnProperty.call(existing, 'away_penalty_score')
-
   const clearPenaltyPatch = () => {
-    if (!supportsPenalties) {
-      return
-    }
-
     patch.home_penalty_score = null
     patch.away_penalty_score = null
   }
@@ -146,12 +138,6 @@ export default defineEventHandler(async (event) => {
   }
 
   if (hasHomePenalty && hasAwayPenalty) {
-    if (!supportsPenalties) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'Tu base no tiene soporte de penales aun. Aplica la migracion 0028_knockout_penalties_progression.sql',
-      })
-    }
 
     const homePenaltyScore = parseScore(body.home_penalty_score, 'Penales local')
     const awayPenaltyScore = parseScore(body.away_penalty_score, 'Penales visitante')
@@ -195,16 +181,14 @@ export default defineEventHandler(async (event) => {
     (patch.away_score as number | null | undefined) !== undefined
       ? (patch.away_score as number | null)
       : (existing.away_score as number | null)
-  const nextHomePenalty = supportsPenalties
-    ? (patch.home_penalty_score as number | null | undefined) !== undefined
+  const nextHomePenalty =
+    (patch.home_penalty_score as number | null | undefined) !== undefined
       ? (patch.home_penalty_score as number | null)
       : (existing.home_penalty_score as number | null)
-    : null
-  const nextAwayPenalty = supportsPenalties
-    ? (patch.away_penalty_score as number | null | undefined) !== undefined
+  const nextAwayPenalty =
+    (patch.away_penalty_score as number | null | undefined) !== undefined
       ? (patch.away_penalty_score as number | null)
       : (existing.away_penalty_score as number | null)
-    : null
   const isKnockout = KNOCKOUT_STAGES.has(String(existing.stage || ''))
 
   if (nextStatus === 'pending') {
@@ -226,12 +210,6 @@ export default defineEventHandler(async (event) => {
     }
 
     if (isKnockout && nextHomeScore === nextAwayScore) {
-      if (!supportsPenalties) {
-        throw createError({
-          statusCode: 400,
-          statusMessage: 'Tu base no tiene soporte de penales aun. Aplica la migracion 0028_knockout_penalties_progression.sql',
-        })
-      }
 
       if (nextHomePenalty === null || nextAwayPenalty === null || nextHomePenalty === undefined || nextAwayPenalty === undefined) {
         throw createError({
@@ -259,13 +237,6 @@ export default defineEventHandler(async (event) => {
     .maybeSingle()
 
   if (updateError) {
-    if (updateError.code === '42703') {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'Tu base no tiene soporte de penales aun. Aplica la migracion 0028_knockout_penalties_progression.sql',
-      })
-    }
-
     throw createError({ statusCode: 500, statusMessage: updateError.message })
   }
 
