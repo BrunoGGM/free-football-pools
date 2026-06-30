@@ -35,7 +35,7 @@ const awayPrediction = ref<string>("");
 const selectedOutcome = ref<PredictionOutcome | null>(null);
 const predictsExtraTime = ref(false);
 const predictsPenalties = ref(false);
-const predictsPenaltyWinner = ref<'home' | 'away' | null>(null);
+const predictsQualifier = ref<'home' | 'away' | null>(null);
 const loading = ref(false);
 const saveError = ref<string | null>(null);
 const savedOnce = ref(false);
@@ -272,9 +272,8 @@ const predictionSummary = computed(() => {
   }
 
   if (isKnockoutMatch.value) {
-    if (predictsPenalties.value && predictsPenaltyWinner.value) {
-       const winner = predictsPenaltyWinner.value === 'home' ? props.match.home_team : props.match.away_team;
-       return `${home === away ? `Empate (${home}-${away}), g` : 'G'}ana ${winner} en penales`;
+    if (predictsPenalties.value) {
+       return `Empate (${home}-${away}) y se define en Penales`;
     }
     if (predictsExtraTime.value) {
       if (home === away) {
@@ -357,7 +356,7 @@ const loadPrediction = async () => {
   if (predictionsByQuinielaSupported.value === false) {
     const legacyResult = await client
       .from("predictions")
-      .select("home_score, away_score, predicts_extra_time, predicts_penalties, predicts_penalty_winner, points_earned")
+      .select("home_score, away_score, predicts_extra_time, predicts_penalties, predicts_qualifier, points_earned")
       .eq("user_id", user.value.id)
       .eq("match_id", props.match.id)
       .maybeSingle();
@@ -371,7 +370,7 @@ const loadPrediction = async () => {
   } else {
     const scopedResult = await client
       .from("predictions")
-      .select("home_score, away_score, predicts_extra_time, predicts_penalties, predicts_penalty_winner, points_earned")
+      .select("home_score, away_score, predicts_extra_time, predicts_penalties, predicts_qualifier, points_earned")
       .eq("user_id", user.value.id)
       .eq("quiniela_id", activeQuinielaId.value)
       .eq("match_id", props.match.id)
@@ -385,7 +384,7 @@ const loadPrediction = async () => {
 
       const legacyResult = await client
         .from("predictions")
-        .select("home_score, away_score, predicts_extra_time, predicts_penalties, predicts_penalty_winner, points_earned")
+        .select("home_score, away_score, predicts_extra_time, predicts_penalties, predicts_qualifier, points_earned")
         .eq("user_id", user.value.id)
         .eq("match_id", props.match.id)
         .maybeSingle();
@@ -409,7 +408,7 @@ const loadPrediction = async () => {
   awayPrediction.value = data?.away_score?.toString() ?? "";
   predictsExtraTime.value = data?.predicts_extra_time ?? false;
   predictsPenalties.value = data?.predicts_penalties ?? false;
-  predictsPenaltyWinner.value = data?.predicts_penalty_winner ?? null;
+  predictsQualifier.value = data?.predicts_qualifier ?? null;
   if (
     typeof data?.home_score === "number" &&
     typeof data?.away_score === "number"
@@ -448,9 +447,17 @@ const savePrediction = async () => {
     return;
   }
 
-  if (isKnockoutMatch.value && predictsPenalties.value && !predictsPenaltyWinner.value) {
-      saveError.value = "Selecciona que equipo ganara en penales.";
-      return;
+  let finalQualifier: 'home' | 'away' | null = null;
+  if (isKnockoutMatch.value) {
+    if (home === away) {
+      if (!predictsQualifier.value) {
+        saveError.value = "Debes seleccionar que equipo clasificara tras el empate.";
+        return;
+      }
+      finalQualifier = predictsQualifier.value;
+    } else {
+      finalQualifier = home > away ? 'home' : 'away';
+    }
   }
 
   loading.value = true;
@@ -466,7 +473,7 @@ const savePrediction = async () => {
     away_score: away,
     predicts_extra_time: predictsExtraTime.value,
     predicts_penalties: predictsPenalties.value,
-    predicts_penalty_winner: predictsPenalties.value ? predictsPenaltyWinner.value : null,
+    predicts_qualifier: finalQualifier,
   };
 
   if (predictionsByQuinielaSupported.value === false) {
@@ -815,7 +822,7 @@ onBeforeUnmount(() => {
                 <span class="text-warning bg-warning/20 rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide">
                   PENALES
                 </span>
-                <span class="text-base-content/50 text-[10px] hidden sm:inline">(+5 pts ganador)</span>
+                <span class="text-base-content/50 text-[10px] hidden sm:inline">(+2 pts)</span>
               </div>
               <input
                 v-model="predictsPenalties"
@@ -824,26 +831,38 @@ onBeforeUnmount(() => {
                 :disabled="loading"
                 @change="
                   if (predictsPenalties) predictsExtraTime = true;
-                  if (!predictsPenalties) predictsPenaltyWinner = null;
                   savePrediction();
                 "
               />
             </label>
+          </div>
 
-            <div v-if="predictsPenalties" class="flex gap-2">
+          <div v-if="selectedOutcome === 'draw'" class="divider my-2 border-secondary/10 opacity-30"></div>
+
+          <div v-if="selectedOutcome === 'draw'" class="space-y-3">
+            <label class="cursor-pointer flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-primary bg-primary/20 rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide">
+                  CLASIFICA
+                </span>
+                <span class="text-base-content/50 text-[10px] hidden sm:inline">(+1 pt ganador)</span>
+              </div>
+            </label>
+
+            <div class="flex gap-2">
               <button
                 class="btn btn-xs flex-1"
-                :class="predictsPenaltyWinner === 'home' ? 'btn-warning' : 'btn-outline border-warning/50 text-warning/70 hover:bg-warning/20'"
+                :class="predictsQualifier === 'home' ? 'btn-primary' : 'btn-outline border-primary/50 text-primary/70 hover:bg-primary/20'"
                 :disabled="loading"
-                @click="predictsPenaltyWinner = 'home'; savePrediction();"
+                @click="predictsQualifier = 'home'; savePrediction();"
               >
                 Gana {{ props.match.home_team_code || props.match.home_team }}
               </button>
               <button
                 class="btn btn-xs flex-1"
-                :class="predictsPenaltyWinner === 'away' ? 'btn-warning' : 'btn-outline border-warning/50 text-warning/70 hover:bg-warning/20'"
+                :class="predictsQualifier === 'away' ? 'btn-primary' : 'btn-outline border-primary/50 text-primary/70 hover:bg-primary/20'"
                 :disabled="loading"
-                @click="predictsPenaltyWinner = 'away'; savePrediction();"
+                @click="predictsQualifier = 'away'; savePrediction();"
               >
                 Gana {{ props.match.away_team_code || props.match.away_team }}
               </button>

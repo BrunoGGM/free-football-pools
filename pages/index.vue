@@ -233,21 +233,24 @@ const epicMoments = computed(() => landingVisuals.value.moments);
 
         <ul class="text-base-content mt-5 space-y-3 text-sm">
           <li class="card border border-base-300 bg-base-100/80 p-3">
-            <p class="text-primary font-semibold">1 punto</p>
-            <p class="text-base-content/70">
-              Acertar resultado (local, empate o visita).
+            <p class="text-primary font-semibold">Grupos y 90 minutos</p>
+            <p class="text-base-content/70 text-xs mt-1">
+              <strong>+1 punto</strong> por acertar resultado (local, empate o visita).<br/>
+              <strong>+3 puntos</strong> por acertar marcador exacto.
             </p>
           </li>
           <li class="card border border-base-300 bg-base-100/80 p-3">
-            <p class="text-primary font-semibold">3 puntos</p>
-            <p class="text-base-content/70">
-              Acertar marcador exacto del partido.
+            <p class="text-secondary font-semibold">Extras en Eliminatorias</p>
+            <p class="text-base-content/70 text-xs mt-1">
+              <strong>+1 pt</strong> si aciertas que habra tiempo extra.<br/>
+              <strong>+2 pts</strong> si aciertas que habra penales.<br/>
+              <strong>+1 pt</strong> por acertar que equipo clasifica a la siguiente ronda.
             </p>
           </li>
           <li class="card border border-base-300 bg-base-100/80 p-3">
-            <p class="text-warning font-semibold">10 puntos bonus</p>
-            <p class="text-base-content/70">
-              Acertar campeon predicho antes del inicio del torneo.
+            <p class="text-warning font-semibold">Bonus Campeon</p>
+            <p class="text-base-content/70 text-xs mt-1">
+              <strong>+10 puntos</strong> si aciertas al campeon elegido antes del inicio.
             </p>
           </li>
         </ul>

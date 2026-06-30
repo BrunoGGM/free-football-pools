@@ -999,7 +999,7 @@ const openUserQuinielaModal = async (row: PositionRow) => {
   const predictionsResult = await client
     .from("predictions")
     .select(
-      "id, match_id, home_score, away_score, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score)",
+      "id, match_id, home_score, away_score, predicts_extra_time, predicts_penalties, predicts_qualifier, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score)",
     )
     .eq("quiniela_id", activeQuinielaId.value)
     .eq("user_id", row.user_id)

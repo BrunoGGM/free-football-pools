@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onMounted, ref, nextTick } from 'vue';
 import { resolveTeamCode, teamFlagEmojiFromCode } from "~/utils/teamMeta";
 
 type MatchStatus = "pending" | "in_progress" | "finished";
@@ -24,6 +25,9 @@ type PredictionRow = {
   home_score: number | null;
   away_score: number | null;
   points_earned: number;
+  predicts_extra_time?: boolean;
+  predicts_penalties?: boolean;
+  predicts_qualifier?: string | null;
   created_at?: string | null;
   hasPrediction: boolean;
   match: PredictionMatchRow | null;
@@ -175,15 +179,31 @@ const predictionText = (row: PredictionRow) => {
     return "Sin pick guardado";
   }
 
+  const isKnockout = ['round_32', 'round_16', 'quarter_final', 'semi_final', 'third_place', 'final'].includes(row.match.stage);
+
+  let text = "Empate";
   if (row.home_score > row.away_score) {
-    return `Gana ${displayTeamName(row.match.home_team)}`;
+    text = `Gana ${displayTeamName(row.match.home_team)}`;
+  } else if (row.home_score < row.away_score) {
+    text = `Gana ${displayTeamName(row.match.away_team)}`;
   }
 
-  if (row.home_score < row.away_score) {
-    return `Gana ${displayTeamName(row.match.away_team)}`;
+  if (isKnockout) {
+    const extras = [];
+    if (row.predicts_penalties) extras.push("Penales");
+    else if (row.predicts_extra_time) extras.push("T. Extra");
+    
+    if (row.predicts_qualifier) {
+      const qTeam = row.predicts_qualifier === 'home' ? row.match.home_team : row.match.away_team;
+      extras.push(`Clasifica ${displayTeamName(qTeam)}`);
+    }
+
+    if (extras.length > 0) {
+      return `${text} (${extras.join(', ')})`;
+    }
   }
 
-  return "Empate";
+  return text;
 };
 
 const officialResultText = (match: PredictionMatchRow | null) => {
@@ -286,10 +306,25 @@ const pointBreakdownText = (row: PredictionRow) => {
 
   return `+${outcomePart} pick +${bonusPart} exacto`;
 };
+
+const tableContainerRef = ref<HTMLElement | null>(null);
+
+onMounted(() => {
+  nextTick(() => {
+    if (!tableContainerRef.value) return;
+    
+    const rowsElements = tableContainerRef.value.querySelectorAll('tr[data-status="pending"], tr[data-status="in_progress"]');
+    
+    if (rowsElements.length > 0) {
+       rowsElements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
+});
 </script>
 
 <template>
   <div
+    ref="tableContainerRef"
     class="table-shell rounded-2xl border border-base-300 bg-base-100/70"
   >
     <table class="table min-w-full text-sm">
@@ -310,6 +345,7 @@ const pointBreakdownText = (row: PredictionRow) => {
           v-for="row in rows"
           :key="row.id"
           class="border-t border-base-300 align-top"
+          :data-status="row.match?.status"
         >
           <td class="px-4 py-3">
             <p class="text-base-content/70 text-xs">
