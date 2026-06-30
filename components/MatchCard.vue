@@ -28,6 +28,70 @@ const predictionsByQuinielaSupported = useState<boolean | null>(
   () => null,
 );
 
+const { data: communityStatsMap } = useAsyncData(
+  `community_stats_${activeQuinielaId.value}`,
+  async () => {
+    if (!activeQuinielaId.value) return new Map<string, any>();
+
+    const { data } = await client
+      .from("predictions")
+      .select("match_id, home_score, away_score, predicts_extra_time, predicts_penalties")
+      .eq("quiniela_id", activeQuinielaId.value);
+
+    const map = new Map<
+      string,
+      { homeWins: number; draws: number; awayWins: number; total: number; extraTime: number; penalties: number; scores: Record<string, number> }
+    >();
+
+    if (data) {
+      for (const p of data) {
+        if (!p.match_id || p.home_score === null || p.away_score === null) continue;
+        let s = map.get(p.match_id);
+        if (!s) {
+          s = { homeWins: 0, draws: 0, awayWins: 0, total: 0, extraTime: 0, penalties: 0, scores: {} };
+          map.set(p.match_id, s);
+        }
+        if (p.home_score > p.away_score) s.homeWins++;
+        else if (p.home_score < p.away_score) s.awayWins++;
+        else s.draws++;
+        
+        if (p.predicts_extra_time) s.extraTime++;
+        if (p.predicts_penalties) s.penalties++;
+
+        const scoreStr = `${p.home_score}-${p.away_score}`;
+        s.scores[scoreStr] = (s.scores[scoreStr] || 0) + 1;
+
+        s.total++;
+      }
+    }
+    return map;
+  },
+  {
+    server: false,
+    lazy: true,
+    default: () => new Map(),
+  }
+);
+
+const communityStats = computed(() => communityStatsMap.value?.get(props.match.id));
+
+const mostVotedScore = computed(() => {
+  if (!communityStats.value) return null;
+  let maxCount = 0;
+  let topScore: string | null = null;
+  for (const [score, count] of Object.entries(communityStats.value.scores)) {
+    if (count > maxCount) {
+      maxCount = count;
+      topScore = score;
+    }
+  }
+  if (maxCount === 0 || !topScore) return null;
+  return {
+    score: topScore,
+    percentage: Math.round((maxCount / communityStats.value.total) * 100)
+  };
+});
+
 type PredictionOutcome = "home" | "draw" | "away";
 
 const homePrediction = ref<string>("");
@@ -929,6 +993,58 @@ onBeforeUnmount(() => {
           </p>
         </div>
       </template>
+    </div>
+
+    <div v-if="communityStats && communityStats.total > 0" class="mt-3 rounded-lg bg-base-200/50 p-3">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-medium text-base-content/70">Pulso de la comunidad ({{ communityStats.total }} picks)</span>
+        <span v-if="mostVotedScore" class="text-[10px] font-semibold text-primary" :title="`${mostVotedScore.percentage}% voto este marcador`">
+          Más votado: {{ mostVotedScore.score }}
+        </span>
+      </div>
+      <div class="mt-2.5 px-1">
+        <div class="flex h-2.5 w-full overflow-hidden rounded-full bg-base-300">
+          <div
+            v-if="communityStats.homeWins > 0"
+            class="bg-primary transition-all duration-500"
+            :style="{ width: `${(communityStats.homeWins / communityStats.total) * 100}%` }"
+            :title="`Gana ${props.match.home_team_code || props.match.home_team}: ${Math.round((communityStats.homeWins / communityStats.total) * 100)}%`"
+          ></div>
+          <div
+            v-if="communityStats.draws > 0"
+            class="bg-base-content/30 transition-all duration-500"
+            :style="{ width: `${(communityStats.draws / communityStats.total) * 100}%` }"
+            :title="`Empate: ${Math.round((communityStats.draws / communityStats.total) * 100)}%`"
+          ></div>
+          <div
+            v-if="communityStats.awayWins > 0"
+            class="bg-secondary transition-all duration-500"
+            :style="{ width: `${(communityStats.awayWins / communityStats.total) * 100}%` }"
+            :title="`Gana ${props.match.away_team_code || props.match.away_team}: ${Math.round((communityStats.awayWins / communityStats.total) * 100)}%`"
+          ></div>
+        </div>
+        <div class="mt-1.5 flex justify-between text-[10px] text-base-content/60 font-semibold uppercase tracking-wider">
+          <span v-if="communityStats.homeWins > 0" class="text-primary">{{ Math.round((communityStats.homeWins / communityStats.total) * 100) }}% L</span>
+          <span v-else class="w-8"></span>
+          
+          <span v-if="communityStats.draws > 0">{{ Math.round((communityStats.draws / communityStats.total) * 100) }}% E</span>
+          <span v-else class="w-8"></span>
+          
+          <span v-if="communityStats.awayWins > 0" class="text-secondary text-right">{{ Math.round((communityStats.awayWins / communityStats.total) * 100) }}% V</span>
+          <span v-else class="w-8"></span>
+        </div>
+      </div>
+      
+      <div v-if="isKnockoutMatch && (communityStats.extraTime > 0 || communityStats.penalties > 0)" class="mt-2.5 flex items-center gap-3 border-t border-base-300 pt-2.5 text-[10px] font-medium text-base-content/60">
+        <div v-if="communityStats.extraTime > 0" class="flex items-center gap-1" :title="`${communityStats.extraTime} personas creen que habra tiempo extra`">
+          <span class="h-1.5 w-1.5 rounded-full bg-secondary"></span>
+          {{ Math.round((communityStats.extraTime / communityStats.total) * 100) }}% T. Extra
+        </div>
+        <div v-if="communityStats.penalties > 0" class="flex items-center gap-1" :title="`${communityStats.penalties} personas creen que habra penales`">
+          <span class="h-1.5 w-1.5 rounded-full bg-warning"></span>
+          {{ Math.round((communityStats.penalties / communityStats.total) * 100) }}% Penales
+        </div>
+      </div>
     </div>
   </article>
 </template>

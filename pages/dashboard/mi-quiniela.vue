@@ -34,6 +34,12 @@ interface PredictionRow {
   created_at: string | null;
   hasPrediction: boolean;
   match: MatchRow | null;
+  communityStats?: {
+    homeWins: number;
+    draws: number;
+    awayWins: number;
+    total: number;
+  } | null;
 }
 
 interface RawPredictionRow {
@@ -923,6 +929,11 @@ const loadMyQuinielaView = async () => {
     )
     .order("match_time", { ascending: true });
 
+  const allPredictionsPromise = client
+    .from("predictions")
+    .select("match_id, home_score, away_score")
+    .eq("quiniela_id", activeQuinielaId.value);
+
   const scopedPredictionsPromise = client
     .from("predictions")
     .select(
@@ -1170,6 +1181,27 @@ const loadMyQuinielaView = async () => {
     tiePeersPreview.value = [];
   }
 
+  const allPredictionsResult = await allPredictionsPromise;
+  const communityStatsByMatchId = new Map<string, { homeWins: number; draws: number; awayWins: number; total: number }>();
+  
+  if (!allPredictionsResult.error && allPredictionsResult.data) {
+    for (const p of allPredictionsResult.data as Array<{ match_id: string; home_score: number | null; away_score: number | null }>) {
+      if (!p.match_id || p.home_score === null || p.away_score === null) continue;
+      
+      let stats = communityStatsByMatchId.get(p.match_id);
+      if (!stats) {
+        stats = { homeWins: 0, draws: 0, awayWins: 0, total: 0 };
+        communityStatsByMatchId.set(p.match_id, stats);
+      }
+      
+      if (p.home_score > p.away_score) stats.homeWins++;
+      else if (p.home_score < p.away_score) stats.awayWins++;
+      else stats.draws++;
+      
+      stats.total++;
+    }
+  }
+
   const normalizedPredictions = (
     (predictionsResult.data as RawPredictionRow[] | null) ?? []
   ).map((row) => ({
@@ -1191,13 +1223,13 @@ const loadMyQuinielaView = async () => {
 
     predictionByMatchId.set(matchId, row);
   }
-
-  const orderedMatches = (
+    const orderedMatches = (
     (allMatchesResult.data as MatchRow[] | null) ?? []
   ).slice();
 
   predictions.value = orderedMatches.map((match) => {
     const prediction = predictionByMatchId.get(match.id);
+    const cStats = communityStatsByMatchId.get(match.id) ?? null;
 
     if (!prediction) {
       return {
@@ -1209,6 +1241,7 @@ const loadMyQuinielaView = async () => {
         created_at: null,
         hasPrediction: false,
         match,
+        communityStats: cStats,
       };
     }
 
@@ -1226,6 +1259,7 @@ const loadMyQuinielaView = async () => {
       created_at: prediction.created_at,
       hasPrediction: homeScore !== null && awayScore !== null,
       match,
+      communityStats: cStats,
     };
   });
 
