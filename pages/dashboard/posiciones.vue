@@ -799,8 +799,18 @@ const openPointsHistoryModal = async (row: PositionRow) => {
       const matchWentToET = Boolean((match as any)?.went_to_extra_time);
       const matchHadPenalties = (match as any)?.home_penalty_score != null;
 
-      // 1. Outcome hit (+1)
-      if (isOutcomeHit) {
+      // 1. Exact score => +3 total (includes outcome, not additive)
+      if (isExact) {
+        rows.push({
+          id: `${item.id}-exact`,
+          source: "exact_score",
+          points: configuredExactPoints,
+          created_at: createdAt,
+          title,
+          detail: `${baseDetail} • Marcador exacto`,
+        });
+      } else if (isOutcomeHit) {
+        // 2. Only outcome hit => +1
         rows.push({
           id: `${item.id}-pick`,
           source: "pick_outcome",
@@ -809,21 +819,6 @@ const openPointsHistoryModal = async (row: PositionRow) => {
           title,
           detail: `${baseDetail} • Punto por resultado`,
         });
-      }
-
-      // 2. Exact score bonus (+3 - outcome = +2, o el total configurado)
-      if (isExact) {
-        const exactBonus = configuredExactPoints - configuredOutcomePoints;
-        if (exactBonus > 0) {
-          rows.push({
-            id: `${item.id}-exact`,
-            source: "exact_score",
-            points: exactBonus,
-            created_at: createdAt,
-            title,
-            detail: `${baseDetail} • Bonus por marcador exacto`,
-          });
-        }
       }
 
       // 3. Knockout bonuses
