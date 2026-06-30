@@ -1064,6 +1064,7 @@ const loadIngestionLogs = async () => {
       status: previous?.status ?? ((item.status as MatchStatus) || "pending"),
       home_team: previous?.home_team ?? item.home_team,
       away_team: previous?.away_team ?? item.away_team,
+      went_to_extra_time: previous?.went_to_extra_time ?? (item.went_to_extra_time || false),
     };
   }
 
@@ -1260,8 +1261,8 @@ const saveMatchScore = async (matchId: string) => {
       payload.away_team = draft.away_team;
     }
 
-    if (draft.went_to_extra_time !== null && draft.went_to_extra_time !== targetMatch.went_to_extra_time) {
-      payload.went_to_extra_time = draft.went_to_extra_time;
+    if (isKnockoutStage) {
+      payload.went_to_extra_time = draft.went_to_extra_time ?? targetMatch.went_to_extra_time ?? false;
     }
 
     if (homePenaltyScore !== null && awayPenaltyScore !== null) {
