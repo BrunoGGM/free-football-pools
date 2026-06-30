@@ -1150,18 +1150,18 @@ export type Database = {
       }
       calculate_prediction_points_for_quiniela_v3: {
         Args: {
-          actual_away: number
-          actual_away_penalty: number
-          actual_home: number
-          actual_home_penalty: number
-          actual_went_to_extra_time: boolean
+          p_actual_away_penalties: number
+          p_actual_away_score: number
+          p_actual_home_penalties: number
+          p_actual_home_score: number
+          p_has_penalties: boolean
+          p_pred_away_score: number
+          p_pred_home_score: number
+          p_predicts_extra_time: boolean
+          p_predicts_penalties: boolean
+          p_predicts_qualifier: string
           p_quiniela_id: string
-          p_stage: string
-          pred_predicts_extra_time: boolean
-          pred_predicts_penalties: boolean
-          pred_predicts_qualifier: string
-          predicted_away: number
-          predicted_home: number
+          p_stage: Database["public"]["Enums"]["match_stage"]
         }
         Returns: number
       }
