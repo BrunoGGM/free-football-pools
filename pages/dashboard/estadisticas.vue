@@ -1941,7 +1941,7 @@ watch(
         </div>
       </article>
 
-      <StatsKpiStrip :items="statsKpis" />
+      <DashboardStatsKpiStrip :items="statsKpis" />
 
       <div class="grid gap-4 xl:grid-cols-2">
         <article class="rounded-2xl border border-base-300 bg-base-100/70 p-4">
@@ -2291,7 +2291,7 @@ watch(
 
       <div class="grid gap-4 xl:grid-cols-2">
         <ClientOnly>
-          <StatsLineChart
+          <DashboardStatsLineChart
             v-if="hasEvolutionData"
             title="Evolucion de puntos (tu progreso)"
             :labels="evolutionLabels"
@@ -2325,7 +2325,7 @@ watch(
         </ClientOnly>
 
         <ClientOnly>
-          <StatsLineChart
+          <DashboardStatsLineChart
             v-if="hasWeeklyData"
             title="Rendimiento semanal"
             :labels="weeklyLabels"
@@ -2361,7 +2361,7 @@ watch(
 
       <div class="grid gap-4 xl:grid-cols-2">
         <ClientOnly>
-          <StatsBarChart
+          <DashboardStatsBarChart
             v-if="hasLeaderboardData"
             title="Leaderboard de la quiniela"
             :labels="leaderboardLabels"
@@ -2384,7 +2384,7 @@ watch(
         </ClientOnly>
 
         <ClientOnly>
-          <StatsDoughnutChart
+          <DashboardStatsDoughnutChart
             v-if="hasDistributionData"
             :title="distributionTitle"
             :labels="distributionLabels"
@@ -2409,7 +2409,7 @@ watch(
 
       <div class="grid gap-4 xl:grid-cols-2">
         <ClientOnly>
-          <StatsRadarChart
+          <DashboardStatsRadarChart
             v-if="hasDistributionData"
             title="Tu Perfil de Prediccion"
             :labels="['Resultado Base', 'Marcador Exacto', 'Tiempo Extra', 'Penales', 'Clasificado']"
@@ -2423,7 +2423,7 @@ watch(
         </ClientOnly>
 
         <ClientOnly>
-          <StatsDoughnutChart
+          <DashboardStatsDoughnutChart
             v-if="hasDistributionData && knockoutBonusesValues.some(v => v > 0)"
             title="Bonos de Eliminatorias"
             :labels="['Clasificado', 'Tiempo Extra', 'Penales', 'Fallos en bonos']"
@@ -2439,7 +2439,7 @@ watch(
 
       <div class="grid gap-4 xl:grid-cols-2">
         <ClientOnly>
-          <StatsBarChart
+          <DashboardStatsBarChart
             v-if="stagePointsValues.length > 0"
             title="Puntos Totales por Fase"
             :labels="stagePointsLabels"
