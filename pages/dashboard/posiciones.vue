@@ -628,7 +628,7 @@ const openPointsHistoryModal = async (row: PositionRow) => {
 
   const rulesResult = await client
     .from("quiniela_rules")
-    .select("correct_outcome_points, exact_score_points, extra_time_prediction_points, penalty_prediction_points, qualifier_prediction_points")
+    .select("correct_outcome_points, exact_score_points, extra_time_prediction_points, penalty_prediction_points, qualifier_prediction_points, champion_bonus_points")
     .eq("quiniela_id", activeQuinielaId.value)
     .maybeSingle();
 
@@ -995,7 +995,15 @@ const openPointsHistoryModal = async (row: PositionRow) => {
     0,
   );
   const memberTotalPoints = Number(memberStateResult.data?.total_points ?? 0);
-  const championBonusPoints = memberTotalPoints - matchPoints - customPickPoints;
+  
+  const actualChampion = quiniela.value?.champion_team?.trim().toLowerCase();
+  const predictedChampion = memberStateResult.data?.predicted_champion?.trim().toLowerCase();
+  
+  const championBonusPoints = actualChampion && predictedChampion && actualChampion === predictedChampion
+    ? Number(rulesResult.data?.champion_bonus_points ?? 10)
+    : 0;
+
+  const syncDiscrepancy = memberTotalPoints - matchPoints - customPickPoints - championBonusPoints;
 
   const championBonusEntry: PointHistoryEntry[] =
     championBonusPoints === 0
@@ -1007,9 +1015,21 @@ const openPointsHistoryModal = async (row: PositionRow) => {
             points: championBonusPoints,
             created_at: quiniela.value?.start_date || new Date().toISOString(),
             title: "Bonus de campeon",
-            detail: memberStateResult.data?.predicted_champion
-              ? `Pick registrado: ${memberStateResult.data.predicted_champion}`
-              : "Sin pick de campeon",
+            detail: `Pick registrado: ${memberStateResult.data?.predicted_champion}`,
+          },
+        ];
+
+  const discrepancyEntry: PointHistoryEntry[] =
+    syncDiscrepancy === 0
+      ? []
+      : [
+          {
+            id: `discrepancy-${row.user_id}`,
+            source: "manual",
+            points: syncDiscrepancy,
+            created_at: new Date().toISOString(),
+            title: "Ajuste de sincronizacion",
+            detail: "Diferencia temporal por reglas anteriores o calculos pendientes",
           },
         ];
 
@@ -1018,6 +1038,7 @@ const openPointsHistoryModal = async (row: PositionRow) => {
     ...manualEntries,
     ...customPickEntries,
     ...championBonusEntry,
+    ...discrepancyEntry,
   ]
     .slice()
     .sort(
