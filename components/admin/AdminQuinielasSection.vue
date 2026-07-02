@@ -18,8 +18,10 @@ interface ManagedQuiniela {
   ticket_price: number;
   start_date: string;
   end_date: string | null;
+  champion_team: string | null;
   admin_id: string;
   admin_username: string;
+  created_at: string;
   rules: {
     exact_score_points: number;
     correct_outcome_points: number;
@@ -2051,7 +2053,7 @@ watch(
             {{ membersLoading ? "Cargando..." : "Recargar miembros" }}
           </button>
         </div>
-        
+
         <p v-if="membersError" class="alert alert-error mt-3 text-xs">
           {{ membersError }}
         </p>

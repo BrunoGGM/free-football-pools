@@ -19,6 +19,9 @@ interface MatchRow {
   away_team: string;
   home_score: number | null;
   away_score: number | null;
+  home_extra_time_score?: number | null;
+  away_extra_time_score?: number | null;
+  went_to_extra_time?: boolean | null;
   home_team_code: string | null;
   away_team_code: string | null;
   home_team_logo_url: string | null;
@@ -925,7 +928,7 @@ const loadMyQuinielaView = async () => {
   const allMatchesPromise = client
     .from("matches")
     .select(
-      "id, stage, status, match_time, home_team, away_team, home_score, away_score, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url",
+      "id, stage, status, match_time, home_team, away_team, home_score, away_score, home_extra_time_score, away_extra_time_score, went_to_extra_time, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url",
     )
     .order("match_time", { ascending: true });
 
@@ -937,7 +940,7 @@ const loadMyQuinielaView = async () => {
   const scopedPredictionsPromise = client
     .from("predictions")
     .select(
-      "id, match_id, home_score, away_score, predicts_extra_time, predicts_penalties, predicts_qualifier, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url)",
+      "id, match_id, home_score, away_score, predicts_extra_time, predicts_penalties, predicts_qualifier, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_extra_time_score, away_extra_time_score, went_to_extra_time, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url)",
     )
     .eq("user_id", user.value.id)
     .eq("quiniela_id", activeQuinielaId.value)
@@ -946,7 +949,7 @@ const loadMyQuinielaView = async () => {
   const legacyPredictionsPromise = client
     .from("predictions")
     .select(
-      "id, match_id, home_score, away_score, predicts_extra_time, predicts_penalties, predicts_qualifier, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url)",
+      "id, match_id, home_score, away_score, predicts_extra_time, predicts_penalties, predicts_qualifier, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_extra_time_score, away_extra_time_score, went_to_extra_time, home_team_code, away_team_code, home_team_logo_url, away_team_logo_url)",
     )
     .eq("user_id", user.value.id)
     .order("match_time", { ascending: true, referencedTable: "matches" });
@@ -1183,21 +1186,21 @@ const loadMyQuinielaView = async () => {
 
   const allPredictionsResult = await allPredictionsPromise;
   const communityStatsByMatchId = new Map<string, { homeWins: number; draws: number; awayWins: number; total: number }>();
-  
+
   if (!allPredictionsResult.error && allPredictionsResult.data) {
     for (const p of allPredictionsResult.data as Array<{ match_id: string; home_score: number | null; away_score: number | null }>) {
       if (!p.match_id || p.home_score === null || p.away_score === null) continue;
-      
+
       let stats = communityStatsByMatchId.get(p.match_id);
       if (!stats) {
         stats = { homeWins: 0, draws: 0, awayWins: 0, total: 0 };
         communityStatsByMatchId.set(p.match_id, stats);
       }
-      
+
       if (p.home_score > p.away_score) stats.homeWins++;
       else if (p.home_score < p.away_score) stats.awayWins++;
       else stats.draws++;
-      
+
       stats.total++;
     }
   }

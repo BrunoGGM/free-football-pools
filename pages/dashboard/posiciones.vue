@@ -4,6 +4,7 @@ import {
   resolveTeamCode,
   teamFlagEmojiFromCode,
 } from "~/utils/teamMeta";
+import { getEffectiveAwayScore, getEffectiveHomeScore, getEffectiveQualifier } from "~/utils/matchScore";
 import {
   useRegisteredTeamsCatalog,
   type RegisteredTeamCatalogItem,
@@ -67,6 +68,11 @@ interface RankedUserPredictionRow {
     away_team: string;
     home_score: number | null;
     away_score: number | null;
+    home_extra_time_score?: number | null;
+    away_extra_time_score?: number | null;
+    home_penalty_score?: number | null;
+    away_penalty_score?: number | null;
+    went_to_extra_time?: boolean | null;
   } | null;
 }
 
@@ -87,6 +93,11 @@ interface RankedUserRawPredictionRow {
         away_team: string;
         home_score: number | null;
         away_score: number | null;
+        home_extra_time_score?: number | null;
+        away_extra_time_score?: number | null;
+        home_penalty_score?: number | null;
+        away_penalty_score?: number | null;
+        went_to_extra_time?: boolean | null;
       }
     | Array<{
         id: string;
@@ -97,6 +108,11 @@ interface RankedUserRawPredictionRow {
         away_team: string;
         home_score: number | null;
         away_score: number | null;
+        home_extra_time_score?: number | null;
+        away_extra_time_score?: number | null;
+        home_penalty_score?: number | null;
+        away_penalty_score?: number | null;
+        went_to_extra_time?: boolean | null;
       }>
     | null;
 }
@@ -667,7 +683,7 @@ const openPointsHistoryModal = async (row: PositionRow) => {
   const predictionsResult = await client
     .from("predictions")
     .select(
-      "id, home_score, away_score, points_earned, predicts_extra_time, predicts_penalties, predicts_qualifier, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, went_to_extra_time, home_penalty_score, away_penalty_score)",
+      "id, home_score, away_score, points_earned, predicts_extra_time, predicts_penalties, predicts_qualifier, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_extra_time_score, away_extra_time_score, went_to_extra_time, home_penalty_score, away_penalty_score)",
     )
     .eq("quiniela_id", activeQuinielaId.value)
     .eq("user_id", row.user_id)
@@ -719,6 +735,9 @@ const openPointsHistoryModal = async (row: PositionRow) => {
       home_score: number | null;
       away_score: number | null;
       points_earned: number | null;
+      predicts_extra_time?: boolean | null;
+      predicts_penalties?: boolean | null;
+      predicts_qualifier?: string | null;
       created_at: string | null;
       match:
         | {
@@ -849,16 +868,9 @@ const openPointsHistoryModal = async (row: PositionRow) => {
 
         // Qualifier bonus
         if (item.predicts_qualifier) {
-          let actualQualifier: string | null = null;
-          if (actualHome !== null && actualAway !== null) {
-            if (actualHome > actualAway) actualQualifier = 'home';
-            else if (actualHome < actualAway) actualQualifier = 'away';
-            else if (matchHadPenalties) {
-              const hp = Number((match as any)?.home_penalty_score ?? 0);
-              const ap = Number((match as any)?.away_penalty_score ?? 0);
-              actualQualifier = hp > ap ? 'home' : 'away';
-            }
-          }
+          const actualQualifier = match
+            ? getEffectiveQualifier(match)
+            : null;
           if (actualQualifier && item.predicts_qualifier === actualQualifier) {
             rows.push({
               id: `${item.id}-qual`,
@@ -995,10 +1007,10 @@ const openPointsHistoryModal = async (row: PositionRow) => {
     0,
   );
   const memberTotalPoints = Number(memberStateResult.data?.total_points ?? 0);
-  
+
   const actualChampion = quiniela.value?.champion_team?.trim().toLowerCase();
   const predictedChampion = memberStateResult.data?.predicted_champion?.trim().toLowerCase();
-  
+
   const championBonusPoints = actualChampion && predictedChampion && actualChampion === predictedChampion
     ? Number(rulesResult.data?.champion_bonus_points ?? 10)
     : 0;
@@ -1081,7 +1093,7 @@ const openUserQuinielaModal = async (row: PositionRow) => {
   const predictionsResult = await client
     .from("predictions")
     .select(
-      "id, match_id, home_score, away_score, predicts_extra_time, predicts_penalties, predicts_qualifier, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score)",
+      "id, match_id, home_score, away_score, predicts_extra_time, predicts_penalties, predicts_qualifier, points_earned, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_extra_time_score, away_extra_time_score, went_to_extra_time, home_penalty_score, away_penalty_score)",
     )
     .eq("quiniela_id", activeQuinielaId.value)
     .eq("user_id", row.user_id)
@@ -1090,7 +1102,7 @@ const openUserQuinielaModal = async (row: PositionRow) => {
   const matchesResult = await client
     .from("matches")
     .select(
-      "id, stage, status, match_time, home_team, away_team, home_score, away_score",
+      "id, stage, status, match_time, home_team, away_team, home_score, away_score, home_extra_time_score, away_extra_time_score, went_to_extra_time, home_penalty_score, away_penalty_score",
     )
     .order("match_time", { ascending: true });
 
@@ -1342,7 +1354,7 @@ const loadRanking = async () => {
   const finalMatchResult = await client
     .from("matches")
     .select(
-      "home_team, away_team, home_score, away_score, status, match_time, updated_at",
+      "home_team, away_team, home_score, away_score, home_extra_time_score, away_extra_time_score, went_to_extra_time, home_penalty_score, away_penalty_score, status, match_time, updated_at",
     )
     .eq("stage", "final")
     .eq("status", "finished")
@@ -1359,12 +1371,39 @@ const loadRanking = async () => {
       away_team: string;
       home_score: number;
       away_score: number;
+      home_extra_time_score?: number | null;
+      away_extra_time_score?: number | null;
+      went_to_extra_time?: boolean | null;
+      home_penalty_score?: number | null;
+      away_penalty_score?: number | null;
     };
 
-    if (finalMatch.home_score > finalMatch.away_score) {
+    const effectiveHomeScore = getEffectiveHomeScore(finalMatch);
+    const effectiveAwayScore = getEffectiveAwayScore(finalMatch);
+
+    if (
+      effectiveHomeScore !== null &&
+      effectiveAwayScore !== null &&
+      effectiveHomeScore > effectiveAwayScore
+    ) {
       finalWinnerNormalized = normalizeTeamKey(finalMatch.home_team);
-    } else if (finalMatch.home_score < finalMatch.away_score) {
+    } else if (
+      effectiveHomeScore !== null &&
+      effectiveAwayScore !== null &&
+      effectiveHomeScore < effectiveAwayScore
+    ) {
       finalWinnerNormalized = normalizeTeamKey(finalMatch.away_team);
+    } else if (
+      finalMatch.home_penalty_score !== null &&
+      finalMatch.home_penalty_score !== undefined &&
+      finalMatch.away_penalty_score !== null &&
+      finalMatch.away_penalty_score !== undefined
+    ) {
+      if (finalMatch.home_penalty_score > finalMatch.away_penalty_score) {
+        finalWinnerNormalized = normalizeTeamKey(finalMatch.home_team);
+      } else if (finalMatch.home_penalty_score < finalMatch.away_penalty_score) {
+        finalWinnerNormalized = normalizeTeamKey(finalMatch.away_team);
+      }
     }
   }
 

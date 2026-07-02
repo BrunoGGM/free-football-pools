@@ -28,6 +28,8 @@ defineProps<{
     away_team: string;
     home_score: number | null;
     away_score: number | null;
+    home_extra_time_score: number | null;
+    away_extra_time_score: number | null;
     home_penalty_score: number | null;
     away_penalty_score: number | null;
     went_to_extra_time: boolean;
@@ -51,6 +53,8 @@ defineProps<{
       match_time: string;
       home_score: string;
       away_score: string;
+      home_extra_time_score: string;
+      away_extra_time_score: string;
       home_penalty_score: string;
       away_penalty_score: string;
       status: "pending" | "in_progress" | "finished";
@@ -78,6 +82,8 @@ const emit = defineEmits<{
         | "match_time"
         | "home_score"
         | "away_score"
+        | "home_extra_time_score"
+        | "away_extra_time_score"
         | "home_penalty_score"
         | "away_penalty_score"
         | "status"
@@ -307,7 +313,7 @@ const emit = defineEmits<{
                     :value="matchScoreDraftById[entry.id]?.home_team ?? entry.home_team"
                     type="text"
                     list="team-catalog-datalist"
-                    class="input input-bordered input-xs w-full max-w-[120px]"
+                    class="input input-bordered input-xs w-full max-w-30"
                     @input="
                       emit('updateMatchScoreDraft', {
                         id: entry.id,
@@ -321,7 +327,7 @@ const emit = defineEmits<{
                     :value="matchScoreDraftById[entry.id]?.away_team ?? entry.away_team"
                     type="text"
                     list="team-catalog-datalist"
-                    class="input input-bordered input-xs w-full max-w-[120px]"
+                    class="input input-bordered input-xs w-full max-w-30"
                     @input="
                       emit('updateMatchScoreDraft', {
                         id: entry.id,
@@ -444,6 +450,64 @@ const emit = defineEmits<{
                           "
                         />
                       </label>
+                    </div>
+
+                    <div
+                      v-if="
+                        matchScoreDraftById[entry.id]?.went_to_extra_time ??
+                        entry.went_to_extra_time
+                      "
+                      class="bg-secondary/5 border-secondary/20 rounded-lg border px-2 py-1"
+                    >
+                      <div class="mb-1 flex items-center gap-2">
+                        <span
+                          class="text-secondary bg-secondary/15 rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide"
+                        >
+                          MARCADOR T. EXTRA
+                        </span>
+                        <span class="text-base-content/50 text-[10px]"
+                          >marcador final oficial</span
+                        >
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <input
+                          :value="
+                            matchScoreDraftById[entry.id]?.home_extra_time_score ??
+                            (entry.home_extra_time_score === null
+                              ? ''
+                              : String(entry.home_extra_time_score))
+                          "
+                          type="number"
+                          min="0"
+                          class="input input-bordered input-xs border-secondary/30 bg-base-100 w-16"
+                          @input="
+                            emit('updateMatchScoreDraft', {
+                              id: entry.id,
+                              field: 'home_extra_time_score',
+                              value: ($event.target as HTMLInputElement).value,
+                            })
+                          "
+                        />
+                        <span class="text-secondary/80 text-xs">-</span>
+                        <input
+                          :value="
+                            matchScoreDraftById[entry.id]?.away_extra_time_score ??
+                            (entry.away_extra_time_score === null
+                              ? ''
+                              : String(entry.away_extra_time_score))
+                          "
+                          type="number"
+                          min="0"
+                          class="input input-bordered input-xs border-secondary/30 bg-base-100 w-16"
+                          @input="
+                            emit('updateMatchScoreDraft', {
+                              id: entry.id,
+                              field: 'away_extra_time_score',
+                              value: ($event.target as HTMLInputElement).value,
+                            })
+                          "
+                        />
+                      </div>
                     </div>
 
                     <div

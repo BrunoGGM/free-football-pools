@@ -4,6 +4,7 @@ import {
   resolveTeamCode,
   teamFlagEmojiFromCode,
 } from "~/utils/teamMeta";
+import { getEffectiveAwayScore, getEffectiveHomeScore } from "~/utils/matchScore";
 
 definePageMeta({
   middleware: ["auth"],
@@ -37,6 +38,9 @@ interface PredictionStatsRow {
         away_team: string;
         home_score: number | null;
         away_score: number | null;
+        home_extra_time_score?: number | null;
+        away_extra_time_score?: number | null;
+        went_to_extra_time?: boolean | null;
       }
     | Array<{
         id: string;
@@ -47,6 +51,9 @@ interface PredictionStatsRow {
         away_team: string;
         home_score: number | null;
         away_score: number | null;
+        home_extra_time_score?: number | null;
+        away_extra_time_score?: number | null;
+        went_to_extra_time?: boolean | null;
       }>
     | null;
 }
@@ -69,6 +76,9 @@ interface FinishedMatchRow {
   away_team: string;
   home_score: number | null;
   away_score: number | null;
+  home_extra_time_score?: number | null;
+  away_extra_time_score?: number | null;
+  went_to_extra_time?: boolean | null;
 }
 
 interface DashboardMatchRow {
@@ -100,6 +110,9 @@ interface NormalizedPredictionRow {
     away_team: string;
     home_score: number | null;
     away_score: number | null;
+    home_extra_time_score?: number | null;
+    away_extra_time_score?: number | null;
+    went_to_extra_time?: boolean | null;
   } | null;
 }
 
@@ -697,17 +710,13 @@ const loadPredictionDerivedStats = async () => {
     evolutionLabels.value = [];
     evolutionDailyValues.value = [];
     evolutionCumulativeValues.value = [];
-    return [] as Array<{
-      user_id: string;
-      points_earned: number;
-      match_time: string;
-    }>;
+    return [] as Array<NormalizedPredictionRow & { match_time: string }>;
   }
 
   const predictionsResult = await client
     .from("predictions")
     .select(
-      "user_id, home_score, away_score, points_earned, predicts_extra_time, predicts_penalties, predicts_qualifier, created_at, match:matches(id, status, match_time, stage, home_team, away_team, home_score, away_score)",
+      "user_id, home_score, away_score, points_earned, predicts_extra_time, predicts_penalties, predicts_qualifier, created_at, match:matches(id, status, match_time, stage, home_team, away_team, home_score, away_score, home_extra_time_score, away_extra_time_score, went_to_extra_time)",
     )
     .eq("quiniela_id", activeQuinielaId.value);
 
@@ -749,6 +758,7 @@ const loadPredictionDerivedStats = async () => {
         item.match?.status === "finished" && Boolean(item.match?.match_time),
     )
     .map((item) => ({
+      ...item,
       user_id: item.user_id,
       points_earned: item.points_earned,
       match_time: item.match?.match_time || item.created_at,
@@ -867,7 +877,7 @@ const loadPredictionDerivedStats = async () => {
       else pulse.draw_pct++;
     }
   }
-  
+
   const upcomingPulse = Array.from(pulseMatchesMap.values())
     .sort((a, b) => new Date(a.match_time).getTime() - new Date(b.match_time).getTime())
     .slice(0, 3);
@@ -898,7 +908,7 @@ const loadPredictionDerivedStats = async () => {
 
     const homeActual = row.match.home_score ?? 0;
     const awayActual = row.match.away_score ?? 0;
-    
+
     if (row.home_score === homeActual && row.away_score === awayActual) {
       ownExact++;
     } else if (resolveOutcome(row.home_score, row.away_score) === resolveOutcome(homeActual, awayActual)) {
@@ -908,7 +918,7 @@ const loadPredictionDerivedStats = async () => {
     const isKnockout = ['round_32', 'round_16', 'quarter_final', 'semi_final', 'third_place', 'final'].includes(row.match.stage);
     if (isKnockout) {
       ownKnockoutTotal++;
-      
+
       const wasDraw = homeActual === awayActual;
       // TE es acierto si adivino empate o si la logica lo dice, asumiremos para simplicidad que si saco mas de 4 puntos pego bonos
       const outcomePts = row.home_score === homeActual && row.away_score === awayActual ? exactScoreMaxPoints.value : (resolveOutcome(row.home_score, row.away_score) === resolveOutcome(homeActual, awayActual) ? correctOutcomePoints.value : 0);
@@ -929,7 +939,7 @@ const loadPredictionDerivedStats = async () => {
   }
 
   knockoutBonusesValues.value = [ownQualHits, ownTEHits, ownPenHits, ownBonusMisses];
-  
+
   const pctExact = ownTotal > 0 ? Math.round((ownExact / ownTotal) * 100) : 0;
   const pctOutcome = ownTotal > 0 ? Math.round(((ownOutcome + ownExact) / ownTotal) * 100) : 0;
   const pctTE = ownKnockoutTotal > 0 ? Math.round((ownTEHits / ownKnockoutTotal) * 100) : 0;
@@ -1445,7 +1455,7 @@ const loadHeatmaps = () => {
 const loadTournamentInsights = async () => {
   const result = await client
     .from("matches")
-    .select("home_team, away_team, home_score, away_score")
+    .select("home_team, away_team, home_score, away_score, home_extra_time_score, away_extra_time_score, went_to_extra_time")
     .eq("status", "finished");
 
   if (result.error) {
@@ -1534,7 +1544,7 @@ const loadTournamentWinners = async () => {
     client
       .from("matches")
       .select(
-        "home_team, away_team, home_score, away_score, home_penalty_score, away_penalty_score, home_team_logo_url, away_team_logo_url, match_time, updated_at",
+        "home_team, away_team, home_score, away_score, home_extra_time_score, away_extra_time_score, went_to_extra_time, home_penalty_score, away_penalty_score, home_team_logo_url, away_team_logo_url, match_time, updated_at",
       )
       .eq("stage", "final")
       .eq("status", "finished")
@@ -1563,16 +1573,30 @@ const loadTournamentWinners = async () => {
       away_team: string;
       home_score: number;
       away_score: number;
+      home_extra_time_score?: number | null;
+      away_extra_time_score?: number | null;
+      went_to_extra_time?: boolean | null;
       home_penalty_score: number | null;
       away_penalty_score: number | null;
       home_team_logo_url: string | null;
       away_team_logo_url: string | null;
     };
 
-    if (finalMatch.home_score > finalMatch.away_score) {
+    const effectiveHomeScore = getEffectiveHomeScore(finalMatch);
+    const effectiveAwayScore = getEffectiveAwayScore(finalMatch);
+
+    if (
+      effectiveHomeScore !== null &&
+      effectiveAwayScore !== null &&
+      effectiveHomeScore > effectiveAwayScore
+    ) {
       winnerFromFinalMatch = finalMatch.home_team;
       winnerLogoFromFinalMatch = finalMatch.home_team_logo_url;
-    } else if (finalMatch.home_score < finalMatch.away_score) {
+    } else if (
+      effectiveHomeScore !== null &&
+      effectiveAwayScore !== null &&
+      effectiveHomeScore < effectiveAwayScore
+    ) {
       winnerFromFinalMatch = finalMatch.away_team;
       winnerLogoFromFinalMatch = finalMatch.away_team_logo_url;
     } else if (

@@ -10,6 +10,8 @@ export interface MatchItem {
   away_team_logo_url: string | null
   home_score: number | null
   away_score: number | null
+  home_extra_time_score: number | null
+  away_extra_time_score: number | null
   home_penalty_score: number | null
   away_penalty_score: number | null
   went_to_extra_time?: boolean

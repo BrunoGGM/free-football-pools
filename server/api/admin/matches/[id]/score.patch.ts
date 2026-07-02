@@ -7,6 +7,8 @@ type MatchStatus = 'pending' | 'in_progress' | 'finished'
 type MatchUpdateBody = {
   home_score?: number | null
   away_score?: number | null
+  home_extra_time_score?: number | null
+  away_extra_time_score?: number | null
   home_penalty_score?: number | null
   away_penalty_score?: number | null
   status?: MatchStatus
@@ -79,6 +81,8 @@ export default defineEventHandler(async (event) => {
 
   const hasHome = Object.prototype.hasOwnProperty.call(body, 'home_score')
   const hasAway = Object.prototype.hasOwnProperty.call(body, 'away_score')
+  const hasHomeExtraTime = Object.prototype.hasOwnProperty.call(body, 'home_extra_time_score')
+  const hasAwayExtraTime = Object.prototype.hasOwnProperty.call(body, 'away_extra_time_score')
   const hasHomePenalty = Object.prototype.hasOwnProperty.call(body, 'home_penalty_score')
   const hasAwayPenalty = Object.prototype.hasOwnProperty.call(body, 'away_penalty_score')
   const hasStatus = Object.prototype.hasOwnProperty.call(body, 'status')
@@ -87,7 +91,7 @@ export default defineEventHandler(async (event) => {
   const hasAwayTeam = Object.prototype.hasOwnProperty.call(body, 'away_team')
   const hasWentToExtraTime = Object.prototype.hasOwnProperty.call(body, 'went_to_extra_time')
 
-  if (!hasHome && !hasAway && !hasHomePenalty && !hasAwayPenalty && !hasStatus && !hasMatchTime && !hasHomeTeam && !hasAwayTeam && !hasWentToExtraTime) {
+  if (!hasHome && !hasAway && !hasHomeExtraTime && !hasAwayExtraTime && !hasHomePenalty && !hasAwayPenalty && !hasStatus && !hasMatchTime && !hasHomeTeam && !hasAwayTeam && !hasWentToExtraTime) {
     throw createError({ statusCode: 400, statusMessage: 'No hay campos para actualizar' })
   }
 
@@ -102,6 +106,13 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 400,
       statusMessage: 'Debes enviar home_penalty_score y away_penalty_score juntos',
+    })
+  }
+
+  if (hasHomeExtraTime !== hasAwayExtraTime) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Debes enviar home_extra_time_score y away_extra_time_score juntos',
     })
   }
 
@@ -124,6 +135,10 @@ export default defineEventHandler(async (event) => {
     patch.home_penalty_score = null
     patch.away_penalty_score = null
   }
+  const clearExtraTimePatch = () => {
+    patch.home_extra_time_score = null
+    patch.away_extra_time_score = null
+  }
 
   if (hasHome && hasAway) {
     const homeScore = parseScore(body.home_score, 'Marcador local')
@@ -144,6 +159,11 @@ export default defineEventHandler(async (event) => {
 
     patch.home_penalty_score = homePenaltyScore
     patch.away_penalty_score = awayPenaltyScore
+  }
+
+  if (hasHomeExtraTime && hasAwayExtraTime) {
+    patch.home_extra_time_score = parseScore(body.home_extra_time_score, 'Marcador TE local')
+    patch.away_extra_time_score = parseScore(body.away_extra_time_score, 'Marcador TE visitante')
   }
 
   if (hasWentToExtraTime) {
@@ -189,15 +209,40 @@ export default defineEventHandler(async (event) => {
     (patch.away_penalty_score as number | null | undefined) !== undefined
       ? (patch.away_penalty_score as number | null)
       : (existing.away_penalty_score as number | null)
+  const nextHomeExtraTime =
+    (patch.home_extra_time_score as number | null | undefined) !== undefined
+      ? (patch.home_extra_time_score as number | null)
+      : (existing.home_extra_time_score as number | null)
+  const nextAwayExtraTime =
+    (patch.away_extra_time_score as number | null | undefined) !== undefined
+      ? (patch.away_extra_time_score as number | null)
+      : (existing.away_extra_time_score as number | null)
+  const nextWentToExtraTime =
+    (patch.went_to_extra_time as boolean | undefined) !== undefined
+      ? Boolean(patch.went_to_extra_time)
+      : Boolean(existing.went_to_extra_time)
   const isKnockout = KNOCKOUT_STAGES.has(String(existing.stage || ''))
+
+  const effectiveHomeScore =
+    nextWentToExtraTime && nextHomeExtraTime !== null && nextAwayExtraTime !== null
+      ? nextHomeExtraTime
+      : nextHomeScore
+  const effectiveAwayScore =
+    nextWentToExtraTime && nextHomeExtraTime !== null && nextAwayExtraTime !== null
+      ? nextAwayExtraTime
+      : nextAwayScore
 
   if (nextStatus === 'pending') {
     patch.home_score = null
     patch.away_score = null
+    patch.went_to_extra_time = false
+    clearExtraTimePatch()
     clearPenaltyPatch()
   }
 
   if (nextStatus === 'in_progress') {
+    patch.went_to_extra_time = false
+    clearExtraTimePatch()
     clearPenaltyPatch()
   }
 
@@ -209,7 +254,23 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    if (isKnockout && nextHomeScore === nextAwayScore) {
+    if (isKnockout && nextWentToExtraTime) {
+      if (nextHomeScore !== nextAwayScore) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: 'Si hubo tiempo extra, el marcador regular debe quedar empatado',
+        })
+      }
+
+      if (nextHomeExtraTime === null || nextAwayExtraTime === null || nextHomeExtraTime === undefined || nextAwayExtraTime === undefined) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: 'Debes enviar el marcador final del tiempo extra',
+        })
+      }
+    }
+
+    if (isKnockout && effectiveHomeScore === effectiveAwayScore) {
 
       if (nextHomePenalty === null || nextAwayPenalty === null || nextHomePenalty === undefined || nextAwayPenalty === undefined) {
         throw createError({
@@ -226,6 +287,11 @@ export default defineEventHandler(async (event) => {
       }
     } else {
       clearPenaltyPatch()
+    }
+
+    if (!isKnockout || !nextWentToExtraTime) {
+      patch.went_to_extra_time = false
+      clearExtraTimePatch()
     }
   }
 

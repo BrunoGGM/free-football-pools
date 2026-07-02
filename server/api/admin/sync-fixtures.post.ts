@@ -33,6 +33,10 @@ type ApiFootballFixture = {
     away?: number | null
   }
   score?: {
+    fulltime?: {
+      home?: number | null
+      away?: number | null
+    }
     extratime?: {
       home?: number | null
       away?: number | null
@@ -173,6 +177,8 @@ export default defineEventHandler(async (event) => {
     away_team_logo_url: string | null
     home_score: number | null
     away_score: number | null
+    home_extra_time_score: number | null
+    away_extra_time_score: number | null
     home_penalty_score: number | null
     away_penalty_score: number | null
     status: 'pending' | 'in_progress' | 'finished'
@@ -224,8 +230,10 @@ export default defineEventHandler(async (event) => {
       away_team_code: resolveTeamCode(awayTeam),
       home_team_logo_url: homeTeamLogo,
       away_team_logo_url: awayTeamLogo,
-      home_score: fixture.goals?.home ?? null,
-      away_score: fixture.goals?.away ?? null,
+      home_score: fixture.score?.fulltime?.home ?? fixture.goals?.home ?? null,
+      away_score: fixture.score?.fulltime?.away ?? fixture.goals?.away ?? null,
+      home_extra_time_score: fixture.score?.extratime?.home ?? null,
+      away_extra_time_score: fixture.score?.extratime?.away ?? null,
       home_penalty_score: fixture.score?.penalty?.home ?? null,
       away_penalty_score: fixture.score?.penalty?.away ?? null,
       status: normalizeApiFootballStatus(fixture.fixture?.status?.short),

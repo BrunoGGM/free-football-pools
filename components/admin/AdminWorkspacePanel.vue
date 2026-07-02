@@ -95,6 +95,9 @@ interface ManagedQuiniela {
     exact_score_points: number;
     correct_outcome_points: number;
     champion_bonus_points: number;
+    extra_time_prediction_points: number;
+    penalty_prediction_points: number;
+    penalty_exact_score_points: number;
     allow_member_predictions_view: boolean;
   };
 }
@@ -177,6 +180,8 @@ const latestMatches = ref<
     away_team: string;
     home_score: number | null;
     away_score: number | null;
+    home_extra_time_score: number | null;
+    away_extra_time_score: number | null;
     home_penalty_score: number | null;
     away_penalty_score: number | null;
     went_to_extra_time: boolean;
@@ -198,6 +203,8 @@ const matchScoreDraftById = ref<
       match_time: string;
       home_score: string;
       away_score: string;
+      home_extra_time_score: string;
+      away_extra_time_score: string;
       home_penalty_score: string;
       away_penalty_score: string;
       status: MatchStatus;
@@ -1019,6 +1026,16 @@ const loadIngestionLogs = async () => {
         item.away_score === null || item.away_score === undefined
           ? null
           : Number(item.away_score),
+      home_extra_time_score:
+        item.home_extra_time_score === null ||
+        item.home_extra_time_score === undefined
+          ? null
+          : Number(item.home_extra_time_score),
+      away_extra_time_score:
+        item.away_extra_time_score === null ||
+        item.away_extra_time_score === undefined
+          ? null
+          : Number(item.away_extra_time_score),
       home_penalty_score:
         item.home_penalty_score === null ||
         item.home_penalty_score === undefined
@@ -1029,6 +1046,7 @@ const loadIngestionLogs = async () => {
         item.away_penalty_score === undefined
           ? null
           : Number(item.away_penalty_score),
+      went_to_extra_time: Boolean(item.went_to_extra_time),
       status: item.status as string,
       updated_at: new Date(item.updated_at as string).toLocaleString("es-MX", {
         dateStyle: "short",
@@ -1051,6 +1069,16 @@ const loadIngestionLogs = async () => {
       away_score:
         previous?.away_score ??
         (item.away_score === null ? "" : String(item.away_score)),
+      home_extra_time_score:
+        previous?.home_extra_time_score ??
+        (item.home_extra_time_score === null
+          ? ""
+          : String(item.home_extra_time_score)),
+      away_extra_time_score:
+        previous?.away_extra_time_score ??
+        (item.away_extra_time_score === null
+          ? ""
+          : String(item.away_extra_time_score)),
       home_penalty_score:
         previous?.home_penalty_score ??
         (item.home_penalty_score === null
@@ -1087,6 +1115,8 @@ const updateMatchScoreDraft = (payload: {
     | "match_time"
     | "home_score"
     | "away_score"
+    | "home_extra_time_score"
+    | "away_extra_time_score"
     | "home_penalty_score"
     | "away_penalty_score"
     | "status"
@@ -1101,13 +1131,20 @@ const updateMatchScoreDraft = (payload: {
       match_time: "",
       home_score: "",
       away_score: "",
+      home_extra_time_score: "",
+      away_extra_time_score: "",
       home_penalty_score: "",
       away_penalty_score: "",
       status: "pending",
+      home_team: "",
+      away_team: "",
       went_to_extra_time: null,
     } as {
+      match_time: string;
       home_score: string;
       away_score: string;
+      home_extra_time_score: string;
+      away_extra_time_score: string;
       home_penalty_score: string;
       away_penalty_score: string;
       status: MatchStatus;
@@ -1184,12 +1221,16 @@ const saveMatchScore = async (matchId: string) => {
 
   let homeScore: number | null;
   let awayScore: number | null;
+  let homeExtraTimeScore: number | null;
+  let awayExtraTimeScore: number | null;
   let homePenaltyScore: number | null;
   let awayPenaltyScore: number | null;
 
   try {
     homeScore = parseDraftScore(draft.home_score);
     awayScore = parseDraftScore(draft.away_score);
+    homeExtraTimeScore = parseDraftScore(draft.home_extra_time_score);
+    awayExtraTimeScore = parseDraftScore(draft.away_extra_time_score);
     homePenaltyScore = parseDraftScore(draft.home_penalty_score);
     awayPenaltyScore = parseDraftScore(draft.away_penalty_score);
   } catch (error: any) {
@@ -1200,6 +1241,12 @@ const saveMatchScore = async (matchId: string) => {
   if ((homeScore === null) !== (awayScore === null)) {
     matchScoreError.value =
       "Debes capturar ambos marcadores o dejar ambos vacios.";
+    return;
+  }
+
+  if ((homeExtraTimeScore === null) !== (awayExtraTimeScore === null)) {
+    matchScoreError.value =
+      "Debes capturar ambos marcadores de tiempo extra o dejar ambos vacios.";
     return;
   }
 
@@ -1221,7 +1268,34 @@ const saveMatchScore = async (matchId: string) => {
   if (
     draft.status === "finished" &&
     isKnockoutStage &&
-    homeScore === awayScore
+    draft.went_to_extra_time
+  ) {
+    if (homeScore !== awayScore) {
+      matchScoreError.value =
+        "Para capturar tiempo extra, el marcador regular debe quedar empatado.";
+      return;
+    }
+
+    if (homeExtraTimeScore === null || awayExtraTimeScore === null) {
+      matchScoreError.value =
+        "Debes capturar el marcador final del tiempo extra.";
+      return;
+    }
+  }
+
+  const effectiveHomeScore =
+    isKnockoutStage && draft.went_to_extra_time
+      ? homeExtraTimeScore
+      : homeScore;
+  const effectiveAwayScore =
+    isKnockoutStage && draft.went_to_extra_time
+      ? awayExtraTimeScore
+      : awayScore;
+
+  if (
+    draft.status === "finished" &&
+    isKnockoutStage &&
+    effectiveHomeScore === effectiveAwayScore
   ) {
     if (homePenaltyScore === null || awayPenaltyScore === null) {
       matchScoreError.value =
@@ -1237,11 +1311,20 @@ const saveMatchScore = async (matchId: string) => {
 
   if (
     draft.status !== "finished" ||
-    homeScore !== awayScore ||
+    effectiveHomeScore !== effectiveAwayScore ||
     !isKnockoutStage
   ) {
     homePenaltyScore = null;
     awayPenaltyScore = null;
+  }
+
+  if (
+    draft.status !== "finished" ||
+    !isKnockoutStage ||
+    !draft.went_to_extra_time
+  ) {
+    homeExtraTimeScore = null;
+    awayExtraTimeScore = null;
   }
 
   savingMatchScoreId.value = matchId;
@@ -1262,7 +1345,12 @@ const saveMatchScore = async (matchId: string) => {
     }
 
     if (isKnockoutStage) {
-      payload.went_to_extra_time = draft.went_to_extra_time ?? targetMatch.went_to_extra_time ?? false;
+      payload.went_to_extra_time =
+        draft.status === "finished"
+          ? (draft.went_to_extra_time ?? targetMatch.went_to_extra_time ?? false)
+          : false;
+      payload.home_extra_time_score = homeExtraTimeScore;
+      payload.away_extra_time_score = awayExtraTimeScore;
     }
 
     if (homePenaltyScore !== null && awayPenaltyScore !== null) {

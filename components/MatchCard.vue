@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { MatchItem } from "~/composables/useMatchesRealtime";
+import { getEffectiveAwayScore, getEffectiveHomeScore } from "~/utils/matchScore";
 import { resolveTeamCode, teamFlagEmojiFromCode } from "~/utils/teamMeta";
 import "flag-icons/css/flag-icons.min.css";
 
@@ -54,7 +55,7 @@ const { data: communityStatsMap } = useAsyncData(
         if (p.home_score > p.away_score) s.homeWins++;
         else if (p.home_score < p.away_score) s.awayWins++;
         else s.draws++;
-        
+
         if (p.predicts_extra_time) s.extraTime++;
         if (p.predicts_penalties) s.penalties++;
 
@@ -79,7 +80,9 @@ const mostVotedScore = computed(() => {
   if (!communityStats.value) return null;
   let maxCount = 0;
   let topScore: string | null = null;
-  for (const [score, count] of Object.entries(communityStats.value.scores)) {
+  for (const [score, count] of Object.entries(
+    communityStats.value.scores as Record<string, number>,
+  )) {
     if (count > maxCount) {
       maxCount = count;
       topScore = score;
@@ -192,6 +195,9 @@ const KNOCKOUT_STAGES = new Set([
 
 const isKnockoutMatch = computed(() => KNOCKOUT_STAGES.has(props.match.stage));
 
+const effectiveHomeScore = computed(() => getEffectiveHomeScore(props.match));
+const effectiveAwayScore = computed(() => getEffectiveAwayScore(props.match));
+
 const shouldShowPenaltyLine = computed(() => {
   if (!isKnockoutMatch.value) {
     return false;
@@ -206,9 +212,19 @@ const shouldShowPenaltyLine = computed(() => {
 
   return (
     props.match.status === "finished" &&
-    props.match.home_score !== null &&
-    props.match.away_score !== null &&
-    props.match.home_score === props.match.away_score
+    effectiveHomeScore.value !== null &&
+    effectiveAwayScore.value !== null &&
+    effectiveHomeScore.value === effectiveAwayScore.value
+  );
+});
+
+const shouldShowExtraTimeLine = computed(() => {
+  return (
+    isKnockoutMatch.value &&
+    props.match.went_to_extra_time === true &&
+    props.match.status === "finished" &&
+    props.match.home_extra_time_score !== null &&
+    props.match.away_extra_time_score !== null
   );
 });
 
@@ -219,20 +235,20 @@ const qualifiedTeamLabel = computed(() => {
 
   if (
     props.match.status !== "finished" ||
-    props.match.home_score === null ||
-    props.match.away_score === null
+    effectiveHomeScore.value === null ||
+    effectiveAwayScore.value === null
   ) {
     return null;
   }
 
-  const regularTie = props.match.home_score === props.match.away_score;
+  const regularTie = effectiveHomeScore.value === effectiveAwayScore.value;
 
   let winner = "";
   let winnerByPenalties = false;
 
   if (!regularTie) {
     winner =
-      props.match.home_score > props.match.away_score
+      effectiveHomeScore.value > effectiveAwayScore.value
         ? props.match.home_team
         : props.match.away_team;
   } else {
@@ -722,6 +738,20 @@ onBeforeUnmount(() => {
           </p>
         </div>
         <div
+          v-if="shouldShowExtraTimeLine"
+          class="bg-secondary/10 border-secondary/40 mt-2 rounded-lg border border-dashed px-3 py-1.5"
+        >
+          <p
+            class="text-secondary/90 text-[10px] font-semibold tracking-[0.16em]"
+          >
+            TIEMPO EXTRA
+          </p>
+          <p class="text-secondary text-lg font-bold">
+            {{ props.match.home_extra_time_score ?? "-" }} :
+            {{ props.match.away_extra_time_score ?? "-" }}
+          </p>
+        </div>
+        <div
           v-if="shouldShowPenaltyLine"
           class="bg-warning/10 border-warning/40 mt-2 rounded-lg border border-dashed px-3 py-1.5"
         >
@@ -872,7 +902,7 @@ onBeforeUnmount(() => {
               class="toggle toggle-secondary toggle-xs"
               :disabled="loading"
               @change="
-                if (!predictsExtraTime) { predictsPenalties = false; predictsPenaltyWinner = null; }
+                if (!predictsExtraTime) { predictsPenalties = false; }
                 savePrediction();
               "
             />
@@ -1026,15 +1056,15 @@ onBeforeUnmount(() => {
         <div class="mt-1.5 flex justify-between text-[10px] text-base-content/60 font-semibold uppercase tracking-wider">
           <span v-if="communityStats.homeWins > 0" class="text-primary">{{ Math.round((communityStats.homeWins / communityStats.total) * 100) }}% L</span>
           <span v-else class="w-8"></span>
-          
+
           <span v-if="communityStats.draws > 0">{{ Math.round((communityStats.draws / communityStats.total) * 100) }}% E</span>
           <span v-else class="w-8"></span>
-          
+
           <span v-if="communityStats.awayWins > 0" class="text-secondary text-right">{{ Math.round((communityStats.awayWins / communityStats.total) * 100) }}% V</span>
           <span v-else class="w-8"></span>
         </div>
       </div>
-      
+
       <div v-if="isKnockoutMatch && (communityStats.extraTime > 0 || communityStats.penalties > 0)" class="mt-2.5 flex items-center gap-3 border-t border-base-300 pt-2.5 text-[10px] font-medium text-base-content/60">
         <div v-if="communityStats.extraTime > 0" class="flex items-center gap-1" :title="`${communityStats.extraTime} personas creen que habra tiempo extra`">
           <span class="h-1.5 w-1.5 rounded-full bg-secondary"></span>

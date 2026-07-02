@@ -104,6 +104,7 @@ export type Database = {
       matches: {
         Row: {
           api_fixture_id: number
+          away_extra_time_score: number | null
           away_penalty_score: number | null
           away_score: number | null
           away_seed_token: string | null
@@ -112,6 +113,7 @@ export type Database = {
           away_team_logo_url: string | null
           bracket_match_no: number | null
           created_at: string
+          home_extra_time_score: number | null
           home_penalty_score: number | null
           home_score: number | null
           home_seed_token: string | null
@@ -130,6 +132,7 @@ export type Database = {
         }
         Insert: {
           api_fixture_id: number
+          away_extra_time_score?: number | null
           away_penalty_score?: number | null
           away_score?: number | null
           away_seed_token?: string | null
@@ -138,6 +141,7 @@ export type Database = {
           away_team_logo_url?: string | null
           bracket_match_no?: number | null
           created_at?: string
+          home_extra_time_score?: number | null
           home_penalty_score?: number | null
           home_score?: number | null
           home_seed_token?: string | null
@@ -156,6 +160,7 @@ export type Database = {
         }
         Update: {
           api_fixture_id?: number
+          away_extra_time_score?: number | null
           away_penalty_score?: number | null
           away_score?: number | null
           away_seed_token?: string | null
@@ -164,6 +169,7 @@ export type Database = {
           away_team_logo_url?: string | null
           bracket_match_no?: number | null
           created_at?: string
+          home_extra_time_score?: number | null
           home_penalty_score?: number | null
           home_score?: number | null
           home_seed_token?: string | null
@@ -1166,7 +1172,45 @@ export type Database = {
         }
         Returns: number
       }
+      calculate_prediction_points_for_quiniela_v4: {
+        Args: {
+          p_actual_away_penalties: number
+          p_actual_home_penalties: number
+          p_final_away_score: number
+          p_final_home_score: number
+          p_has_penalties: boolean
+          p_pred_away_score: number
+          p_pred_home_score: number
+          p_predicts_extra_time: boolean
+          p_predicts_penalties: boolean
+          p_predicts_qualifier: string
+          p_quiniela_id: string
+          p_regular_away_score: number
+          p_regular_home_score: number
+          p_stage: Database["public"]["Enums"]["match_stage"]
+          p_went_to_extra_time: boolean
+        }
+        Returns: number
+      }
       champion_pick_lock_time: { Args: never; Returns: string }
+      effective_match_away_score: {
+        Args: {
+          p_away_extra_time_score: number
+          p_away_score: number
+          p_home_extra_time_score: number
+          p_went_to_extra_time: boolean
+        }
+        Returns: number
+      }
+      effective_match_home_score: {
+        Args: {
+          p_away_extra_time_score: number
+          p_home_extra_time_score: number
+          p_home_score: number
+          p_went_to_extra_time: boolean
+        }
+        Returns: number
+      }
       get_quiniela_rules: {
         Args: { p_quiniela_id: string }
         Returns: {

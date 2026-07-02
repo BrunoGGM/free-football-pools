@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { MatchItem } from "~/composables/useMatchesRealtime";
+import { getEffectiveAwayScore, getEffectiveHomeScore } from "~/utils/matchScore";
 import {
   normalizeTeamKey,
   resolveTeamCode,
@@ -693,15 +694,15 @@ const viewerData = computed(() => {
         opponent1: homeParticipant
           ? {
               id: homeParticipant.id,
-              score: match.home_penalty_score !== null 
-                ? `${match.home_score} (${match.home_penalty_score})` 
-                : match.went_to_extra_time 
-                  ? `${match.home_score} (TE)` 
+              score: match.home_penalty_score !== null
+                ? `${getEffectiveHomeScore(match) ?? "-"} (${match.home_penalty_score})`
+                : match.went_to_extra_time
+                  ? `${getEffectiveHomeScore(match) ?? "-"} (TE)`
                   : match.home_score ?? undefined,
               result: getOpponentResult(
                 match.status,
-                match.home_score,
-                match.away_score,
+                getEffectiveHomeScore(match),
+                getEffectiveAwayScore(match),
                 match.home_penalty_score,
                 match.away_penalty_score,
               ),
@@ -710,15 +711,15 @@ const viewerData = computed(() => {
         opponent2: awayParticipant
           ? {
               id: awayParticipant.id,
-              score: match.away_penalty_score !== null 
-                ? `${match.away_score} (${match.away_penalty_score})` 
-                : match.went_to_extra_time 
-                  ? `${match.away_score} (TE)` 
+              score: match.away_penalty_score !== null
+                ? `${getEffectiveAwayScore(match) ?? "-"} (${match.away_penalty_score})`
+                : match.went_to_extra_time
+                  ? `${getEffectiveAwayScore(match) ?? "-"} (TE)`
                   : match.away_score ?? undefined,
               result: getOpponentResult(
                 match.status,
-                match.away_score,
-                match.home_score,
+                getEffectiveAwayScore(match),
+                getEffectiveHomeScore(match),
                 match.away_penalty_score,
                 match.home_penalty_score,
               ),
