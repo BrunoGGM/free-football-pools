@@ -128,6 +128,19 @@ interface TeamProfileItem {
   updated_at: string;
 }
 
+interface QuinielaRecalculationPreviewRow {
+  user_id: string;
+  username: string;
+  automatic_points_before: number;
+  manual_points: number;
+  total_points_before: number;
+  rank_before: number;
+  automatic_points_after: number;
+  total_points_after: number;
+  rank_after: number;
+  delta_points: number;
+}
+
 type AdminSectionKey = "overview" | "quinielas" | "teams" | "ingestion";
 type MatchStatus = "pending" | "in_progress" | "finished";
 type SimulationSegment =
@@ -268,6 +281,20 @@ const manualPointsForm = reactive({
   points_delta: 1,
   reason: "",
 });
+const recalculationForm = reactive({
+  quiniela_id: "",
+});
+const loadingRecalculationPreview = ref(false);
+const applyingRecalculation = ref(false);
+const recalculationMessage = ref<string | null>(null);
+const recalculationError = ref<string | null>(null);
+const recalculationPreviewRows = ref<QuinielaRecalculationPreviewRow[]>([]);
+const recalculationPreviewSummary = ref<{
+  total_members: number;
+  changed_members: number;
+  changed_points: number;
+  changed_ranks: number;
+} | null>(null);
 
 const simulationForm = reactive({
   quiniela_id: "",
@@ -525,6 +552,11 @@ const resetQuinielaForm = () => {
   quinielaForm.allow_member_predictions_view = false;
 };
 
+const clearRecalculationPreview = () => {
+  recalculationPreviewRows.value = [];
+  recalculationPreviewSummary.value = null;
+};
+
 const editQuiniela = (item: ManagedQuiniela) => {
   quinielaForm.id = item.id;
   quinielaForm.name = item.name;
@@ -555,6 +587,8 @@ const editQuiniela = (item: ManagedQuiniela) => {
     item.rules?.allow_member_predictions_view ?? false,
   );
   manualPointsForm.quiniela_id = item.id;
+  recalculationForm.quiniela_id = item.id;
+  clearRecalculationPreview();
   globalMessage.value = null;
   globalError.value = null;
 };
@@ -610,6 +644,95 @@ const applyManualPoints = async () => {
       "No se pudo aplicar el ajuste manual";
   } finally {
     applyingManualPoints.value = false;
+  }
+};
+
+const loadRecalculationPreview = async () => {
+  recalculationMessage.value = null;
+  recalculationError.value = null;
+
+  const quinielaId = recalculationForm.quiniela_id.trim();
+
+  if (!quinielaId) {
+    recalculationError.value = "Selecciona una quiniela para previsualizar el recálculo.";
+    return;
+  }
+
+  loadingRecalculationPreview.value = true;
+
+  try {
+    const result = await adminFetch<{
+      rows: QuinielaRecalculationPreviewRow[];
+      summary: {
+        total_members: number;
+        changed_members: number;
+        changed_points: number;
+        changed_ranks: number;
+      };
+    }>(`/api/admin/quinielas/${quinielaId}/recalculate-preview`);
+
+    recalculationPreviewRows.value = result.rows || [];
+    recalculationPreviewSummary.value = result.summary;
+  } catch (error: any) {
+    recalculationError.value =
+      error?.data?.message ||
+      error?.message ||
+      "No se pudo generar la vista previa del recálculo.";
+  } finally {
+    loadingRecalculationPreview.value = false;
+  }
+};
+
+const applyRecalculation = async () => {
+  recalculationMessage.value = null;
+  recalculationError.value = null;
+
+  const quinielaId = recalculationForm.quiniela_id.trim();
+
+  if (!quinielaId) {
+    recalculationError.value = "Selecciona una quiniela para recalcular.";
+    return;
+  }
+
+  if (!recalculationPreviewSummary.value) {
+    recalculationError.value = "Genera primero la vista previa antes de confirmar el recálculo.";
+    return;
+  }
+
+  if (process.client) {
+    const confirmed = window.confirm(
+      `Se recalcularán los puntos automáticos de ${recalculationPreviewSummary.value.total_members} miembros. Los ajustes manuales se conservarán. ¿Continuar?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+  }
+
+  applyingRecalculation.value = true;
+
+  try {
+    const result = await adminFetch<{
+      summary: {
+        total_members: number;
+        changed_members: number;
+        changed_points: number;
+        changed_ranks: number;
+      };
+    }>(`/api/admin/quinielas/${quinielaId}/recalculate`, {
+      method: "POST",
+    });
+
+    recalculationMessage.value = `Recálculo aplicado. Miembros revisados: ${result.summary.total_members}, cambios en puntos: ${result.summary.changed_points}, cambios de ranking: ${result.summary.changed_ranks}.`;
+    clearRecalculationPreview();
+    await loadGlobalStats(false);
+  } catch (error: any) {
+    recalculationError.value =
+      error?.data?.message ||
+      error?.message ||
+      "No se pudo aplicar el recálculo de puntos.";
+  } finally {
+    applyingRecalculation.value = false;
   }
 };
 
@@ -1879,6 +2002,13 @@ watch(
       :applying-manual-points="applyingManualPoints"
       :manual-points-message="manualPointsMessage"
       :manual-points-error="manualPointsError"
+      :recalculation-form="recalculationForm"
+      :loading-recalculation-preview="loadingRecalculationPreview"
+      :applying-recalculation="applyingRecalculation"
+      :recalculation-message="recalculationMessage"
+      :recalculation-error="recalculationError"
+      :recalculation-preview-rows="recalculationPreviewRows"
+      :recalculation-preview-summary="recalculationPreviewSummary"
       :simulation-form="simulationForm"
       :running-simulation="runningSimulation"
       :clearing-simulation-data="clearingSimulationData"
@@ -1891,6 +2021,8 @@ watch(
       @edit-quiniela="editQuiniela"
       @delete-quiniela="deleteQuiniela"
       @apply-manual-points="applyManualPoints"
+      @load-recalculation-preview="loadRecalculationPreview"
+      @apply-recalculation="applyRecalculation"
       @run-simulation="runSimulation"
       @clear-simulation-data="clearSimulationData"
       @reset-whole-quiniela="resetWholeQuiniela"

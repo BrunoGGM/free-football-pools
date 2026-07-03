@@ -436,7 +436,7 @@ const loadPrediction = async () => {
   if (predictionsByQuinielaSupported.value === false) {
     const legacyResult = await client
       .from("predictions")
-      .select("home_score, away_score, predicts_extra_time, predicts_penalties, predicts_qualifier, points_earned")
+      .select("home_score, away_score, predicts_extra_time, predicts_penalties, predicts_penalty_winner, predicts_qualifier, points_earned")
       .eq("user_id", user.value.id)
       .eq("match_id", props.match.id)
       .maybeSingle();
@@ -450,7 +450,7 @@ const loadPrediction = async () => {
   } else {
     const scopedResult = await client
       .from("predictions")
-      .select("home_score, away_score, predicts_extra_time, predicts_penalties, predicts_qualifier, points_earned")
+      .select("home_score, away_score, predicts_extra_time, predicts_penalties, predicts_penalty_winner, predicts_qualifier, points_earned")
       .eq("user_id", user.value.id)
       .eq("quiniela_id", activeQuinielaId.value)
       .eq("match_id", props.match.id)
@@ -464,7 +464,7 @@ const loadPrediction = async () => {
 
       const legacyResult = await client
         .from("predictions")
-        .select("home_score, away_score, predicts_extra_time, predicts_penalties, predicts_qualifier, points_earned")
+        .select("home_score, away_score, predicts_extra_time, predicts_penalties, predicts_penalty_winner, predicts_qualifier, points_earned")
         .eq("user_id", user.value.id)
         .eq("match_id", props.match.id)
         .maybeSingle();
@@ -488,7 +488,8 @@ const loadPrediction = async () => {
   awayPrediction.value = data?.away_score?.toString() ?? "";
   predictsExtraTime.value = data?.predicts_extra_time ?? false;
   predictsPenalties.value = data?.predicts_penalties ?? false;
-  predictsQualifier.value = data?.predicts_qualifier ?? null;
+  predictsQualifier.value =
+    data?.predicts_qualifier ?? data?.predicts_penalty_winner ?? null;
   if (
     typeof data?.home_score === "number" &&
     typeof data?.away_score === "number"

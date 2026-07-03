@@ -683,7 +683,7 @@ const openPointsHistoryModal = async (row: PositionRow) => {
   const predictionsResult = await client
     .from("predictions")
     .select(
-      "id, home_score, away_score, points_earned, predicts_extra_time, predicts_penalties, predicts_qualifier, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_extra_time_score, away_extra_time_score, went_to_extra_time, home_penalty_score, away_penalty_score)",
+      "id, home_score, away_score, points_earned, predicts_extra_time, predicts_penalties, predicts_penalty_winner, predicts_qualifier, created_at, match:matches(id, stage, status, match_time, home_team, away_team, home_score, away_score, home_extra_time_score, away_extra_time_score, went_to_extra_time, home_penalty_score, away_penalty_score)",
     )
     .eq("quiniela_id", activeQuinielaId.value)
     .eq("user_id", row.user_id)
@@ -737,6 +737,7 @@ const openPointsHistoryModal = async (row: PositionRow) => {
       points_earned: number | null;
       predicts_extra_time?: boolean | null;
       predicts_penalties?: boolean | null;
+      predicts_penalty_winner?: string | null;
       predicts_qualifier?: string | null;
       created_at: string | null;
       match:
@@ -818,8 +819,19 @@ const openPointsHistoryModal = async (row: PositionRow) => {
       const matchWentToET = Boolean((match as any)?.went_to_extra_time);
       const matchHadPenalties = (match as any)?.home_penalty_score != null;
 
-      // 1. Exact score => +3 total (includes outcome, not additive)
+      const predictedQualifier =
+        item.predicts_qualifier ?? item.predicts_penalty_winner ?? null;
+
+      // 1. Exact score => resultado base + bono exacto
       if (isExact) {
+        rows.push({
+          id: `${item.id}-pick`,
+          source: "pick_outcome",
+          points: configuredOutcomePoints,
+          created_at: createdAt,
+          title,
+          detail: `${baseDetail} • Punto por resultado`,
+        });
         rows.push({
           id: `${item.id}-exact`,
           source: "exact_score",
@@ -867,11 +879,11 @@ const openPointsHistoryModal = async (row: PositionRow) => {
         }
 
         // Qualifier bonus
-        if (item.predicts_qualifier) {
+        if (predictedQualifier) {
           const actualQualifier = match
             ? getEffectiveQualifier(match)
             : null;
-          if (actualQualifier && item.predicts_qualifier === actualQualifier) {
+          if (actualQualifier && predictedQualifier === actualQualifier) {
             rows.push({
               id: `${item.id}-qual`,
               source: "pick_outcome",

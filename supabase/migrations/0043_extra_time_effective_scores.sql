@@ -109,7 +109,7 @@ begin
   end if;
 
   if p_regular_home_score = p_pred_home_score and p_regular_away_score = p_pred_away_score then
-    v_points := v_max_exact;
+    v_points := v_outcome + v_max_exact;
   else
     v_regular_sign := sign(p_regular_home_score - p_regular_away_score);
     v_pred_sign := sign(p_pred_home_score - p_pred_away_score);
@@ -295,7 +295,7 @@ begin
         ),
         p.predicts_extra_time,
         p.predicts_penalties,
-        p.predicts_qualifier,
+        coalesce(p.predicts_qualifier, p.predicts_penalty_winner),
         coalesce(new.went_to_extra_time, false),
         (new.home_penalty_score is not null),
         coalesce(new.home_penalty_score, 0),
@@ -358,7 +358,7 @@ begin
             ),
             p.predicts_extra_time,
             p.predicts_penalties,
-            p.predicts_qualifier,
+            coalesce(p.predicts_qualifier, p.predicts_penalty_winner),
             coalesce(m.went_to_extra_time, false),
             (m.home_penalty_score is not null),
             coalesce(m.home_penalty_score, 0),

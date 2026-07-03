@@ -91,6 +91,19 @@ interface QuinielaMemberInfo {
   email: string;
 }
 
+interface QuinielaRecalculationPreviewRow {
+  user_id: string;
+  username: string;
+  automatic_points_before: number;
+  manual_points: number;
+  total_points_before: number;
+  rank_before: number;
+  automatic_points_after: number;
+  total_points_after: number;
+  rank_after: number;
+  delta_points: number;
+}
+
 const props = defineProps<{
   isGlobalAdmin: boolean;
   globalLoading: boolean;
@@ -136,6 +149,20 @@ const props = defineProps<{
   applyingManualPoints: boolean;
   manualPointsMessage: string | null;
   manualPointsError: string | null;
+  recalculationForm: {
+    quiniela_id: string;
+  };
+  loadingRecalculationPreview: boolean;
+  applyingRecalculation: boolean;
+  recalculationMessage: string | null;
+  recalculationError: string | null;
+  recalculationPreviewRows: QuinielaRecalculationPreviewRow[];
+  recalculationPreviewSummary: {
+    total_members: number;
+    changed_members: number;
+    changed_points: number;
+    changed_ranks: number;
+  } | null;
   simulationForm: {
     quiniela_id: string;
     segment:
@@ -166,6 +193,8 @@ const emit = defineEmits<{
   editQuiniela: [item: ManagedQuiniela];
   deleteQuiniela: [id: string];
   applyManualPoints: [];
+  loadRecalculationPreview: [];
+  applyRecalculation: [];
   runSimulation: [];
   clearSimulationData: [];
   resetWholeQuiniela: [];
@@ -2006,6 +2035,130 @@ watch(
         </p>
         <p v-if="manualPointsError" class="alert alert-error mt-3 text-xs">
           {{ manualPointsError }}
+        </p>
+      </div>
+
+      <div
+        class="card mt-6 rounded-xl border border-base-300 bg-base-100/70 p-4"
+      >
+        <h3 class="text-primary text-lg">Recalcular puntos</h3>
+        <p class="text-base-content/70 mt-1 text-sm">
+          Previsualiza los cambios antes de recalcular. Los puntos manuales se
+          conservan y el recálculo solo actualiza el puntaje automático.
+        </p>
+
+        <div class="mt-4 grid gap-3 md:grid-cols-2">
+          <div class="space-y-1 md:col-span-2">
+            <label
+              class="text-base-content/70 text-xs uppercase tracking-[0.12em]"
+            >
+              Quiniela objetivo
+            </label>
+            <select
+              v-model="recalculationForm.quiniela_id"
+              class="select select-bordered w-full"
+            >
+              <option value="">Selecciona quiniela</option>
+              <option
+                v-for="item in managedQuinielas"
+                :key="`recalc-${item.id}`"
+                :value="item.id"
+              >
+                {{ item.name }} ({{ item.access_code }})
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button
+            class="btn btn-outline btn-sm"
+            :disabled="loadingRecalculationPreview || applyingRecalculation"
+            @click="emit('loadRecalculationPreview')"
+          >
+            {{ loadingRecalculationPreview ? "Calculando..." : "Ver vista previa" }}
+          </button>
+          <button
+            class="btn btn-primary btn-sm"
+            :disabled="applyingRecalculation || !recalculationPreviewSummary"
+            @click="emit('applyRecalculation')"
+          >
+            {{ applyingRecalculation ? "Aplicando..." : "Confirmar y recalcular" }}
+          </button>
+        </div>
+
+        <div
+          v-if="recalculationPreviewSummary"
+          class="mt-4 grid gap-3 md:grid-cols-4"
+        >
+          <div class="rounded-xl border border-base-300 bg-base-200/60 p-3">
+            <p class="text-base-content/60 text-[11px] uppercase tracking-[0.12em]">Miembros</p>
+            <p class="text-base-content mt-1 text-xl font-semibold">{{ recalculationPreviewSummary.total_members }}</p>
+          </div>
+          <div class="rounded-xl border border-base-300 bg-base-200/60 p-3">
+            <p class="text-base-content/60 text-[11px] uppercase tracking-[0.12em]">Con cambios</p>
+            <p class="text-base-content mt-1 text-xl font-semibold">{{ recalculationPreviewSummary.changed_members }}</p>
+          </div>
+          <div class="rounded-xl border border-base-300 bg-base-200/60 p-3">
+            <p class="text-base-content/60 text-[11px] uppercase tracking-[0.12em]">Puntos</p>
+            <p class="text-base-content mt-1 text-xl font-semibold">{{ recalculationPreviewSummary.changed_points }}</p>
+          </div>
+          <div class="rounded-xl border border-base-300 bg-base-200/60 p-3">
+            <p class="text-base-content/60 text-[11px] uppercase tracking-[0.12em]">Ranking</p>
+            <p class="text-base-content mt-1 text-xl font-semibold">{{ recalculationPreviewSummary.changed_ranks }}</p>
+          </div>
+        </div>
+
+        <div
+          v-if="recalculationPreviewRows.length > 0"
+          class="table-shell mt-4 rounded-xl border border-base-300 overflow-x-auto"
+        >
+          <table class="table table-sm min-w-full">
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Auto antes</th>
+                <th>Manual</th>
+                <th>Total antes</th>
+                <th>Rank antes</th>
+                <th>Auto ahora</th>
+                <th>Total ahora</th>
+                <th>Rank ahora</th>
+                <th>Delta</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in recalculationPreviewRows"
+                :key="row.user_id"
+                :class="row.delta_points !== 0 || row.rank_before !== row.rank_after ? 'bg-warning/5' : ''"
+              >
+                <td>
+                  <div>
+                    <p class="font-medium">{{ row.username }}</p>
+                    <p class="text-base-content/50 text-[11px]">{{ row.user_id }}</p>
+                  </div>
+                </td>
+                <td>{{ row.automatic_points_before }}</td>
+                <td>{{ row.manual_points }}</td>
+                <td>{{ row.total_points_before }}</td>
+                <td>#{{ row.rank_before }}</td>
+                <td>{{ row.automatic_points_after }}</td>
+                <td>{{ row.total_points_after }}</td>
+                <td>#{{ row.rank_after }}</td>
+                <td :class="row.delta_points > 0 ? 'text-success font-semibold' : row.delta_points < 0 ? 'text-error font-semibold' : 'text-base-content/60'">
+                  {{ row.delta_points > 0 ? `+${row.delta_points}` : row.delta_points }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p v-if="recalculationMessage" class="alert alert-success mt-3 text-xs">
+          {{ recalculationMessage }}
+        </p>
+        <p v-if="recalculationError" class="alert alert-error mt-3 text-xs">
+          {{ recalculationError }}
         </p>
       </div>
 

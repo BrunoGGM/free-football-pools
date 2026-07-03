@@ -1115,6 +1115,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_preview_quiniela_recalculation: {
+        Args: { p_quiniela_id: string }
+        Returns: {
+          automatic_points_after: number
+          automatic_points_before: number
+          delta_points: number
+          manual_points: number
+          rank_after: number
+          rank_before: number
+          total_points_after: number
+          total_points_before: number
+          user_id: string
+          username: string
+        }[]
+      }
       award_member_achievements: {
         Args: { p_quiniela_id: string; p_user_id: string }
         Returns: undefined
@@ -1191,6 +1206,10 @@ export type Database = {
           p_went_to_extra_time: boolean
         }
         Returns: number
+      }
+      calculate_weekly_ranking: {
+        Args: { p_quiniela_id: string; p_week_start_date: string }
+        Returns: undefined
       }
       champion_pick_lock_time: { Args: never; Returns: string }
       effective_match_away_score: {
