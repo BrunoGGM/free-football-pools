@@ -1,6 +1,7 @@
 import { createError, getRouterParam, readBody } from 'h3'
 import { serverSupabaseServiceRole } from '#supabase/server'
 import { requireGlobalAdminAccess } from '../../../../utils/adminAccess'
+import { getEffectiveQualifier } from '../../../../../utils/matchScore'
 import { normalizeTeamKey, resolveTeamCode } from '../../../../../utils/teamMeta'
 import {
   computeGroupRankings,
@@ -185,45 +186,23 @@ const resolveMatchOutcome = (match: any) => {
     return null
   }
 
-  const homeScore = Number(match?.home_score)
-  const awayScore = Number(match?.away_score)
+  const qualifier = getEffectiveQualifier(match)
 
-  if (!Number.isInteger(homeScore) || !Number.isInteger(awayScore)) {
-    return null
-  }
-
-  if (homeScore > awayScore) {
+  if (qualifier === 'home') {
     return {
       winner: String(match.home_team || ''),
       loser: String(match.away_team || ''),
     }
   }
 
-  if (awayScore > homeScore) {
+  if (qualifier === 'away') {
     return {
       winner: String(match.away_team || ''),
       loser: String(match.home_team || ''),
     }
   }
 
-  const homePenalty = Number(match?.home_penalty_score)
-  const awayPenalty = Number(match?.away_penalty_score)
-
-  if (!Number.isInteger(homePenalty) || !Number.isInteger(awayPenalty) || homePenalty === awayPenalty) {
-    return null
-  }
-
-  if (homePenalty > awayPenalty) {
-    return {
-      winner: String(match.home_team || ''),
-      loser: String(match.away_team || ''),
-    }
-  }
-
-  return {
-    winner: String(match.away_team || ''),
-    loser: String(match.home_team || ''),
-  }
+  return null
 }
 
 const loadGroupOverrides = async (supabase: any, quinielaId: string): Promise<GroupOverrideRow[]> => {
